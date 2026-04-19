@@ -2017,48 +2017,52 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       currentStops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
 
     const applyRoute = (nr) => {
-      if (!nr) return;
-      const isNew     = nr.sentAt !== lastSentAt.current;
-      const moreStops = (nr.stops||[]).length !== (lastSentAt._stopCount || 0);
-      if (isNew || moreStops) {
-        // ── PROTECCIÓN DE RUTA ACTIVA ────────────────────────────────────────
-        // Si el mensajero tiene paradas pendientes/en_ruta, NO reemplazar su ruta.
-        // La nueva ruta llega a la cola pendiente.
+      if (!nr || !nr.stops) return;
+      const isDifferentRoute = nr.sentAt !== lastSentAt.current;
+      if (isDifferentRoute) {
+        // Ruta diferente: solo reemplazar si NO hay trabajo activo en curso
         setStops(currentStops => {
-          if (hasActiveWork(currentStops)) {
-            // Agregar a cola en vez de reemplazar
+          const hasActive = currentStops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
+          if (hasActive && currentStops.length > 0) {
+            // Hay trabajo activo: encolar la nueva ruta, no reemplazar
             setPendingRoutes(prev => {
-              const alreadyInQueue = prev.some(r => r.sentAt === nr.sentAt);
-              if (alreadyInQueue) return prev;
+              if (prev.some(r => r.sentAt === nr.sentAt)) return prev;
               const updated = [...prev, nr];
               if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
               window.__rdPendingRoutes[myKey] = updated;
               LS.setPending(myKey, updated);
               return updated;
             });
-            return currentStops; // mantener paradas actuales intactas
-          } else {
-            // Sin trabajo activo: aplicar nueva ruta directamente
-            lastSentAt.current    = nr.sentAt;
-            lastSentAt._stopCount = (nr.stops||[]).length;
-            if (!window.__rdRouteStore) window.__rdRouteStore = {};
-            window.__rdRouteStore[myKey] = nr;
-            _memStore.routes[myKey] = nr;
-            onUpdateRoute(myKey, nr);
-            return (nr.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
+            return currentStops;
           }
+          // Sin trabajo activo: aplicar nueva ruta conservando driverStatus de Firebase
+          lastSentAt.current = nr.sentAt;
+          lastSentAt._stopCount = nr.stops.length;
+          if (!window.__rdRouteStore) window.__rdRouteStore = {};
+          window.__rdRouteStore[myKey] = nr;
+          _memStore.routes[myKey] = nr;
+          onUpdateRoute(myKey, nr);
+          return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
         });
+      } else {
+        // Misma ruta: actualizar stops conservando driverStatus de Firebase (el mensajero puede haber marcado paradas)
+        lastSentAt._stopCount = nr.stops.length;
+        if (!window.__rdRouteStore) window.__rdRouteStore = {};
+        window.__rdRouteStore[myKey] = nr;
+        _memStore.routes[myKey] = nr;
+        onUpdateRoute(myKey, nr);
+        setStops(nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" })));
       }
     };
 
     const applyChat = (msgs) => {
       if (!Array.isArray(msgs)) return;
-      setChatLog(prev => msgs.length !== prev.length ? [...msgs] : prev);
+      setChatLog([...msgs]);
     };
 
     const applyPending = (queue) => {
       if (!Array.isArray(queue)) return;
-      setPendingRoutes(prev => queue.length !== prev.length ? [...queue] : prev);
+      setPendingRoutes([...queue]);
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
       window.__rdPendingRoutes[myKey] = queue;
     };
@@ -2095,26 +2099,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // NOTA: El admin ya maneja la cola antes de llamar a __rdSetRoute,
   // así que aquí solo llegará una ruta si el mensajero NO tenía trabajo activo.
   // Por seguridad, también verificamos aquí.
-  useEffect(() => {
-    const nr = globalRoutes[myKey];
-    if (!nr) return;
-    const isNew     = nr.sentAt !== lastSentAt.current;
-    const moreStops = (nr.stops||[]).length !== (lastSentAt._stopCount || 0);
-    if (isNew || moreStops) {
-      setStops(currentStops => {
-        const hasActive = currentStops.some(
-          s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
-        );
-        if (hasActive) return currentStops; // proteger ruta activa
-        lastSentAt.current    = nr.sentAt;
-        lastSentAt._stopCount = (nr.stops||[]).length;
-        if (!window.__rdRouteStore) window.__rdRouteStore = {};
-        window.__rdRouteStore[myKey] = nr;
-        LS.setRoute(myKey, nr);
-        return (nr.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
-      });
-    }
-  }, [globalRoutes, myKey]);
+  // globalRoutes changes are handled by the Firebase listener above.
+  // This effect intentionally left empty to avoid double-applying routes.
 
   // -- Google Maps ---------------------------------------------------------------
   useEffect(() => {
@@ -6233,6 +6219,7 @@ export default function RapDrive() {
   const [events,setEvents]       = useState(LIVE_EVENTS_SEED);
   const toastId = useRef(0);
   const lastRouteSnapRef = useRef({}); // track previous route states to detect changes
+  const cleanupRef = useRef(null); // cleanup for async Firebase listener
 
   // Helper: push a real event + toast
   const pushEvent = useCallback((ev) => {
@@ -6244,36 +6231,42 @@ export default function RapDrive() {
 
   // -- Firebase: UN SOLO listener para rutas (sincroniza globalRoutes + notificaciones) --------
   useEffect(() => {
-    const processRouteData = (data, fireNotifications) => {
+    // Inicializar snapshot de una ruta sin disparar eventos
+    const initSnapshot = (driverId, route) => {
+      const stopsMap = {};
+      (route.stops||[]).forEach(s => { stopsMap[s.id] = s.driverStatus; });
+      lastRouteSnapRef.current[driverId] = {
+        sentAt: route.sentAt,
+        stops: stopsMap,
+        routeCompletedNotified: (route.stops||[]).every(s => s.driverStatus === "delivered" || s.driverStatus === "problema"),
+      };
+    };
+
+    // Procesar cambios de rutas y disparar notificaciones
+    const processChanges = (data) => {
       if (!data || typeof data !== "object") return;
-      // Siempre sincronizar globalRoutes
       _memStore.routes = data;
       window.__rdRouteStore = data;
       setGlobalRoutes(prev => ({ ...prev, ...data }));
 
-      if (!fireNotifications) return;
       const now = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
       Object.entries(data).forEach(([driverId, route]) => {
         if (!route?.stops) return;
-        const prev = lastRouteSnapRef.current[driverId];
+        const snap = lastRouteSnapRef.current[driverId];
+
+        // Sin snapshot todavía: inicializar sin notificar
+        if (!snap) { initSnapshot(driverId, route); return; }
+
+        // Ruta diferente: actualizar snapshot sin notificar
+        if (snap.sentAt !== route.sentAt) { initSnapshot(driverId, route); return; }
+
+        // Misma ruta: comparar stop por stop
         const driverLabel = route.driverName || driverId;
-
-        // Ruta nueva: inicializar snapshot sin disparar evento
-        if (!prev || prev.sentAt !== route.sentAt) {
-          const stopsMap = {};
-          route.stops.forEach(s => { stopsMap[s.id] = s.driverStatus; });
-          lastRouteSnapRef.current[driverId] = { sentAt: route.sentAt, stops: stopsMap, routeCompletedNotified: false };
-          return;
-        }
-
-        // Detectar paradas que cambiaron de estado
-        const prevStops = prev.stops || {};
         let anyChange = false;
         route.stops.forEach(stop => {
-          const prevStatus = prevStops[stop.id];
+          const prevStatus = snap.stops[stop.id];
           const newStatus  = stop.driverStatus;
-          // Actualizar snapshot siempre
-          lastRouteSnapRef.current[driverId].stops[stop.id] = newStatus;
+          snap.stops[stop.id] = newStatus; // actualizar snapshot
           if (!prevStatus || prevStatus === newStatus) return;
           anyChange = true;
           const clientLabel = stop.client || `Parada #${stop.stopNum}`;
@@ -6286,7 +6279,7 @@ export default function RapDrive() {
           } else if (newStatus === "problema") {
             pushEvent({ id:"e"+Date.now()+stop.id, type:"delayed", icon:"⚠", color:"#f59e0b",
               title:`Problema: ${clientLabel}${trackLabel}`,
-              body:`${driverLabel} · ${stop.issue || "Sin detalles"} · #${stop.stopNum}`,
+              body:`${driverLabel} · ${stop.issue||"Sin detalles"} · #${stop.stopNum}`,
               time: now, read: false, isNew: true });
           } else if (newStatus === "en_ruta") {
             pushEvent({ id:"e"+Date.now()+stop.id, type:"on_route", icon:"→", color:"#3b82f6",
@@ -6295,15 +6288,14 @@ export default function RapDrive() {
               time: now, read: false, isNew: true });
           }
         });
-
-        // Detectar ruta completada
-        if (anyChange && route.stops.length > 0 && !prev.routeCompletedNotified) {
+        // Ruta completada
+        if (anyChange && !snap.routeCompletedNotified) {
           const allDone = route.stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
           if (allDone) {
-            lastRouteSnapRef.current[driverId].routeCompletedNotified = true;
+            snap.routeCompletedNotified = true;
             const del  = route.stops.filter(s => s.driverStatus === "delivered").length;
             const prob = route.stops.filter(s => s.driverStatus === "problema").length;
-            pushEvent({ id:"e"+Date.now()+"complete"+driverId, type:"delivered", icon:"🏁", color:"#10b981",
+            pushEvent({ id:"e"+Date.now()+"done"+driverId, type:"delivered", icon:"🏁", color:"#10b981",
               title:`Ruta completada: ${driverLabel}`,
               body:`${del} entregados · ${prob} problemas · ${route.stops.length} paradas totales`,
               time: now, read: false, isNew: true });
@@ -6312,23 +6304,25 @@ export default function RapDrive() {
       });
     };
 
-    // 1) Carga inicial: sincronizar sin disparar notificaciones
-    FB.get("routes").then(data => processRouteData(data, false));
-
-    // 2) Listener SSE único: sincroniza rutas Y dispara notificaciones
-    const unsubRoutes = FB.listen("routes", (data) => processRouteData(data, true));
-
-    // 3) Polling de respaldo cada 5s (solo para globalRoutes, sin notificaciones)
-    const poll = setInterval(() => {
-      FB.get("routes").then(data => {
-        if (!data || typeof data !== "object") return;
-        _memStore.routes = data;
-        window.__rdRouteStore = data;
-        setGlobalRoutes(prev => ({ ...prev, ...data }));
+    // 1) Carga inicial: cargar snapshot + globalRoutes sin disparar notificaciones
+    FB.get("routes").then(data => {
+      if (!data || typeof data !== "object") return;
+      _memStore.routes = data;
+      window.__rdRouteStore = data;
+      setGlobalRoutes(data);
+      // Poblar snapshot inicial sin disparar eventos
+      Object.entries(data).forEach(([driverId, route]) => {
+        if (route?.stops) initSnapshot(driverId, route);
       });
-    }, 5000);
+      // AHORA activar el listener SSE (después del snapshot inicial)
+      const unsubRoutes = FB.listen("routes", processChanges);
+      // Polling cada 5s como respaldo
+      const poll = setInterval(() => FB.get("routes").then(processChanges), 5000);
+      // Guardar cleanup en ref para que useEffect lo pueda llamar
+      cleanupRef.current = () => { unsubRoutes(); clearInterval(poll); };
+    });
 
-    return () => { unsubRoutes(); clearInterval(poll); };
+    return () => { if (cleanupRef.current) cleanupRef.current(); };
   }, [pushEvent]);
 
   const unreadCount = events.filter(e=>!e.read).length;
