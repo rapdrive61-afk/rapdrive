@@ -428,18 +428,28 @@ const PageRoutes = () => {
   const gMapRef = useRef(null);
   const markersRef = useRef([]);
 
-  // Refresh from Firebase every 5s
+  // Cargar rutas desde Firebase directamente (no desde memoria)
   useEffect(() => {
-    const refresh = async () => {
-      const stored = LS.getRoutes();
-      const win = window.__rdRouteStore || {};
-      const merged = { ...stored, ...win };
-      const arr = Object.values(merged).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
-      setAllRouteHistory(arr);
+    const loadFromFB = () => {
+      FB.get("routes").then(data => {
+        if (!data || typeof data !== "object") return;
+        _memStore.routes = data;
+        window.__rdRouteStore = data;
+        const arr = Object.values(data).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
+        setAllRouteHistory(arr);
+      });
     };
-    refresh();
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
+    loadFromFB();
+    // Escuchar cambios en tiempo real
+    const unsub = FB.listen("routes", (data) => {
+      if (!data || typeof data !== "object") return;
+      _memStore.routes = data;
+      window.__rdRouteStore = data;
+      const arr = Object.values(data).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
+      setAllRouteHistory(arr);
+    });
+    const t = setInterval(loadFromFB, 5000);
+    return () => { unsub(); clearInterval(t); };
   }, []);
 
   // Build map when route selected
@@ -2625,7 +2635,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                   {/* Expanded detail panel */}
                   {isExp && (
-                    <div style={{ padding:"0 10px 14px 10px",animation:"fadeUp .15s ease" }}>
+                    <div style={{ padding:"0 0 14px 0",animation:"fadeUp .15s ease" }}>
                       {stop.notes && <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:8,padding:"8px 10px",marginBottom:8,lineHeight:1.5,fontFamily:"'DM Sans',sans-serif" }}>{stop.notes}</div>}
                       {isProb && stop.issue && <div style={{ fontSize:12,color:"rgba(239,68,68,0.7)",background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:8,padding:"8px 10px",marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>⚠ {stop.issue}</div>}
                       {!isDone && !isProb && (
@@ -2646,7 +2656,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {/* Fila 2: Fallido · Entregado */}
                           <div style={{ display:"flex",gap:6 }}>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();setShowProb(stop.id);}}
-                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 4px",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.4)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",transition:"all .15s" }}>
+                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 4px",borderRadius:10,border:"1px solid rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.08)",color:"rgba(239,68,68,0.8)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",transition:"all .15s" }}>
                               Fallido
                             </button>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();markDelivered(stop.id);}}
@@ -3069,26 +3079,42 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       </div>
 
       {/* -- Reportar problema modal -- */}
-      {showProb && (
-        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(8px)",zIndex:9000,display:"flex",alignItems:"flex-end",justifyContent:"center" }}
-          onClick={e=>{if(e.target===e.currentTarget){setShowProb(null);setProbNote("");}}}>
-          <div style={{ width:"100%",maxWidth:520,background:"#111",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",animation:"slideUp .25s cubic-bezier(.4,0,.2,1)" }}>
-            <div style={{ width:32,height:3,background:"rgba(255,255,255,0.12)",borderRadius:2,margin:"0 auto 18px" }}/>
-            <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:4 }}>
-              Reportar problema · Parada #{stops.find(s=>s.id===showProb)?.stopNum}
-            </div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginBottom:14,fontFamily:"'DM Sans',sans-serif" }}>
-              {stops.find(s=>s.id===showProb)?.client} · {stops.find(s=>s.id===showProb)?.displayAddr}
-            </div>
-            <textarea value={probNote} onChange={e=>setProbNote(e.target.value)} placeholder="Describe el problema (nadie en casa, dirección incorrecta...)"
-              style={{ width:"100%",background:"#0a0a0a",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"12px 13px",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white",resize:"none",height:90,marginBottom:14 }}/>
-            <div style={{ display:"flex",gap:8 }}>
-              <button className="rd-btn" onClick={()=>{setShowProb(null);setProbNote("");}} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer" }}>Cancelar</button>
-              <button className="rd-btn" onClick={()=>markProblem(showProb)} style={{ flex:2,padding:"13px",borderRadius:12,border:"none",background:"white",color:"black",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>Confirmar problema</button>
+      {showProb && (() => {
+        const probStop = stops.find(s=>s.id===showProb);
+        const REASONS = ["Nadie en casa","Dirección incorrecta","Cliente canceló","Negocio cerrado","Acceso no disponible","Paquete dañado","Otro"];
+        return (
+          <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(8px)",zIndex:9000,display:"flex",alignItems:"flex-end",justifyContent:"center" }}
+            onClick={e=>{if(e.target===e.currentTarget){setShowProb(null);setProbNote("");}}}>
+            <div style={{ width:"100%",maxWidth:520,background:"#111",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",animation:"slideUp .25s cubic-bezier(.4,0,.2,1)" }}>
+              <div style={{ width:32,height:3,background:"rgba(255,255,255,0.12)",borderRadius:2,margin:"0 auto 16px" }}/>
+              <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:3 }}>
+                Marcar como fallido · #{probStop?.stopNum}
+              </div>
+              <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginBottom:14,fontFamily:"'DM Sans',sans-serif" }}>
+                {probStop?.client} · {probStop?.displayAddr||probStop?.rawAddr}
+              </div>
+              {/* Quick reasons */}
+              <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginBottom:14 }}>
+                {REASONS.map(r => (
+                  <button key={r} onClick={()=>setProbNote(r)}
+                    style={{ padding:"7px 13px",borderRadius:20,border:`1px solid ${probNote===r?"rgba(239,68,68,0.6)":"rgba(255,255,255,0.08)"}`,background:probNote===r?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)",color:probNote===r?"rgba(239,68,68,0.9)":"rgba(255,255,255,0.5)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",transition:"all .15s" }}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              {/* Custom text if "Otro" or wants to add detail */}
+              <textarea value={probNote==="Nadie en casa"||probNote==="Dirección incorrecta"||probNote==="Cliente canceló"||probNote==="Negocio cerrado"||probNote==="Acceso no disponible"||probNote==="Paquete dañado" ? "" : probNote}
+                onChange={e=>setProbNote(e.target.value)}
+                placeholder="Otro motivo o detalle adicional..."
+                style={{ width:"100%",background:"#0a0a0a",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"11px 13px",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white",resize:"none",height:70,marginBottom:14,boxSizing:"border-box" }}/>
+              <div style={{ display:"flex",gap:8 }}>
+                <button onClick={()=>{setShowProb(null);setProbNote("");}} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer" }}>Cancelar</button>
+                <button onClick={()=>{ if(!probNote.trim()){alert("Selecciona o escribe un motivo");return;} markProblem(showProb);}} style={{ flex:2,padding:"13px",borderRadius:12,border:"none",background:"rgba(239,68,68,0.85)",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>Confirmar fallido</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* -- Logout confirm -- */}
       {logoutConf && (
@@ -6304,25 +6330,25 @@ export default function RapDrive() {
       });
     };
 
-    // 1) Carga inicial: cargar snapshot + globalRoutes sin disparar notificaciones
+    // 1) Carga inicial desde Firebase: inicializar snapshot sin disparar notificaciones
     FB.get("routes").then(data => {
-      if (!data || typeof data !== "object") return;
-      _memStore.routes = data;
-      window.__rdRouteStore = data;
-      setGlobalRoutes(data);
-      // Poblar snapshot inicial sin disparar eventos
-      Object.entries(data).forEach(([driverId, route]) => {
-        if (route?.stops) initSnapshot(driverId, route);
-      });
-      // AHORA activar el listener SSE (después del snapshot inicial)
-      const unsubRoutes = FB.listen("routes", processChanges);
-      // Polling cada 5s como respaldo
-      const poll = setInterval(() => FB.get("routes").then(processChanges), 5000);
-      // Guardar cleanup en ref para que useEffect lo pueda llamar
-      cleanupRef.current = () => { unsubRoutes(); clearInterval(poll); };
+      if (data && typeof data === "object") {
+        _memStore.routes = data;
+        window.__rdRouteStore = data;
+        setGlobalRoutes(data);
+        Object.entries(data).forEach(([driverId, route]) => {
+          if (route?.stops) initSnapshot(driverId, route);
+        });
+      }
     });
 
-    return () => { if (cleanupRef.current) cleanupRef.current(); };
+    // 2) Listener SSE: se activa inmediatamente, pero ignora cambios si snapshot no está listo
+    const unsubRoutes = FB.listen("routes", processChanges);
+
+    // 3) Polling cada 5s como respaldo
+    const poll = setInterval(() => FB.get("routes").then(d => { if(d) processChanges(d); }), 5000);
+
+    return () => { unsubRoutes(); clearInterval(poll); };
   }, [pushEvent]);
 
   const unreadCount = events.filter(e=>!e.read).length;
