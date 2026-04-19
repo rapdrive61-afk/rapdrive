@@ -2071,13 +2071,25 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
         });
       } else {
-        // Misma ruta: actualizar stops conservando driverStatus de Firebase (el mensajero puede haber marcado paradas)
+        // Misma ruta: mergear conservando el driverStatus MAS avanzado (local vs Firebase)
+        // Evita que el polling de 3s revierta paradas ya marcadas por el mensajero
+        const statusRank = { delivered:3, problema:3, en_ruta:2, pending:1 };
         lastSentAt._stopCount = nr.stops.length;
         if (!window.__rdRouteStore) window.__rdRouteStore = {};
         window.__rdRouteStore[myKey] = nr;
         _memStore.routes[myKey] = nr;
         onUpdateRoute(myKey, nr);
-        setStops(nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" })));
+        setStops(currentStops => {
+          const localMap = {};
+          currentStops.forEach(s => { localMap[s.id] = s; });
+          return nr.stops.map(s => {
+            const local = localMap[s.id];
+            const fbRank    = statusRank[s.driverStatus] || 1;
+            const localRank = local ? (statusRank[local.driverStatus] || 1) : 0;
+            const best = localRank >= fbRank ? local : s;
+            return { ...s, ...best, driverStatus: best.driverStatus || "pending" };
+          });
+        });
       }
     };
 
@@ -2247,10 +2259,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   });
 
   const pushUpdate = (updatedStops) => {
-    const updated = { ...(globalRoutes[myKey]||{}), stops:updatedStops, lastUpdate:Date.now() };
+    // Usar la ruta base de Firebase (memoria) para no perder campos
+    const base = _memStore.routes[myKey] || (window.__rdRouteStore||{})[myKey] || globalRoutes[myKey] || {};
+    const updated = { ...base, stops:updatedStops, lastUpdate:Date.now() };
     onUpdateRoute(myKey, updated);
     if (!window.__rdRouteStore) window.__rdRouteStore = {};
-    window.__rdRouteStore[myKey] = updated; LS.setRoute(myKey, updated);
+    window.__rdRouteStore[myKey] = updated;
+    _memStore.routes[myKey] = updated;
+    // Guardar directo a Firebase (no solo via LS) para garantizar persistencia inmediata
+    FB.set(`routes/${myKey}`, updated);
+    LS.setRoute(myKey, updated);
     // Check if route is now fully complete → save to history
     const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
     if (allDone) {
@@ -2612,16 +2630,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                     {/* Content */}
                     <div style={{ flex:1,minWidth:0 }}>
-                      {/* CLIENTE - lo más visible */}
-                      <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:2 }}>
-                        <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:isDone?"rgba(16,185,129,0.7)":isProb?"rgba(239,68,68,0.8)":isCur?"white":"rgba(255,255,255,0.85)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1 }}>
+                      {/* CLIENTE - centrado */}
+                      <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:2 }}>
+                        <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:isDone?"rgba(16,185,129,0.7)":isProb?"rgba(239,68,68,0.8)":isCur?"white":"rgba(255,255,255,0.85)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"center" }}>
                           {stop.client||"—"}
                         </div>
                         {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"rgba(255,255,255,0.12)",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
                       </div>
-                      {/* TELÉFONO + TRACKING - inline con la dirección */}
+                      {/* TELÉFONO + TRACKING - centrado debajo del nombre */}
                       {(stop.phone || stop.tracking) && (
-                        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:2,overflow:"hidden" }}>
+                        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:2,overflow:"hidden" }}>
                           {stop.phone && (
                             <a href={`tel:${stop.phone}`} onClick={e=>e.stopPropagation()}
                               style={{ fontSize:11,color:"rgba(59,130,246,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,textDecoration:"none",flexShrink:0 }}>
@@ -2629,12 +2647,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                             </a>
                           )}
                           {stop.tracking && (
-                            <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>· {stop.tracking}</span>
+                            <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{stop.tracking}</span>
                           )}
                         </div>
                       )}
-                      {/* DIRECCIÓN - secundaria */}
-                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.28)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4,fontFamily:"'DM Sans',sans-serif" }}>
+                      {/* DIRECCIÓN - centrada */}
+                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.28)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4,fontFamily:"'DM Sans',sans-serif",textAlign:"center" }}>
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
                       </div>
                       {stop.notes && <div style={{ fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:2,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>· {stop.notes}</div>}
