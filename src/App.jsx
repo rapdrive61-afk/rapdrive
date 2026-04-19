@@ -2589,7 +2589,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
                   style={{ borderBottom:"1px solid rgba(255,255,255,0.04)",background:isExp?"rgba(255,255,255,0.04)":isCur?"rgba(255,255,255,0.02)":"transparent",cursor:"pointer",transition:"background .1s",animation:`slideIn .18s ${Math.min(i,15)*18}ms ease both` }}>
 
-                  <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 10px 12px 6px" }}>
+                  <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 10px" }}>
                     {/* Stop number */}
                     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:0,flexShrink:0,paddingTop:1 }}>
                       <div style={{ width:28,height:28,borderRadius:"50%",background:isDone?"rgba(255,255,255,0.05)":isCur?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.04)",border:`1.5px solid ${isDone?"rgba(255,255,255,0.1)":isCur?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:numColor,fontFamily:"'DM Mono',monospace" }}>
@@ -2607,19 +2607,17 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         </div>
                         {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"rgba(255,255,255,0.12)",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
                       </div>
-                      {/* TELÉFONO + TRACKING SP - solo si hay datos */}
+                      {/* TELÉFONO + TRACKING - inline con la dirección */}
                       {(stop.phone || stop.tracking) && (
-                        <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap" }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:2,overflow:"hidden" }}>
                           {stop.phone && (
                             <a href={`tel:${stop.phone}`} onClick={e=>e.stopPropagation()}
-                              style={{ fontSize:11,color:"rgba(59,130,246,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,textDecoration:"none" }}>
+                              style={{ fontSize:11,color:"rgba(59,130,246,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,textDecoration:"none",flexShrink:0 }}>
                               {stop.phone}
                             </a>
                           )}
                           {stop.tracking && (
-                            <div style={{ display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:5,padding:"1px 7px" }}>
-                              <span style={{ fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Mono',monospace",fontWeight:500,letterSpacing:"0.2px" }}>{stop.tracking}</span>
-                            </div>
+                            <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>· {stop.tracking}</span>
                           )}
                         </div>
                       )}
@@ -2641,7 +2639,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                   {/* Expanded detail panel */}
                   {isExp && (
-                    <div style={{ padding:"0 14px 14px 52px",animation:"fadeUp .15s ease" }}>
+                    <div style={{ padding:"0 10px 14px 10px",animation:"fadeUp .15s ease" }}>
                       {stop.notes && <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:8,padding:"8px 10px",marginBottom:8,lineHeight:1.5,fontFamily:"'DM Sans',sans-serif" }}>{stop.notes}</div>}
                       {isProb && stop.issue && <div style={{ fontSize:12,color:"rgba(239,68,68,0.7)",background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:8,padding:"8px 10px",marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>⚠ {stop.issue}</div>}
                       {!isDone && !isProb && (
@@ -6203,7 +6201,9 @@ export default function RapDrive() {
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
   const [clients,      setClients]      = useState([]);
-  const [globalRoutes, setGlobalRoutes] = useState(() => LS.getRoutes());
+  const [globalRoutes, setGlobalRoutes] = useState({});
+
+  // globalRoutes se sincroniza dentro del useEffect de notificaciones (un solo FB.listen)
 
   const handleUpdateRoute = (driverId, route) => {
     setGlobalRoutes(prev => ({ ...prev, [driverId]: route }));
@@ -6242,42 +6242,40 @@ export default function RapDrive() {
     setTimeout(() => setToasts(ts => ts.filter(t => t.toastId !== tid)), 5500);
   }, []);
 
-  // -- Firebase listener: detectar cambios reales en rutas de mensajeros --------
+  // -- Firebase: UN SOLO listener para rutas (sincroniza globalRoutes + notificaciones) --------
   useEffect(() => {
-    const unsub = FB.listen("routes", (data) => {
+    const processRouteData = (data, fireNotifications) => {
       if (!data || typeof data !== "object") return;
+      // Siempre sincronizar globalRoutes
+      _memStore.routes = data;
+      window.__rdRouteStore = data;
+      setGlobalRoutes(prev => ({ ...prev, ...data }));
+
+      if (!fireNotifications) return;
       const now = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
       Object.entries(data).forEach(([driverId, route]) => {
         if (!route?.stops) return;
         const prev = lastRouteSnapRef.current[driverId];
         const driverLabel = route.driverName || driverId;
 
-        // --- Ruta nueva o distinta detectada ---
+        // Ruta nueva: inicializar snapshot sin disparar evento
         if (!prev || prev.sentAt !== route.sentAt) {
-          lastRouteSnapRef.current[driverId] = { sentAt: route.sentAt, stops: {} };
-          return; // primera carga, no generar evento
+          const stopsMap = {};
+          route.stops.forEach(s => { stopsMap[s.id] = s.driverStatus; });
+          lastRouteSnapRef.current[driverId] = { sentAt: route.sentAt, stops: stopsMap, routeCompletedNotified: false };
+          return;
         }
 
-        // --- Detectar paradas que cambiaron de estado ---
+        // Detectar paradas que cambiaron de estado
         const prevStops = prev.stops || {};
         let anyChange = false;
         route.stops.forEach(stop => {
           const prevStatus = prevStops[stop.id];
           const newStatus  = stop.driverStatus;
-          if (!prevStatus || prevStatus === newStatus) {
-            // update snapshot
-            lastRouteSnapRef.current[driverId] = {
-              ...lastRouteSnapRef.current[driverId],
-              stops: { ...prevStops, [stop.id]: newStatus },
-            };
-            return;
-          }
+          // Actualizar snapshot siempre
+          lastRouteSnapRef.current[driverId].stops[stop.id] = newStatus;
+          if (!prevStatus || prevStatus === newStatus) return;
           anyChange = true;
-          // Estado cambió
-          lastRouteSnapRef.current[driverId] = {
-            ...lastRouteSnapRef.current[driverId],
-            stops: { ...prevStops, [stop.id]: newStatus },
-          };
           const clientLabel = stop.client || `Parada #${stop.stopNum}`;
           const trackLabel  = stop.tracking ? ` · ${stop.tracking}` : "";
           if (newStatus === "delivered") {
@@ -6298,15 +6296,11 @@ export default function RapDrive() {
           }
         });
 
-        // --- Detectar ruta completada (todas las paradas done/problema) ---
-        if (anyChange && route.stops.length > 0) {
+        // Detectar ruta completada
+        if (anyChange && route.stops.length > 0 && !prev.routeCompletedNotified) {
           const allDone = route.stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
-          const alreadyNotified = prev.routeCompletedNotified;
-          if (allDone && !alreadyNotified) {
-            lastRouteSnapRef.current[driverId] = {
-              ...lastRouteSnapRef.current[driverId],
-              routeCompletedNotified: true,
-            };
+          if (allDone) {
+            lastRouteSnapRef.current[driverId].routeCompletedNotified = true;
             const del  = route.stops.filter(s => s.driverStatus === "delivered").length;
             const prob = route.stops.filter(s => s.driverStatus === "problema").length;
             pushEvent({ id:"e"+Date.now()+"complete"+driverId, type:"delivered", icon:"🏁", color:"#10b981",
@@ -6316,30 +6310,25 @@ export default function RapDrive() {
           }
         }
       });
-    });
+    };
 
-    // Inicializar snapshot con estado actual (sin disparar eventos)
-    FB.get("routes").then(data => {
-      if (!data) return;
-      Object.entries(data).forEach(([driverId, route]) => {
-        if (!route?.stops) return;
-        const stopsMap = {};
-        route.stops.forEach(s => { stopsMap[s.id] = s.driverStatus; });
-        lastRouteSnapRef.current[driverId] = { sentAt: route.sentAt, stops: stopsMap };
-      });
-    });
+    // 1) Carga inicial: sincronizar sin disparar notificaciones
+    FB.get("routes").then(data => processRouteData(data, false));
 
-    // Escuchar notificaciones directas enviadas por mensajeros
-    const seenAdminNotifs = new Set();
-    const unsubNotifs = FB.listen("adminNotifs", (data) => {
-      if (!data) return;
-      Object.values(data).forEach(notif => {
-        if (!notif?.id || seenAdminNotifs.has(notif.id)) return;
-        seenAdminNotifs.add(notif.id);
-        pushEvent({ ...notif, isNew: true, read: false });
+    // 2) Listener SSE único: sincroniza rutas Y dispara notificaciones
+    const unsubRoutes = FB.listen("routes", (data) => processRouteData(data, true));
+
+    // 3) Polling de respaldo cada 5s (solo para globalRoutes, sin notificaciones)
+    const poll = setInterval(() => {
+      FB.get("routes").then(data => {
+        if (!data || typeof data !== "object") return;
+        _memStore.routes = data;
+        window.__rdRouteStore = data;
+        setGlobalRoutes(prev => ({ ...prev, ...data }));
       });
-    });
-    return () => { unsub(); unsubNotifs(); };
+    }, 5000);
+
+    return () => { unsubRoutes(); clearInterval(poll); };
   }, [pushEvent]);
 
   const unreadCount = events.filter(e=>!e.read).length;
