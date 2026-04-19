@@ -121,7 +121,6 @@ if (typeof window !== "undefined") {
   window.__rdPendingRoutes = LS.getAllPending();
 
   // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
-  // Carga rutas, chats y colas pendientes al iniciar la app
   FB.get("routes").then(data => {
     if (data) { _memStore.routes = data; window.__rdRouteStore = data; }
   });
@@ -130,6 +129,24 @@ if (typeof window !== "undefined") {
   });
   FB.get("pendingRoutes").then(data => {
     if (data) { _memStore.pendingRoutes = data; window.__rdPendingRoutes = data; }
+  });
+  // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
+  FB.get("mens").then(data => {
+    if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
+  });
+  FB.get("users").then(data => {
+    if (data && typeof data === "object") {
+      Object.values(data).forEach(u => {
+        if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+      });
+    }
+  });
+  FB.get("mens_users").then(data => {
+    if (data && typeof data === "object") {
+      Object.values(data).forEach(u => {
+        if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+      });
+    }
   });
 }
 
@@ -2635,7 +2652,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                   {/* Expanded detail panel */}
                   {isExp && (
-                    <div style={{ padding:"0 0 14px 0",animation:"fadeUp .15s ease" }}>
+                    <div style={{ padding:"0 10px 14px 48px",animation:"fadeUp .15s ease" }}>
                       {stop.notes && <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:8,padding:"8px 10px",marginBottom:8,lineHeight:1.5,fontFamily:"'DM Sans',sans-serif" }}>{stop.notes}</div>}
                       {isProb && stop.issue && <div style={{ fontSize:12,color:"rgba(239,68,68,0.7)",background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:8,padding:"8px 10px",marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>⚠ {stop.issue}</div>}
                       {!isDone && !isProb && (
@@ -2656,8 +2673,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {/* Fila 2: Fallido · Entregado */}
                           <div style={{ display:"flex",gap:6 }}>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();setShowProb(stop.id);}}
-                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 4px",borderRadius:10,border:"1px solid rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.08)",color:"rgba(239,68,68,0.8)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",transition:"all .15s" }}>
-                              Fallido
+                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 4px",borderRadius:10,border:"1px solid rgba(239,68,68,0.45)",background:"rgba(239,68,68,0.18)",color:"rgba(239,68,68,1)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s" }}>
+                              ✕ Fallido
                             </button>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();markDelivered(stop.id);}}
                               style={{ flex:2,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"10px 4px",borderRadius:10,border:"none",background:"white",color:"black",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s" }}>
@@ -3344,12 +3361,53 @@ const LoginScreen = ({ onLogin }) => {
   const [focused,  setFocused]  = useState("");
   const [success,  setSuccess]  = useState(false);
 
+  // Carga usuarios de Firebase al montar (para que mensajeros nuevos funcionen)
+  useEffect(() => {
+    const loadFBUsers = async () => {
+      try {
+        const [usersData, mensUsersData] = await Promise.all([
+          FB.get("users"),
+          FB.get("mens_users"),
+        ]);
+        if (usersData && typeof usersData === "object") {
+          Object.values(usersData).forEach(u => {
+            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+          });
+        }
+        if (mensUsersData && typeof mensUsersData === "object") {
+          Object.values(mensUsersData).forEach(u => {
+            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+          });
+        }
+      } catch(e) { /* Firebase no disponible, usa USERS local */ }
+    };
+    loadFBUsers();
+  }, []);
+
   const handleSubmit = () => {
     if (loading) return;
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      const user = USERS.find(u => u.email === email.trim().toLowerCase() && u.password === password);
+    // Pequeño delay para que Firebase haya cargado
+    setTimeout(async () => {
+      // Buscar primero en USERS (ya incluye los de Firebase tras el useEffect)
+      let user = USERS.find(u => u.email === email.trim().toLowerCase() && u.password === password);
+      // Si no encontró, reintentar con Firebase directo (por si el useEffect aún no terminó)
+      if (!user) {
+        try {
+          const [usersData, mensUsersData] = await Promise.all([
+            FB.get("users"),
+            FB.get("mens_users"),
+          ]);
+          const allFB = [
+            ...Object.values(usersData || {}),
+            ...Object.values(mensUsersData || {}),
+          ];
+          user = allFB.find(u => u && u.email === email.trim().toLowerCase() && u.password === password);
+          // Si encontró en Firebase, agrégalo a USERS local para futuras búsquedas
+          if (user && !USERS.find(x => x.id === user.id)) USERS.push(user);
+        } catch(e) {}
+      }
       if (user) {
         setSuccess(true);
         try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
@@ -6198,9 +6256,15 @@ export default function RapDrive() {
       const saved = sessionStorage.getItem("rdSession");
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Verify user still exists in USERS
+        // Aceptar la sesión si está en USERS local, o si tiene id y email válidos
+        // (mensajeros nuevos de Firebase pueden no estar en USERS aún al init)
         const valid = USERS.find(u => u.id === parsed.id && u.email === parsed.email);
-        return valid ? parsed : null;
+        if (valid) return valid;
+        // Si no está en USERS local pero la sesión tiene datos completos, aceptarla y agregar a USERS
+        if (parsed?.id && parsed?.email && parsed?.role) {
+          if (!USERS.find(x => x.id === parsed.id)) USERS.push(parsed);
+          return parsed;
+        }
       }
     } catch(e) {}
     return null;
@@ -6208,7 +6272,22 @@ export default function RapDrive() {
   const [logoutConfirm, setLogoutConfirm] = useState(false);
 
   // -- Mensajeros state (admin-managed) --
-  const [mensajeros, setMensajeros] = useState(DEFAULT_MENSAJEROS);
+  const [mensajeros, setMensajeros] = useState(() => {
+    // Usar lo que ya cargó el init global de Firebase, o DEFAULT
+    const fromMem = _memStore.mens;
+    return fromMem && fromMem.length > 0 ? fromMem : DEFAULT_MENSAJEROS;
+  });
+
+  // Sincronizar mensajeros desde Firebase al montar (por si llegaron después del init)
+  useEffect(() => {
+    FB.get("mens").then(data => {
+      if (data && Array.isArray(data) && data.length > 0) {
+        setMensajeros(data);
+        _memStore.mens = data;
+        window.__rdMensajeros = data;
+      }
+    });
+  }, []);
 
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
