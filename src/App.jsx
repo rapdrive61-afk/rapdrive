@@ -429,15 +429,8 @@ const PageDashboard = () => {
 // --- PAGE: ROUTES -------------------------------------------------------------
 
 const PageRoutes = () => {
-  // Pull all sent routes from Firebase store (keyed by driverId)
-  const [allRouteHistory, setAllRouteHistory] = useState(() => {
-    const stored = LS.getRoutes();
-    // Each key is a driverId, value is the last route sent. We also check window store.
-    const win = window.__rdRouteStore || {};
-    const merged = { ...stored, ...win };
-    // Flatten into array of route objects
-    return Object.values(merged).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
-  });
+  // Lee de routeHistory (todas las rutas) Y de routes (rutas activas con progreso actualizado)
+  const [allRouteHistory, setAllRouteHistory] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [filterDriver, setFilterDriver]   = useState("all");
   const [stopSearch,   setStopSearch]     = useState("");
@@ -445,26 +438,39 @@ const PageRoutes = () => {
   const gMapRef = useRef(null);
   const markersRef = useRef([]);
 
-  // Cargar rutas — sin SSE propio (usa el listener central del App via window.__rdOnRoutesUpdated)
-  useEffect(() => {
-    const loadFromFB = () => {
-      FB.get("routes").then(data => {
-        if (!data || typeof data !== "object") return;
-        _memStore.routes = data;
-        window.__rdRouteStore = data;
-        const arr = Object.values(data).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
-        setAllRouteHistory(arr);
+  const mergeAndSet = (histData, activeData) => {
+    // Combinar historial completo con rutas activas (que tienen driverStatus actualizado)
+    const byId = {};
+    // Primero poner historial
+    if (histData && typeof histData === "object") {
+      Object.values(histData).filter(Boolean).forEach(r => { if(r.routeId) byId[r.routeId] = r; });
+    }
+    // Luego sobreescribir con activas (tienen el progreso más reciente)
+    if (activeData && typeof activeData === "object") {
+      Object.values(activeData).filter(Boolean).forEach(r => {
+        if(r.routeId) byId[r.routeId] = r; // misma ruta: actualizar con progreso
+        else if(r.driverId) byId[r.driverId+"_"+r.sentAt] = r; // rutas sin routeId (legado)
       });
+    }
+    const arr = Object.values(byId).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
+    setAllRouteHistory(arr);
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      const [histData, activeData] = await Promise.all([
+        FB.get("routeHistory"),
+        FB.get("routes"),
+      ]);
+      if (activeData) { _memStore.routes = activeData; window.__rdRouteStore = activeData; }
+      mergeAndSet(histData, activeData);
     };
-    // Carga inicial
-    loadFromFB();
-    // El listener del App llama a este callback cuando hay cambios en Firebase
-    window.__rdOnRoutesUpdated = (data) => {
-      const arr = Object.values(data).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
-      setAllRouteHistory(arr);
+    load();
+    // El listener del App notifica cuando hay cambios en routes (activas)
+    window.__rdOnRoutesUpdated = (activeData) => {
+      FB.get("routeHistory").then(histData => mergeAndSet(histData, activeData));
     };
-    // Polling de respaldo cada 4s
-    const t = setInterval(loadFromFB, 4000);
+    const t = setInterval(load, 5000);
     return () => { clearInterval(t); delete window.__rdOnRoutesUpdated; };
   }, []);
 
@@ -2071,25 +2077,31 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
         });
       } else {
-        // Misma ruta: mergear conservando el driverStatus MAS avanzado (local vs Firebase)
-        // Evita que el polling de 3s revierta paradas ya marcadas por el mensajero
+        // Misma ruta: ignorar datos de Firebase si lastUpdate local es más reciente
+        // Esto evita que el polling revierta paradas ya marcadas por el mensajero
         const statusRank = { delivered:3, problema:3, en_ruta:2, pending:1 };
         lastSentAt._stopCount = nr.stops.length;
-        if (!window.__rdRouteStore) window.__rdRouteStore = {};
-        window.__rdRouteStore[myKey] = nr;
-        _memStore.routes[myKey] = nr;
-        onUpdateRoute(myKey, nr);
-        setStops(currentStops => {
-          const localMap = {};
-          currentStops.forEach(s => { localMap[s.id] = s; });
-          return nr.stops.map(s => {
-            const local = localMap[s.id];
-            const fbRank    = statusRank[s.driverStatus] || 1;
-            const localRank = local ? (statusRank[local.driverStatus] || 1) : 0;
-            const best = localRank >= fbRank ? local : s;
-            return { ...s, ...best, driverStatus: best.driverStatus || "pending" };
+        const localRoute = _memStore.routes[myKey] || (window.__rdRouteStore||{})[myKey];
+        const fbIsNewer = !localRoute || (nr.lastUpdate||0) > (localRoute.lastUpdate||0);
+        if (fbIsNewer) {
+          // Firebase tiene datos más recientes (otro dispositivo actualizó) → merge
+          if (!window.__rdRouteStore) window.__rdRouteStore = {};
+          window.__rdRouteStore[myKey] = nr;
+          _memStore.routes[myKey] = nr;
+          onUpdateRoute(myKey, nr);
+          setStops(currentStops => {
+            const localMap = {};
+            currentStops.forEach(s => { localMap[s.id] = s; });
+            return nr.stops.map(s => {
+              const local = localMap[s.id];
+              const fbRank    = statusRank[s.driverStatus] || 1;
+              const localRank = local ? (statusRank[local.driverStatus] || 1) : 0;
+              const best = localRank >= fbRank ? local : s;
+              return { ...s, ...best, driverStatus: best.driverStatus || "pending" };
+            });
           });
-        });
+        }
+        // Si local es más reciente → no hacer nada, el pushUpdate ya guardó en Firebase
       }
     };
 
@@ -2266,8 +2278,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     if (!window.__rdRouteStore) window.__rdRouteStore = {};
     window.__rdRouteStore[myKey] = updated;
     _memStore.routes[myKey] = updated;
-    // Guardar directo a Firebase (no solo via LS) para garantizar persistencia inmediata
+    // Guardar en Firebase: ruta activa + historial (para que admin vea todas)
     FB.set(`routes/${myKey}`, updated);
+    if (updated.routeId) FB.set(`routeHistory/${updated.routeId}`, updated);
     LS.setRoute(myKey, updated);
     // Check if route is now fully complete → save to history
     const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
@@ -6046,6 +6059,8 @@ const CircuitEngine = () => {
                         if (!window.__rdRouteStore) window.__rdRouteStore = {};
                         window.__rdRouteStore[driverId] = route;
                         LS.setRoute(driverId, route);
+                        // Guardar también en historial de rutas (keyed by routeId, no por driverId)
+                        FB.set(`routeHistory/${route.routeId}`, { ...route, sentAt: route.sentAt });
                         if (typeof window.__rdSetRoute === "function") window.__rdSetRoute(driverId, route);
                         // Chat automático
                         if (!window.__rdChatStore) window.__rdChatStore = {};
@@ -6440,13 +6455,34 @@ export default function RapDrive() {
       }
     });
 
-    // 2) Listener SSE: se activa inmediatamente, pero ignora cambios si snapshot no está listo
+    // 2) Listener SSE de rutas
     const unsubRoutes = FB.listen("routes", processChanges);
 
-    // 3) Polling cada 5s como respaldo
+    // 3) Listener SSE de adminNotifs — mensajero escribe aquí cuando entrega/falla
+    let lastNotifIds = new Set();
+    const processAdminNotifs = (data) => {
+      if (!data || typeof data !== "object") return;
+      const now = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
+      Object.values(data).forEach(notif => {
+        if (!notif || !notif.id || lastNotifIds.has(notif.id)) return;
+        lastNotifIds.add(notif.id);
+        // Solo procesar notificaciones recientes (últimos 60s)
+        if (notif.createdAt && Date.now() - notif.createdAt > 60000) return;
+        pushEvent({ ...notif, time: now, read: false, isNew: true });
+      });
+    };
+    // Carga inicial de notifs para poblar lastNotifIds sin disparar eventos
+    FB.get("adminNotifs").then(data => {
+      if (data && typeof data === "object") {
+        Object.keys(data).forEach(k => lastNotifIds.add(k));
+      }
+    });
+    const unsubNotifs = FB.listen("adminNotifs", processAdminNotifs);
+
+    // 4) Polling cada 5s como respaldo
     const poll = setInterval(() => FB.get("routes").then(d => { if(d) processChanges(d); }), 5000);
 
-    return () => { unsubRoutes(); clearInterval(poll); };
+    return () => { unsubRoutes(); unsubNotifs(); clearInterval(poll); };
   }, [pushEvent]);
 
   const unreadCount = events.filter(e=>!e.read).length;
