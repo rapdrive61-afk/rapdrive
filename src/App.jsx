@@ -445,7 +445,7 @@ const PageRoutes = () => {
   const gMapRef = useRef(null);
   const markersRef = useRef([]);
 
-  // Cargar rutas desde Firebase directamente (no desde memoria)
+  // Cargar rutas — sin SSE propio (usa el listener central del App via window.__rdOnRoutesUpdated)
   useEffect(() => {
     const loadFromFB = () => {
       FB.get("routes").then(data => {
@@ -456,17 +456,16 @@ const PageRoutes = () => {
         setAllRouteHistory(arr);
       });
     };
+    // Carga inicial
     loadFromFB();
-    // Escuchar cambios en tiempo real
-    const unsub = FB.listen("routes", (data) => {
-      if (!data || typeof data !== "object") return;
-      _memStore.routes = data;
-      window.__rdRouteStore = data;
+    // El listener del App llama a este callback cuando hay cambios en Firebase
+    window.__rdOnRoutesUpdated = (data) => {
       const arr = Object.values(data).filter(Boolean).sort((a,b)=> new Date(b.sentAt||0) - new Date(a.sentAt||0));
       setAllRouteHistory(arr);
-    });
-    const t = setInterval(loadFromFB, 5000);
-    return () => { unsub(); clearInterval(t); };
+    };
+    // Polling de respaldo cada 4s
+    const t = setInterval(loadFromFB, 4000);
+    return () => { clearInterval(t); delete window.__rdOnRoutesUpdated; };
   }, []);
 
   // Build map when route selected
@@ -2652,7 +2651,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                   {/* Expanded detail panel */}
                   {isExp && (
-                    <div style={{ padding:"0 10px 14px 48px",animation:"fadeUp .15s ease" }}>
+                    <div style={{ padding:"0 10px 14px 10px",animation:"fadeUp .15s ease" }}>
                       {stop.notes && <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:8,padding:"8px 10px",marginBottom:8,lineHeight:1.5,fontFamily:"'DM Sans',sans-serif" }}>{stop.notes}</div>}
                       {isProb && stop.issue && <div style={{ fontSize:12,color:"rgba(239,68,68,0.7)",background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:8,padding:"8px 10px",marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>⚠ {stop.issue}</div>}
                       {!isDone && !isProb && (
@@ -6353,6 +6352,8 @@ export default function RapDrive() {
       _memStore.routes = data;
       window.__rdRouteStore = data;
       setGlobalRoutes(prev => ({ ...prev, ...data }));
+      // Notificar a PageRoutes si está montado
+      if (typeof window.__rdOnRoutesUpdated === "function") window.__rdOnRoutesUpdated(data);
 
       const now = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
       Object.entries(data).forEach(([driverId, route]) => {
