@@ -120,23 +120,17 @@ if (typeof window !== "undefined") {
   window.__rdMensajeros    = LS.getMens();
   window.__rdPendingRoutes = LS.getAllPending();
 
-  // ── LIMPIEZA DE RUTAS DE PRUEBA ──────────────────────────────────────────
-  // Borra todas las rutas y colas pendientes de Firebase para producción.
-  // Se ejecuta una sola vez cuando el flag no está marcado en sessionStorage.
-  if (!sessionStorage.getItem("rd_prod_clean_v1")) {
-    sessionStorage.setItem("rd_prod_clean_v1", "1");
-    // Limpiar memoria local
-    _memStore.routes = {};
-    _memStore.chats  = {};
-    _memStore.pendingRoutes = {};
-    window.__rdRouteStore    = {};
-    window.__rdChatStore     = {};
-    window.__rdPendingRoutes = {};
-    // Borrar en Firebase
-    FB.set("routes", null);
-    FB.set("chats", null);
-    FB.set("pendingRoutes", null);
-  }
+  // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
+  // Carga rutas, chats y colas pendientes al iniciar la app
+  FB.get("routes").then(data => {
+    if (data) { _memStore.routes = data; window.__rdRouteStore = data; }
+  });
+  FB.get("chats").then(data => {
+    if (data) { _memStore.chats = data; window.__rdChatStore = data; }
+  });
+  FB.get("pendingRoutes").then(data => {
+    if (data) { _memStore.pendingRoutes = data; window.__rdPendingRoutes = data; }
+  });
 }
 
 const STATUS = {
@@ -2279,6 +2273,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     setStops(updated); pushUpdate(updated);
     const stop = stops.find(s=>s.id===stopId);
     addChatMsg(`✓ Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`);
+    // Notificar al admin via Firebase
+    const notifId = "n"+Date.now()+stopId;
+    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
+      title:`Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`,
+      body:`${myKey} · #${stop?.stopNum} · ${stop?.displayAddr||stop?.rawAddr||""}`,
+      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
+      read: false, isNew: true, createdAt: Date.now() });
     setSelStop(null);
   };
 
@@ -2287,6 +2288,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     setStops(updated); pushUpdate(updated);
     const stop = stops.find(s=>s.id===stopId);
     addChatMsg(`⚠ Problema parada #${stop?.stopNum}: ${probNote||"Sin detalles"}`);
+    // Notificar al admin via Firebase
+    const notifId = "n"+Date.now()+stopId;
+    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
+      title:`Problema: ${stop?.client||"Parada #"+stop?.stopNum}`,
+      body:`${myKey} · ${probNote||"Sin detalles"} · #${stop?.stopNum}`,
+      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
+      read: false, isNew: true, createdAt: Date.now() });
     setShowProb(null); setProbNote(""); setSelStop(null);
   };
 
@@ -2581,7 +2589,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
                   style={{ borderBottom:"1px solid rgba(255,255,255,0.04)",background:isExp?"rgba(255,255,255,0.04)":isCur?"rgba(255,255,255,0.02)":"transparent",cursor:"pointer",transition:"background .1s",animation:`slideIn .18s ${Math.min(i,15)*18}ms ease both` }}>
 
-                  <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 14px" }}>
+                  <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 10px 12px 6px" }}>
                     {/* Stop number */}
                     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:0,flexShrink:0,paddingTop:1 }}>
                       <div style={{ width:28,height:28,borderRadius:"50%",background:isDone?"rgba(255,255,255,0.05)":isCur?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.04)",border:`1.5px solid ${isDone?"rgba(255,255,255,0.1)":isCur?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:numColor,fontFamily:"'DM Mono',monospace" }}>
@@ -2599,20 +2607,22 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         </div>
                         {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"rgba(255,255,255,0.12)",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
                       </div>
-                      {/* TELÉFONO + TRACKING SP */}
-                      <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap" }}>
-                        {stop.phone && (
-                          <a href={`tel:${stop.phone}`} onClick={e=>e.stopPropagation()}
-                            style={{ fontSize:11,color:"rgba(59,130,246,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,textDecoration:"none" }}>
-                            {stop.phone}
-                          </a>
-                        )}
-                        {stop.tracking && (
-                          <div style={{ display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:5,padding:"1px 7px" }}>
-                            <span style={{ fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Mono',monospace",fontWeight:500,letterSpacing:"0.2px" }}>{stop.tracking}</span>
-                          </div>
-                        )}
-                      </div>
+                      {/* TELÉFONO + TRACKING SP - solo si hay datos */}
+                      {(stop.phone || stop.tracking) && (
+                        <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap" }}>
+                          {stop.phone && (
+                            <a href={`tel:${stop.phone}`} onClick={e=>e.stopPropagation()}
+                              style={{ fontSize:11,color:"rgba(59,130,246,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,textDecoration:"none" }}>
+                              {stop.phone}
+                            </a>
+                          )}
+                          {stop.tracking && (
+                            <div style={{ display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:5,padding:"1px 7px" }}>
+                              <span style={{ fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Mono',monospace",fontWeight:500,letterSpacing:"0.2px" }}>{stop.tracking}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {/* DIRECCIÓN - secundaria */}
                       <div style={{ fontSize:11,color:"rgba(255,255,255,0.28)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4,fontFamily:"'DM Sans',sans-serif" }}>
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
@@ -6319,7 +6329,17 @@ export default function RapDrive() {
       });
     });
 
-    return unsub;
+    // Escuchar notificaciones directas enviadas por mensajeros
+    const seenAdminNotifs = new Set();
+    const unsubNotifs = FB.listen("adminNotifs", (data) => {
+      if (!data) return;
+      Object.values(data).forEach(notif => {
+        if (!notif?.id || seenAdminNotifs.has(notif.id)) return;
+        seenAdminNotifs.add(notif.id);
+        pushEvent({ ...notif, isNew: true, read: false });
+      });
+    });
+    return () => { unsub(); unsubNotifs(); };
   }, [pushEvent]);
 
   const unreadCount = events.filter(e=>!e.read).length;
