@@ -2042,67 +2042,61 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
 
-  // -- Sync ruta en TIEMPO REAL desde Firebase (funciona entre Chrome y Brave) --
-  useEffect(() => {
-    // Verifica si el mensajero tiene paradas activas en curso
-    const hasActiveWork = (currentStops) =>
-      currentStops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
+  // -- Sync ruta en TIEMPO REAL desde Firebase --
+  // REGLA FUNDAMENTAL: los stops en pantalla NUNCA retroceden.
+  // Solo Firebase puede actualizar si trae un sentAt distinto (ruta nueva del admin).
+  // Cambios del propio mensajero se guardan en localStorage + Firebase y NO se revierten.
+  const writingRef = useRef(false); // true mientras pushUpdate está escribiendo en Firebase
 
+  useEffect(() => {
+    const LS_KEY = `rdRoute_${myKey}`;
+
+    // Al montar: recuperar estado desde localStorage primero (respaldo inmediato)
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+      if (saved && saved.stops && saved.sentAt) {
+        lastSentAt.current = saved.sentAt;
+        _memStore.routes[myKey] = saved;
+        if (!window.__rdRouteStore) window.__rdRouteStore = {};
+        window.__rdRouteStore[myKey] = saved;
+        setStops(saved.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" })));
+      }
+    } catch(e) {}
+
+    // applyRoute: SOLO se aplica si es una ruta distinta (sentAt diferente = admin envió nueva ruta)
+    // NUNCA sobreescribe el estado actual del mensajero para la misma ruta
     const applyRoute = (nr) => {
       if (!nr || !nr.stops) return;
+      if (writingRef.current) return; // ignorar Firebase mientras estamos escribiendo
       const isDifferentRoute = nr.sentAt !== lastSentAt.current;
-      if (isDifferentRoute) {
-        // Ruta diferente: solo reemplazar si NO hay trabajo activo en curso
-        setStops(currentStops => {
-          const hasActive = currentStops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
-          if (hasActive && currentStops.length > 0) {
-            // Hay trabajo activo: encolar la nueva ruta, no reemplazar
-            setPendingRoutes(prev => {
-              if (prev.some(r => r.sentAt === nr.sentAt)) return prev;
-              const updated = [...prev, nr];
-              if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-              window.__rdPendingRoutes[myKey] = updated;
-              LS.setPending(myKey, updated);
-              return updated;
-            });
-            return currentStops;
-          }
-          // Sin trabajo activo: aplicar nueva ruta conservando driverStatus de Firebase
-          lastSentAt.current = nr.sentAt;
-          lastSentAt._stopCount = nr.stops.length;
-          if (!window.__rdRouteStore) window.__rdRouteStore = {};
-          window.__rdRouteStore[myKey] = nr;
-          _memStore.routes[myKey] = nr;
-          onUpdateRoute(myKey, nr);
-          return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
-        });
-      } else {
-        // Misma ruta: ignorar datos de Firebase si lastUpdate local es más reciente
-        // Esto evita que el polling revierta paradas ya marcadas por el mensajero
-        const statusRank = { delivered:3, problema:3, en_ruta:2, pending:1 };
-        lastSentAt._stopCount = nr.stops.length;
-        const localRoute = _memStore.routes[myKey] || (window.__rdRouteStore||{})[myKey];
-        const fbIsNewer = !localRoute || (nr.lastUpdate||0) > (localRoute.lastUpdate||0);
-        if (fbIsNewer) {
-          // Firebase tiene datos más recientes (otro dispositivo actualizó) → merge
-          if (!window.__rdRouteStore) window.__rdRouteStore = {};
-          window.__rdRouteStore[myKey] = nr;
-          _memStore.routes[myKey] = nr;
-          onUpdateRoute(myKey, nr);
-          setStops(currentStops => {
-            const localMap = {};
-            currentStops.forEach(s => { localMap[s.id] = s; });
-            return nr.stops.map(s => {
-              const local = localMap[s.id];
-              const fbRank    = statusRank[s.driverStatus] || 1;
-              const localRank = local ? (statusRank[local.driverStatus] || 1) : 0;
-              const best = localRank >= fbRank ? local : s;
-              return { ...s, ...best, driverStatus: best.driverStatus || "pending" };
-            });
+      if (!isDifferentRoute) return; // misma ruta → nunca sobreescribir estado del mensajero
+
+      // Es una ruta diferente → verificar si hay trabajo activo antes de reemplazar
+      setStops(currentStops => {
+        const hasActive = currentStops.length > 0 && currentStops.some(
+          s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
+        );
+        if (hasActive) {
+          // Encolar, no reemplazar
+          setPendingRoutes(prev => {
+            if (prev.some(r => r.sentAt === nr.sentAt)) return prev;
+            const updated = [...prev, nr];
+            if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
+            window.__rdPendingRoutes[myKey] = updated;
+            LS.setPending(myKey, updated);
+            return updated;
           });
+          return currentStops;
         }
-        // Si local es más reciente → no hacer nada, el pushUpdate ya guardó en Firebase
-      }
+        // Sin trabajo activo: aplicar nueva ruta
+        lastSentAt.current = nr.sentAt;
+        if (!window.__rdRouteStore) window.__rdRouteStore = {};
+        window.__rdRouteStore[myKey] = nr;
+        _memStore.routes[myKey] = nr;
+        onUpdateRoute(myKey, nr);
+        try { localStorage.setItem(LS_KEY, JSON.stringify(nr)); } catch(e) {}
+        return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
+      });
     };
 
     const applyChat = (msgs) => {
@@ -2117,29 +2111,23 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       window.__rdPendingRoutes[myKey] = queue;
     };
 
-    // 1) Leer estado actual de Firebase al montar
+    // 1) Leer desde Firebase al montar (para rutas nuevas del admin)
     FB.get(`routes/${myKey}`).then(applyRoute);
     FB.get(`chats/${myKey}`).then(applyChat);
     FB.get(`pendingRoutes/${myKey}`).then(applyPending);
 
-    // 2) Escuchar cambios en tiempo real via SSE
-    const unsubRoute   = FB.listen(`routes/${myKey}`,        applyRoute);
-    const unsubChat    = FB.listen(`chats/${myKey}`,          applyChat);
-    const unsubPending = FB.listen(`pendingRoutes/${myKey}`,  applyPending);
+    // 2) SSE solo para rutas (detectar nueva ruta del admin) y chat/pending
+    const unsubRoute   = FB.listen(`routes/${myKey}`, applyRoute);
+    const unsubChat    = FB.listen(`chats/${myKey}`,   applyChat);
+    const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
 
-    // 3) Polling de respaldo cada 3s (por si SSE falla)
-    const t = setInterval(() => {
-      FB.get(`routes/${myKey}`).then(applyRoute);
-      FB.get(`chats/${myKey}`).then(applyChat);
-      FB.get(`pendingRoutes/${myKey}`).then(applyPending);
-    }, 3000);
+    // SIN polling — el polling era el que revertía los estados
 
-    // Exponer setter de pendientes para el canal React (misma pestaña)
     window.__rdSetPending = (driverId, queue) => {
       if (driverId === myKey) applyPending(queue);
     };
 
-    return () => { unsubRoute(); unsubChat(); unsubPending(); clearInterval(t); };
+    return () => { unsubRoute(); unsubChat(); unsubPending(); };
   }, [myKey]); // eslint-disable-line
 
   useEffect(() => { const t=setInterval(()=>setTime(new Date()),1000); return()=>clearInterval(t); },[]);
@@ -2271,17 +2259,23 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   });
 
   const pushUpdate = (updatedStops) => {
-    // Usar la ruta base de Firebase (memoria) para no perder campos
     const base = _memStore.routes[myKey] || (window.__rdRouteStore||{})[myKey] || globalRoutes[myKey] || {};
     const updated = { ...base, stops:updatedStops, lastUpdate:Date.now() };
-    onUpdateRoute(myKey, updated);
+    // 1) Actualizar memoria local INMEDIATAMENTE (fuente de verdad local)
     if (!window.__rdRouteStore) window.__rdRouteStore = {};
     window.__rdRouteStore[myKey] = updated;
     _memStore.routes[myKey] = updated;
-    // Guardar en Firebase: ruta activa + historial (para que admin vea todas)
-    FB.set(`routes/${myKey}`, updated);
-    if (updated.routeId) FB.set(`routeHistory/${updated.routeId}`, updated);
-    LS.setRoute(myKey, updated);
+    onUpdateRoute(myKey, updated);
+    // 2) Guardar en localStorage (persiste si se recarga antes de que Firebase responda)
+    try { localStorage.setItem(`rdRoute_${myKey}`, JSON.stringify(updated)); } catch(e) {}
+    // 3) Escribir en Firebase con bloqueo para que applyRoute no revierta
+    writingRef.current = true;
+    Promise.all([
+      FB.set(`routes/${myKey}`, updated),
+      updated.routeId ? FB.set(`routeHistory/${updated.routeId}`, updated) : Promise.resolve(),
+    ]).finally(() => {
+      writingRef.current = false;
+    });
     // Check if route is now fully complete → save to history
     const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
     if (allDone) {
