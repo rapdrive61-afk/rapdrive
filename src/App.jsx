@@ -2021,6 +2021,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [search,     setSearch]     = useState("");
   const [selStop,    setSelStop]    = useState(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [splitPct, setSplitPct]       = useState(42); // % height for map (like mapExpanded 42%)
+  const [splitDrag, setSplitDrag]     = useState(false);
+  const splitRef = useRef({ startY:0, startPct:42 });
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [filterMode, setFilterMode] = useState("all");
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
@@ -2152,17 +2155,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         zoomControl: true,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
         styles: [
-          {elementType:"geometry",stylers:[{color:"#04080f"}]},
-          {elementType:"labels.text.stroke",stylers:[{color:"#04080f"}]},
-          {elementType:"labels.text.fill",stylers:[{color:"#1a3050"}]},
-          {featureType:"road",elementType:"geometry",stylers:[{color:"#0b1828"}]},
-          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#0f2035"}]},
-          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#152840"}]},
-          {featureType:"water",elementType:"geometry",stylers:[{color:"#020508"}]},
           {featureType:"poi",stylers:[{visibility:"off"}]},
           {featureType:"transit",stylers:[{visibility:"off"}]},
-          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#050c16"}]},
-          {featureType:"administrative",elementType:"geometry",stylers:[{visibility:"off"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#333333"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
+          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
+          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#eeeeee"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e0e0e0"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#aad3df"}]},
+          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f5f5f5"}]},
+          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#c0c0c0"}]},
         ],
       });
     });
@@ -2387,7 +2389,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       `}</style>
 
       {/* ══ MAP SECTION ══ */}
-      <div style={{ position:"relative", height: tab==="chat"?"0px": mapExpanded?"68%":"42%", flexShrink:0, transition:"height .35s cubic-bezier(.4,0,.2,1)", overflow:"hidden", background:"#000" }}>
+      <div style={{ position:"relative", height: tab==="chat"?"0px": (splitPct+"%"), flexShrink:0, transition: splitDrag?"none":"height .25s ease", overflow:"hidden", background:"#e8eaed" }}>
         <div ref={mapRef} style={{ width:"100%", height:"100%" }}/>
 
         {/* Top gradient overlay */}
@@ -2516,7 +2518,27 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ ROUTE PANEL ══ */}
       {tab === "route" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0a0a0a" }}>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#ffffff",position:"relative" }}>
+          {/* ── Drag divider ── */}
+          <div
+            onPointerDown={e => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              splitRef.current = { startY: e.clientY, startPct: splitPct };
+              setSplitDrag(true);
+            }}
+            onPointerMove={e => {
+              if (!splitDrag) return;
+              const screenH = window.innerHeight;
+              const delta   = e.clientY - splitRef.current.startY;
+              const newPct  = Math.min(75, Math.max(20, splitRef.current.startPct + (delta / screenH) * 100));
+              setSplitPct(Math.round(newPct));
+            }}
+            onPointerUp={() => setSplitDrag(false)}
+            style={{ height:16, display:"flex", alignItems:"center", justifyContent:"center",
+              cursor:"ns-resize", flexShrink:0, background:"#f3f4f6",
+              borderBottom:"1px solid #e5e7eb", touchAction:"none" }}>
+            <div style={{ width:36, height:4, borderRadius:4, background:"#d1d5db" }}/>
+          </div>
 
           {/* - Header area - */}
           <div style={{ padding:"12px 14px 0",flexShrink:0 }}>
@@ -2525,7 +2547,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             <div style={{ position:"relative",marginBottom:10 }}>
               <svg style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
-                style={{ width:"100%",background:"#161616",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"10px 36px 10px 36px",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white",transition:"border-color .15s" }}/>
+                style={{ width:"100%",background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:12,padding:"10px 36px 10px 36px",color:"#111827",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"#111827",transition:"border-color .15s" }}/>
               {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",padding:2,fontSize:14 }}>✕</button>}
             </div>
 
@@ -2540,7 +2562,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   </div>
                   <div style={{ fontSize:12,color:"rgba(255,255,255,0.5)",fontFamily:"'DM Mono',monospace",fontWeight:500 }}>{pct}%</div>
                 </div>
-                <div style={{ fontSize:18,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",letterSpacing:"-0.4px",marginBottom:10 }}>
+                <div style={{ fontSize:18,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"#111827",letterSpacing:"-0.4px",marginBottom:10 }}>
                   {myRoute.routeName || "Ruta del día"}
                 </div>
 
@@ -2553,17 +2575,17 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     {id:"problema",label:"Problemas",count:problems.length},
                   ].map(chip => (
                     <button key={chip.id} onClick={()=>setFilterMode(chip.id)} className="rd-filter-chip rd-btn"
-                      style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1px solid ${filterMode===chip.id?"rgba(255,255,255,0.25)":"rgba(255,255,255,0.07)"}`,background:filterMode===chip.id?"rgba(255,255,255,0.1)":"transparent",color:filterMode===chip.id?"white":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",flexShrink:0,transition:"all .15s" }}>
+                      style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1px solid ${filterMode===chip.id?"#2563eb":"#e5e7eb"}`,background:filterMode===chip.id?"#eff6ff":"#f9fafb",color:filterMode===chip.id?"#2563eb":"#6b7280",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",flexShrink:0,transition:"all .15s" }}>
                       {chip.label}
-                      {chip.count>0 && <span style={{ fontSize:11,color:filterMode===chip.id?"white":"rgba(255,255,255,0.3)",fontWeight:700 }}>{chip.count}</span>}
+                      {chip.count>0 && <span style={{ fontSize:11,color:filterMode===chip.id?"#2563eb":"#9ca3af",fontWeight:700 }}>{chip.count}</span>}
                     </button>
                   ))}
                 </div>
 
                 {/* Progress bar */}
                 {stops.length>0 && (
-                  <div style={{ height:2,background:"rgba(255,255,255,0.07)",borderRadius:2,marginBottom:10,overflow:"hidden" }}>
-                    <div style={{ height:2,borderRadius:2,background:"white",width:`${pct}%`,transition:"width .6s cubic-bezier(.4,0,.2,1)" }}/>
+                  <div style={{ height:3,background:"#e5e7eb",borderRadius:3,marginBottom:10,overflow:"hidden" }}>
+                    <div style={{ height:3,borderRadius:3,background:"#2563eb",width:`${pct}%`,transition:"width .6s cubic-bezier(.4,0,.2,1)" }}/>
                   </div>
                 )}
 
@@ -2624,12 +2646,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               return (
                 <div key={stop.id} className="rd-stop"
                   onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.04)",background:isExp?"rgba(255,255,255,0.04)":isCur?"rgba(255,255,255,0.02)":"transparent",cursor:"pointer",transition:"background .1s",animation:`slideIn .18s ${Math.min(i,15)*18}ms ease both` }}>
+                  style={{ margin:"6px 10px",borderRadius:12,border:`1.5px solid ${isDone?"#86efac":isProb?"#fca5a5":isCur?"#93c5fd":"#e5e7eb"}`,background:isDone?"#f0fdf4":isProb?"#fff5f5":isCur?"#eff6ff":"#ffffff",cursor:"pointer",transition:"background .1s",animation:`slideIn .18s ${Math.min(i,15)*18}ms ease both` }}>
 
                   <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 10px" }}>
                     {/* Stop number */}
                     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:0,flexShrink:0,paddingTop:1 }}>
-                      <div style={{ width:28,height:28,borderRadius:"50%",background:isDone?"rgba(255,255,255,0.05)":isCur?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.04)",border:`1.5px solid ${isDone?"rgba(255,255,255,0.1)":isCur?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:numColor,fontFamily:"'DM Mono',monospace" }}>
+                      <div style={{ width:30,height:30,borderRadius:"50%",background:isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#6b7280",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"white",fontFamily:"'DM Mono',monospace",boxShadow:`0 1px 4px ${isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#6b7280"}55` }}>
                         {isDone?"✓":isProb?"!":stop.stopNum||"?"}
                       </div>
                       {i < filteredStops.length-1 && <div style={{ width:1,height:10,background:"rgba(255,255,255,0.05)",marginTop:2 }}/>}
@@ -2639,10 +2661,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     <div style={{ flex:1,minWidth:0 }}>
                       {/* CLIENTE - centrado */}
                       <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:2 }}>
-                        <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:isDone?"rgba(16,185,129,0.7)":isProb?"rgba(239,68,68,0.8)":isCur?"white":"rgba(255,255,255,0.85)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"center" }}>
+                        <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:isDone?"#16a34a":isProb?"#dc2626":isCur?"#1d4ed8":"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"center" }}>
                           {stop.client||"—"}
                         </div>
-                        {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"rgba(255,255,255,0.12)",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
+                        {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"#2563eb",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
                       </div>
                       {/* TELÉFONO + TRACKING - centrado debajo del nombre */}
                       {(stop.phone || stop.tracking) && (
@@ -2659,7 +2681,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         </div>
                       )}
                       {/* DIRECCIÓN - centrada */}
-                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.28)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4,fontFamily:"'DM Sans',sans-serif",textAlign:"center" }}>
+                      <div style={{ fontSize:11,color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4,fontFamily:"'DM Sans',sans-serif",textAlign:"center" }}>
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
                       </div>
                       {stop.notes && <div style={{ fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:2,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>· {stop.notes}</div>}
@@ -3094,7 +3116,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       )}
 
       {/* ══ BOTTOM NAV ══ */}
-      <div style={{ position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,10,0.97)",backdropFilter:"blur(20px)",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",zIndex:200 }}>
+      <div style={{ position:"fixed",bottom:0,left:0,right:0,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(20px)",borderTop:"1px solid #e5e7eb",display:"flex",zIndex:200 }}>
         {[
           { id:"route", label:"Ruta",
             icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
@@ -3108,13 +3130,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
           <button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn"
-            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"11px 0 16px",border:"none",background:"transparent",color:tab===item.id?"white":"rgba(255,255,255,0.25)",cursor:"pointer",position:"relative",transition:"color .15s" }}>
+            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"11px 0 16px",border:"none",background:"transparent",color:tab===item.id?"#2563eb":"#9ca3af",cursor:"pointer",position:"relative",transition:"color .15s" }}>
             {item.badge>0 && tab!==item.id && (
-              <div style={{ position:"absolute",top:8,right:"calc(50% - 16px)",width:14,height:14,borderRadius:"50%",background:item.badgeColor||"white",border:"2px solid #0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"black",fontWeight:800 }}>{item.badge>9?"9+":item.badge}</div>
+              <div style={{ position:"absolute",top:8,right:"calc(50% - 16px)",width:14,height:14,borderRadius:"50%",background:item.badgeColor||"#2563eb",border:"2px solid white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"black",fontWeight:800 }}>{item.badge>9?"9+":item.badge}</div>
             )}
             {item.icon}
             <span style={{ fontSize:9,fontFamily:"'DM Sans',sans-serif",fontWeight:600 }}>{item.label}</span>
-            {tab===item.id && <div style={{ position:"absolute",bottom:0,left:"25%",right:"25%",height:2,background:"white",borderRadius:2 }}/>}
+            {tab===item.id && <div style={{ position:"absolute",bottom:0,left:"25%",right:"25%",height:2,background:"#2563eb",borderRadius:2 }}/>}
           </button>
         ))}
       </div>
