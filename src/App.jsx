@@ -276,14 +276,8 @@ const PageDashboard = () => {
   };
 
   // Listen to all driver locations from Firebase
-  // FIX: Escuchar cada mensajero individualmente en Firebase Realtime Database.
-  // Cuando el mensajero escribe FB.set("locations/M-01", loc), el SSE del nodo hijo
-  // llega con data = { lat, lng, ... } (el objeto directo), no con el driverId.
-  // La solución es suscribirse a cada nodo hijo por separado y mergearlo con su key.
   useEffect(() => {
-    const DRIVER_IDS = DRIVERS.map(d => d.id);
-
-    // ── Carga inicial del nodo raíz ──────────────────────────────────────
+    // Initial load
     FB.get("locations").then(data => {
       if (data && typeof data === "object") {
         setLiveLocations(data);
@@ -291,46 +285,23 @@ const PageDashboard = () => {
         Object.assign(window.__rdLocations, data);
       }
     });
-
-    // ── SSE nodo raíz (detecta when el nodo entero cambia) ───────────────
-    const unsubRoot = FB.listen("locations", (data) => {
-      if (!data) return;
-      if (typeof data === "object" && !data.lat) {
+    // Real-time updates via SSE
+    const unsub = FB.listen("locations", (data) => {
+      if (data && typeof data === "object") {
         setLiveLocations(prev => ({ ...prev, ...data }));
         if (!window.__rdLocations) window.__rdLocations = {};
         Object.assign(window.__rdLocations, data);
       }
     });
-
-    // ── FIX PRINCIPAL: escuchar cada mensajero individualmente ───────────
-    // Cuando el mensajero hace FB.set("locations/M-01", loc) el SSE del child
-    // llega con data = { lat, lng, ... } — mergeamos con el driverId correcto.
-    const unsubDrivers = DRIVER_IDS.map(driverId =>
-      FB.listen(`locations/${driverId}`, (loc) => {
-        if (!loc || !loc.lat) return;
-        const locWithId = { ...loc, driverId };
-        setLiveLocations(prev => ({ ...prev, [driverId]: locWithId }));
-        if (!window.__rdLocations) window.__rdLocations = {};
-        window.__rdLocations[driverId] = locWithId;
-      })
-    );
-
-    // ── Polling cada 3s como backup robusto ──────────────────────────────
+    // Polling backup every 5s
     const t = setInterval(() => {
       FB.get("locations").then(data => {
         if (data && typeof data === "object") {
           setLiveLocations(prev => ({ ...prev, ...data }));
-          if (!window.__rdLocations) window.__rdLocations = {};
-          Object.assign(window.__rdLocations, data);
         }
       });
-    }, 3000);
-
-    return () => {
-      unsubRoot();
-      unsubDrivers.forEach(u => u());
-      clearInterval(t);
-    };
+    }, 5000);
+    return () => { unsub(); clearInterval(t); };
   }, []);
 
   // Update driver markers on map when locations change
@@ -524,117 +495,8 @@ const PageDashboard = () => {
     navigator.clipboard?.writeText(txt).catch(() => {});
   };
 
-  // ── Ticker de "hace X min" para la barra GPS ─────────────────
-  const [gpsTick, setGpsTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setGpsTick(p => p + 1), 10000);
-    return () => clearInterval(t);
-  }, []);
-  const [gpsExpanded, setGpsExpanded] = useState(false);
-
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" }}>
-
-      {/* ══ PANEL GPS ADMIN ═══════════════════════════════════════════════════════ */}
-      <div style={{
-        background:"linear-gradient(135deg,#070d16,#0a1220)",
-        borderBottom:"1px solid #0f1e2e",
-        padding: gpsExpanded ? "10px 16px 14px" : "7px 16px",
-        flexShrink:0,
-        transition:"padding .2s",
-      }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: gpsExpanded ? 10 : 0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ position:"relative", width:8, height:8 }}>
-              <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"#22c55e", animation:"pulse 2s infinite", opacity:0.4 }}/>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:"#22c55e", boxShadow:"0 0 6px #22c55e", position:"relative" }}/>
-            </div>
-            <span style={{ fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:800, letterSpacing:"1.5px", color:"rgba(255,255,255,0.4)", textTransform:"uppercase" }}>
-              GPS en Tiempo Real
-            </span>
-            {(() => {
-              const onlineCount = Object.values(liveLocations).filter(l => l && l.online !== false && (Date.now()-(l.ts||0)) < 120000).length;
-              const totalWithLoc = Object.keys(liveLocations).length;
-              return totalWithLoc > 0 ? (
-                <div style={{ display:"flex", gap:5 }}>
-                  <span style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.25)", borderRadius:5, padding:"1px 7px", fontSize:9, color:"#22c55e", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>
-                    {onlineCount} online
-                  </span>
-                  {totalWithLoc - onlineCount > 0 && (
-                    <span style={{ background:"rgba(55,65,81,0.3)", border:"1px solid rgba(55,65,81,0.4)", borderRadius:5, padding:"1px 7px", fontSize:9, color:"#6b7280", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>
-                      {totalWithLoc - onlineCount} offline
-                    </span>
-                  )}
-                </div>
-              ) : null;
-            })()}
-          </div>
-          <button onClick={() => setGpsExpanded(e => !e)}
-            style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:7, padding:"3px 10px", color:"rgba(255,255,255,0.3)", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer" }}>
-            {gpsExpanded ? "▲ Colapsar" : "▼ Detalle"}
-          </button>
-        </div>
-
-        <div style={{
-          display:"flex", gap:8, flexWrap: gpsExpanded ? "wrap" : "nowrap",
-          overflowX: gpsExpanded ? "visible" : "auto",
-          marginTop: gpsExpanded ? 0 : 8,
-        }}>
-          {(() => {
-            const mensajeros = window.__rdMensajeros || DEFAULT_MENSAJEROS;
-            const allIds = [...new Set([...mensajeros.map(m => m.id), ...Object.keys(liveLocations)])];
-            return allIds.map(driverId => {
-              const loc = liveLocations[driverId];
-              const mens = mensajeros.find(m => m.id === driverId);
-              const name = loc && loc.driverName ? loc.driverName : (mens ? mens.name : driverId);
-              const initials = mens ? (mens.initials || name.slice(0,2).toUpperCase()) : name.slice(0,2).toUpperCase();
-              const hasLoc = !!(loc && loc.lat);
-              const isOnline = hasLoc && loc.online !== false && (Date.now() - (loc.ts||0)) < 120000;
-              const mins = loc && loc.ts ? Math.round((Date.now() - loc.ts) / 60000) : null;
-              const timeStr = mins === null ? "sin GPS" : mins === 0 ? "ahora" : mins < 60 ? mins+"m" : Math.floor(mins/60)+"h";
-              return (
-                <div key={driverId}
-                  onClick={() => { if (gMapRef.current && hasLoc) { gMapRef.current.panTo({ lat: loc.lat, lng: loc.lng }); gMapRef.current.setZoom(16); } }}
-                  style={{
-                    display:"flex", alignItems:"center", gap: gpsExpanded ? 10 : 7,
-                    background: isOnline ? "rgba(34,197,94,0.07)" : "rgba(255,255,255,0.03)",
-                    border:"1px solid "+(isOnline ? "rgba(34,197,94,0.22)" : "rgba(255,255,255,0.06)"),
-                    borderRadius:10, padding: gpsExpanded ? "10px 14px" : "5px 10px",
-                    cursor: hasLoc ? "pointer" : "default", flexShrink:0,
-                    minWidth: gpsExpanded ? 190 : "auto",
-                    transition:"all .15s",
-                  }}>
-                  <div style={{ width: gpsExpanded ? 34 : 26, height: gpsExpanded ? 34 : 26, borderRadius:"50%", background: isOnline ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#1f2937", display:"flex", alignItems:"center", justifyContent:"center", fontSize: gpsExpanded ? 12 : 9, fontWeight:800, color:"white", flexShrink:0, position:"relative" }}>
-                    {initials}
-                    <div style={{ position:"absolute", bottom:-1, right:-1, width:8, height:8, borderRadius:"50%", background: isOnline ? "#22c55e" : hasLoc ? "#f59e0b" : "#374151", border:"1.5px solid #070d16", boxShadow: isOnline ? "0 0 5px #22c55e" : "none" }}/>
-                  </div>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize: gpsExpanded ? 12 : 10, fontWeight:700, color: isOnline ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth: gpsExpanded ? 120 : 75 }}>
-                      {name.split(" ")[0]}
-                    </div>
-                    {gpsExpanded && <div style={{ fontSize:10, color: isOnline ? "#22c55e" : "#4b5563", marginTop:2 }}>{isOnline ? "🟢 Online" : hasLoc ? "🟡 Hace "+timeStr : "⚫ Sin GPS"}</div>}
-                    {gpsExpanded && loc && loc.routeName && <div style={{ fontSize:9, color:"rgba(59,130,246,0.7)", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:120 }}>📦 {loc.routeName}</div>}
-                    {gpsExpanded && hasLoc && <div style={{ fontSize:9, color:"rgba(255,255,255,0.18)", marginTop:2, fontFamily:"'DM Mono',monospace" }}>{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>}
-                  </div>
-                  {!gpsExpanded && <span style={{ fontSize:9, color: isOnline ? "rgba(34,197,94,0.6)" : "rgba(255,255,255,0.2)", fontFamily:"'DM Mono',monospace", flexShrink:0 }}>{timeStr}</span>}
-                  {gpsExpanded && hasLoc && (
-                    <div style={{ marginLeft:"auto", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill={isOnline?"#22c55e":"#4b5563"}><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                      <span style={{ fontSize:8, color:"rgba(255,255,255,0.2)" }}>{timeStr}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
-          {Object.keys(liveLocations).length === 0 && (
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.2)", padding:"5px 4px", fontStyle:"italic" }}>
-              Esperando que los mensajeros activen su GPS...
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Search bar overlay */}
       <div style={{ position:"absolute", top:16, left:"50%", transform:"translateX(-50%)", zIndex:10, width:"min(560px,90%)" }}>
         <div style={{ background:"rgba(6,11,16,0.95)", border:"1px solid #1e2d3d", borderRadius:14, boxShadow:"0 8px 40px rgba(0,0,0,0.7)", backdropFilter:"blur(12px)", overflow:"hidden" }}>
@@ -2388,7 +2250,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // ── UBICACIÓN EN TIEMPO REAL ────────────────────────────────
   const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied
   const [myLocation,     setMyLocation]     = useState(null);   // { lat, lng, accuracy, ts }
-  const [mapReady,       setMapReady]       = useState(false);  // FIX: declarado aquí, antes de los useEffects que lo usan
   const watchIdRef = useRef(null);
   const locationMarkerRef = useRef(null); // marker azul del mensajero en el mapa
   const locationAccuracyRef = useRef(null); // círculo de precisión
@@ -2425,7 +2286,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,          // FIX: 0 = siempre pide posición fresca, nunca usa cache
+        maximumAge: 5000,       // acepta cache de hasta 5s
         timeout: 15000,          // timeout de 15s
       }
     );
@@ -2457,7 +2318,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   }, []); // eslint-disable-line
 
   // Actualizar el marker del mensajero en el mapa cuando cambia su posición
-  // FIX: usar mapReady (estado) como dependencia, no gMapRef.current (ref mutable)
   useEffect(() => {
     if (!myLocation || !gMapRef.current || !window.google) return;
     const { lat, lng, accuracy } = myLocation;
@@ -2510,12 +2370,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         },
       });
     }
-
-    // FIX GPS: Centrar el mapa suavemente en la posición actual del mensajero
-    // panTo anima el movimiento — el mensajero siempre está centrado en pantalla
-    gMapRef.current.panTo(pos);
-
-  }, [myLocation, mapReady]); // FIX: mapReady es estado → React re-ejecuta al detectar cambio
+  }, [myLocation, gMapRef.current]); // eslint-disable-line
 
   // -- Sync ruta en TIEMPO REAL desde Firebase --
   // REGLA FUNDAMENTAL: los stops en pantalla NUNCA retroceden.
@@ -2678,9 +2533,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   }, []);
 
   // -- Re-render markers after map becomes ready --------------------------------
-  // mapReady se declara junto a los otros estados (arriba) — ver línea ~2388
+  const [mapReady, setMapReady] = useState(false);
   useEffect(() => {
     loadGoogleMaps().then(() => {
+      // Poll until gMapRef is set (handles async init)
       const check = setInterval(() => {
         if (gMapRef.current) { setMapReady(true); clearInterval(check); }
       }, 100);
@@ -4333,154 +4189,58 @@ const LoginScreen = ({ onLogin }) => {
   return (
     <div style={{ position:"fixed",inset:0,background:"#080a0f",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",overflow:"hidden" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
-
-        /* ── LOGIN ANIMATIONS ───────────────────────────────────── */
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@500&display=swap');
+        @keyframes lCard{from{opacity:0;transform:translateY(32px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes lLogo{from{opacity:0;transform:translateY(-16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes lSuccess{0%{transform:scale(1)}30%{transform:scale(1.03)}70%{transform:scale(0.99)}100%{transform:scale(1)}}
         @keyframes spin{to{transform:rotate(360deg)}}
-
-        /* Fondo: partículas tipo radar/sonar */
-        @keyframes radarPing{
-          0%{transform:scale(0.4);opacity:0.7}
-          100%{transform:scale(2.8);opacity:0}
-        }
-        @keyframes radarPing2{
-          0%{transform:scale(0.2);opacity:0.5}
-          100%{transform:scale(3.2);opacity:0}
-        }
-        @keyframes scanLine{
-          0%{transform:translateY(-100%);opacity:0}
-          10%{opacity:1}
-          90%{opacity:1}
-          100%{transform:translateY(100vh);opacity:0}
-        }
-        @keyframes gridPulse{
-          0%,100%{opacity:0.025}
-          50%{opacity:0.06}
-        }
-        /* Partículas flotantes */
-        @keyframes floatA{0%,100%{transform:translate(0,0) scale(1);opacity:0.6}50%{transform:translate(18px,-22px) scale(1.2);opacity:1}}
-        @keyframes floatB{0%,100%{transform:translate(0,0);opacity:0.4}50%{transform:translate(-14px,18px);opacity:0.9}}
-        @keyframes floatC{0%,100%{transform:translate(0,0) rotate(0deg);opacity:0.5}50%{transform:translate(10px,10px) rotate(45deg);opacity:0.8}}
-
-        /* Card entrada tipo "drop from ops center" */
-        @keyframes lCard{
-          0%{opacity:0;transform:translateY(-40px) scale(0.94);filter:blur(8px)}
-          60%{filter:blur(0px)}
-          100%{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
-        }
-        @keyframes lLogo{
-          0%{opacity:0;transform:scale(0.7) rotateX(20deg)}
-          100%{opacity:1;transform:scale(1) rotateX(0deg)}
-        }
-        @keyframes lOut{
-          0%{opacity:1;filter:blur(0)}
-          100%{opacity:0;transform:scale(1.04) translateY(-10px);filter:blur(4px)}
-        }
-        @keyframes lSuccess{
-          0%{transform:scale(1);box-shadow:0 0 0 0 rgba(16,185,129,0)}
-          40%{transform:scale(1.015);box-shadow:0 0 0 12px rgba(16,185,129,0.08)}
-          100%{transform:scale(1);box-shadow:0 0 0 0 rgba(16,185,129,0)}
-        }
-        /* Borde animado en el card */
-        @keyframes borderGlow{
-          0%,100%{opacity:0.15}
-          50%{opacity:0.45}
-        }
-        /* Counter decimal (efecto HUD) */
-        @keyframes hudIn{
-          0%{opacity:0;transform:translateX(-6px)}
-          100%{opacity:1;transform:translateX(0)}
-        }
-        @keyframes blinkCursor{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes lOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.06) translateY(-8px)}}
+        @keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.1)}66%{transform:translate(-20px,20px) scale(0.95)}}
+        @keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,25px) scale(1.05)}66%{transform:translate(30px,-35px) scale(1.08)}}
+        @keyframes orb3{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,40px)}}
+        @keyframes shimmer{0%{opacity:0.03}50%{opacity:0.07}100%{opacity:0.03}}
+        @keyframes inputGlow{from{box-shadow:0 0 0 0 rgba(59,130,246,0)}to{box-shadow:0 0 0 3px rgba(59,130,246,0.15)}}
       `}</style>
 
-      {/* ── FONDO RADAR / OPS CENTER ── */}
-      <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",background:"radial-gradient(ellipse 80% 70% at 50% 40%,#040d1a 0%,#020509 100%)"}}>
-        {/* Grid táctica */}
-        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.04) 1px,transparent 1px)",backgroundSize:"48px 48px",animation:"gridPulse 6s ease-in-out infinite"}}/>
-        {/* Scan line horizontal tipo radar */}
-        <div style={{position:"absolute",left:0,right:0,height:1,background:"linear-gradient(90deg,transparent 0%,rgba(59,130,246,0.0) 20%,rgba(59,130,246,0.35) 50%,rgba(59,130,246,0.0) 80%,transparent 100%)",animation:"scanLine 8s linear infinite",animationDelay:"1s"}}/>
-        <div style={{position:"absolute",left:0,right:0,height:1,background:"linear-gradient(90deg,transparent 0%,rgba(16,185,129,0.0) 20%,rgba(16,185,129,0.2) 50%,rgba(16,185,129,0.0) 80%,transparent 100%)",animation:"scanLine 12s linear infinite",animationDelay:"5s"}}/>
-        {/* Pulsos sonar desde el centro */}
-        <div style={{position:"absolute",top:"38%",left:"50%",transform:"translate(-50%,-50%)"}}>
-          {[0,0.8,1.6,2.4].map((delay,i)=>(
-            <div key={i} style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:420,height:420,borderRadius:"50%",border:"1px solid rgba(59,130,246,0.18)",animation:`radarPing ${3.5}s ease-out infinite`,animationDelay:`${delay}s`,pointerEvents:"none"}}/>
-          ))}
-          {[0.4,1.2,2.0].map((delay,i)=>(
-            <div key={"b"+i} style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:320,height:320,borderRadius:"50%",border:"1px solid rgba(16,185,129,0.1)",animation:`radarPing2 ${4.5}s ease-out infinite`,animationDelay:`${delay}s`,pointerEvents:"none"}}/>
-          ))}
-        </div>
-        {/* Partículas flotantes (3 diamantes) */}
-        {[
-          {top:"18%",left:"12%",anim:"floatA",delay:"0s",size:5,color:"#3b82f6"},
-          {top:"72%",left:"82%",anim:"floatB",delay:"1.2s",size:4,color:"#10b981"},
-          {top:"60%",left:"8%",anim:"floatC",delay:"2.1s",size:6,color:"#6366f1"},
-          {top:"25%",left:"88%",anim:"floatA",delay:"0.7s",size:3,color:"#3b82f6"},
-          {top:"85%",left:"35%",anim:"floatB",delay:"1.8s",size:4,color:"#60a5fa"},
-        ].map((p,i)=>(
-          <div key={i} style={{position:"absolute",top:p.top,left:p.left,width:p.size,height:p.size,borderRadius:1,background:p.color,transform:"rotate(45deg)",animation:`${p.anim} ${3+i*0.4}s ease-in-out infinite`,animationDelay:p.delay,opacity:0.6}}/>
-        ))}
-        {/* Corner accents */}
-        <div style={{position:"absolute",top:20,left:20,width:40,height:40,borderTop:"1px solid rgba(59,130,246,0.3)",borderLeft:"1px solid rgba(59,130,246,0.3)"}}/>
-        <div style={{position:"absolute",top:20,right:20,width:40,height:40,borderTop:"1px solid rgba(59,130,246,0.3)",borderRight:"1px solid rgba(59,130,246,0.3)"}}/>
-        <div style={{position:"absolute",bottom:20,left:20,width:40,height:40,borderBottom:"1px solid rgba(59,130,246,0.3)",borderLeft:"1px solid rgba(59,130,246,0.3)"}}/>
-        <div style={{position:"absolute",bottom:20,right:20,width:40,height:40,borderBottom:"1px solid rgba(59,130,246,0.3)",borderRight:"1px solid rgba(59,130,246,0.3)"}}/>
+      {/* Animated background orbs */}
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:"10%",left:"20%",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.08) 0%,transparent 70%)",animation:"orb1 12s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",bottom:"15%",right:"15%",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,0.06) 0%,transparent 70%)",animation:"orb2 15s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",top:"50%",left:"50%",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(16,185,129,0.04) 0%,transparent 70%)",transform:"translate(-50%,-50%)",animation:"orb3 18s ease-in-out infinite"}}/>
+        {/* Grid pattern */}
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)",backgroundSize:"60px 60px",animation:"shimmer 4s ease-in-out infinite"}}/>
       </div>
 
       <div style={{
         width:380, position:"relative", zIndex:1,
         animation: success ? "lOut .5s ease forwards" : "lCard .6s cubic-bezier(.16,1,.3,1) both",
       }}>
-        {/* ── LOGO HUD ── */}
-        <div style={{ textAlign:"center", marginBottom:24, animation:"lLogo .7s .05s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
-          {/* Icon con anillos */}
-          <div style={{ position:"relative", width:72, height:72, margin:"0 auto 16px" }}>
-            {/* Anillos externos animados */}
-            <div style={{ position:"absolute", inset:-14, borderRadius:"50%", border:"1px solid rgba(59,130,246,0.15)", animation:"radarPing 2.5s ease-out infinite" }}/>
-            <div style={{ position:"absolute", inset:-7, borderRadius:"50%", border:"1px solid rgba(59,130,246,0.22)", animation:"radarPing 2.5s ease-out infinite", animationDelay:"0.6s" }}/>
-            {/* Glow base */}
-            <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,0.25) 0%,transparent 70%)", filter:"blur(10px)" }}/>
-            {/* Icon circle */}
-            <div style={{ position:"relative", width:72, height:72, borderRadius:"50%", background:"linear-gradient(145deg,#0f2040,#1a3a6e)", border:"1px solid rgba(59,130,246,0.4)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 30px rgba(59,130,246,0.25), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white" opacity="0.95"/>
+        {/* Logo */}
+        <div style={{ textAlign:"center", marginBottom:28, animation:"lLogo .6s .08s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
+          <div style={{ position:"relative",width:60,height:60,margin:"0 auto 14px" }}>
+            <div style={{ position:"absolute",inset:-4,borderRadius:20,background:"linear-gradient(135deg,rgba(59,130,246,0.3),rgba(99,102,241,0.2))",filter:"blur(8px)" }}/>
+            <div style={{ position:"relative",width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(59,130,246,0.4)" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
                 <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.4"/>
+                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.45"/>
               </svg>
-              {/* Inner corner accents */}
-              <div style={{ position:"absolute", top:6, left:6, width:8, height:8, borderTop:"1px solid rgba(96,165,250,0.6)", borderLeft:"1px solid rgba(96,165,250,0.6)" }}/>
-              <div style={{ position:"absolute", bottom:6, right:6, width:8, height:8, borderBottom:"1px solid rgba(96,165,250,0.6)", borderRight:"1px solid rgba(96,165,250,0.6)" }}/>
             </div>
           </div>
-          {/* Title */}
-          <div style={{ fontSize:28, fontWeight:700, color:"white", letterSpacing:"-1px", lineHeight:1, fontFamily:"'Space Grotesk',sans-serif" }}>
-            RAP <span style={{ color:"#3b82f6" }}>DRIVE</span>
-          </div>
-          {/* Tagline tipo HUD */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:8 }}>
-            <div style={{ height:1, width:28, background:"linear-gradient(90deg,transparent,rgba(59,130,246,0.5))" }}/>
-            <span style={{ fontSize:9, color:"rgba(59,130,246,0.7)", letterSpacing:"3px", fontWeight:600, fontFamily:"'JetBrains Mono',monospace", textTransform:"uppercase" }}>Gestión de Entregas</span>
-            <div style={{ height:1, width:28, background:"linear-gradient(90deg,rgba(59,130,246,0.5),transparent)" }}/>
-          </div>
+          <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Entregas</div>
         </div>
 
         {/* Card */}
         <div style={{
-          position:"relative",
-          background:"linear-gradient(145deg,rgba(10,20,40,0.92),rgba(6,12,24,0.96))",
-          border:"1px solid rgba(59,130,246,0.18)",
-          borderRadius:20,
+          background:"rgba(255,255,255,0.04)",
+          border:"1px solid rgba(255,255,255,0.08)",
+          borderRadius:22,
           padding:"28px 26px 24px",
-          boxShadow:"0 40px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.03) inset, 0 0 40px rgba(59,130,246,0.05)",
-          backdropFilter:"blur(24px)",
-          animation: success ? "lSuccess .6s ease" : "none",
-          overflow:"hidden",
+          boxShadow:"0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+          backdropFilter:"blur(20px)",
+          animation: success ? "lSuccess .5s ease" : "none",
         }}>
-          {/* Animated top border accent */}
-          <div style={{ position:"absolute",top:0,left:"20%",right:"20%",height:1,background:"linear-gradient(90deg,transparent,rgba(59,130,246,0.6),transparent)",animation:"borderGlow 3s ease-in-out infinite" }}/>
-          {/* Corner dots */}
-          <div style={{ position:"absolute",top:10,left:10,width:3,height:3,borderRadius:"50%",background:"rgba(59,130,246,0.4)" }}/>
-          <div style={{ position:"absolute",top:10,right:10,width:3,height:3,borderRadius:"50%",background:"rgba(59,130,246,0.4)" }}/>
           {/* Header */}
           <div style={{textAlign:"center", marginBottom:26}}>
             <div style={{fontSize:17,fontWeight:700,color:"rgba(255,255,255,0.92)",letterSpacing:"-0.3px"}}>Bienvenido de vuelta</div>
@@ -5000,15 +4760,7 @@ const ImportModal = ({ onClose, onImported }) => {
                 <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Normalizando y asignando coordenadas a cada parada</div>
                 {/* Progress bar */}
                 <div style={{height:6,background:"#131f30",borderRadius:6,marginBottom:8,overflow:"hidden"}}>
-                  {/* Segmentos animados */}
-                  <div style={{display:"flex",gap:2,height:"100%"}}>
-                    {Array.from({length:24}).map((_,i)=>{
-                      const filled=(progress/100)*24;
-                      const isFull=i<Math.floor(filled);
-                      const isGlow=i===Math.floor(filled);
-                      return <div key={i} style={{flex:1,borderRadius:2,background:isFull?"linear-gradient(180deg,#60a5fa,#2563eb)":isGlow?"rgba(59,130,246,0.35)":"rgba(255,255,255,0.04)",boxShadow:isFull?"0 0 4px rgba(59,130,246,0.5)":isGlow?"0 0 8px rgba(59,130,246,0.7)":"none",transition:"all .25s"}}/>;
-                    })}
-                  </div>
+                  <div style={{height:6,background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa)",borderRadius:6,width:`${progress}%`,transition:"width .3s",backgroundSize:"200% 100%",animation:"shimmer 2s linear infinite"}}/>
                 </div>
                 <div style={{fontSize:12,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{progress}% · {Math.round(rawRows.length*progress/100)} de {rawRows.length} direcciones</div>
               </div>
@@ -6084,7 +5836,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  const numInOrig = (original || "").match(/\d{1,4}/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
@@ -7252,58 +7004,17 @@ const CircuitEngine = () => {
                 <div key={geoStatus} style={{ fontSize:11, color:"#3b82f6", fontFamily:"'Inter',monospace", animation:"addressFly 2s ease-in-out", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", padding:"0 20px" }}>{geoStatus || "Iniciando..."}</div>
               </div>
 
-              {/* ── LOADING BAR SEGMENTADA ── */}
-              <div style={{ marginBottom:14 }}>
-                {/* Segmentos */}
-                <div style={{ display:"flex", gap:2, marginBottom:6, height:6 }}>
-                  {Array.from({length:20}).map((_,i)=>{
-                    const filled = (geoProgress/100)*20;
-                    const isFull  = i < Math.floor(filled);
-                    const isGlow  = i === Math.floor(filled);
-                    return (
-                      <div key={i} style={{
-                        flex:1, borderRadius:2,
-                        background: isFull
-                          ? i < 13 ? "#3b82f6" : i < 17 ? "#60a5fa" : "#93c5fd"
-                          : isGlow ? "rgba(59,130,246,0.4)"
-                          : "rgba(255,255,255,0.04)",
-                        boxShadow: isFull ? "0 0 6px rgba(59,130,246,0.4)" : isGlow ? "0 0 10px rgba(59,130,246,0.6)" : "none",
-                        transition:"all .3s ease",
-                      }}/>
-                    );
-                  })}
-                </div>
-                {/* Sub-barra tipo scanner continuo */}
-                <div style={{ position:"relative", height:2, background:"rgba(255,255,255,0.04)", borderRadius:2, overflow:"hidden" }}>
-                  <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, background:"linear-gradient(90deg,transparent 0%,rgba(59,130,246,0.7) 50%,transparent 100%)", backgroundSize:"40% 100%", animation:"geoShimmer 1.4s linear infinite" }}/>
-                </div>
+              {/* Progress bar - enhanced */}
+              <div style={{ height: 8, background: "#0d1420", borderRadius: 8, marginBottom: 10, overflow: "hidden", border:"1px solid #131f30" }}>
+                <div style={{ height:"100%", borderRadius: 8, width: `${geoProgress}%`, background: "linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa,#3b82f6)", backgroundSize: "300% 100%", animation: "geoShimmer 2s linear infinite", transition: "width .6s cubic-bezier(.4,0,.2,1)", boxShadow:"0 0 12px rgba(59,130,246,0.5)" }} />
               </div>
 
-              {/* Stats row — diseño HUD */}
-              <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:20, marginTop:4 }}>
-                {/* Porcentaje */}
-                <div style={{ display:"flex", alignItems:"baseline", gap:2 }}>
-                  <span style={{ fontSize:32, fontFamily:"'JetBrains Mono','DM Mono',monospace", fontWeight:600, color:"#60a5fa", lineHeight:1, letterSpacing:"-2px" }}>{String(geoProgress).padStart(3,"0")}</span>
-                  <span style={{ fontSize:14, color:"rgba(59,130,246,0.5)", fontFamily:"'DM Mono',monospace" }}>%</span>
-                </div>
-                {/* Divisor */}
-                <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)" }}/>
-                {/* Counters */}
-                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ width:5, height:5, borderRadius:"50%", background:"#10b981", boxShadow:"0 0 6px #10b981" }}/>
-                    <span style={{ fontSize:10, color:"#10b981", fontFamily:"'JetBrains Mono',monospace", fontWeight:600 }}>
-                      {stops.filter(s=>s.status==="ok"||s.confidence>=70).length} OK
-                    </span>
-                  </div>
-                  {stops.filter(s=>s.status==="error").length > 0 && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <div style={{ width:5, height:5, borderRadius:"50%", background:"#ef4444", boxShadow:"0 0 6px #ef4444" }}/>
-                      <span style={{ fontSize:10, color:"#ef4444", fontFamily:"'JetBrains Mono',monospace", fontWeight:600 }}>
-                        {stops.filter(s=>s.status==="error").length} ERR
-                      </span>
-                    </div>
-                  )}
+              {/* Stats row */}
+              <div style={{ display:"flex", justifyContent:"center", gap:16, marginTop:8 }}>
+                <div style={{ fontSize: 24, fontFamily: "'Syne',sans-serif", fontWeight: 900, color: "#3b82f6", animation:"geoPulseText 1.8s ease-in-out infinite" }}>{geoProgress}%</div>
+                <div style={{ display:"flex", flexDirection:"column", justifyContent:"center", gap:2, textAlign:"left" }}>
+                  <div style={{ fontSize:10, color:"#10b981", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✓ {stops.filter(s=>s.status==="ok"||s.confidence>=70).length} geocodificadas</div>
+                  {stops.filter(s=>s.status==="error").length > 0 && <div style={{ fontSize:10, color:"#ef4444", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✕ {stops.filter(s=>s.status==="error").length} con error</div>}
                 </div>
               </div>
             </div>
