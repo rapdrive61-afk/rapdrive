@@ -5314,13 +5314,16 @@ const totalKm = (stops) => {
 // --- COLUMN AUTODETECT --------------------------------------------------------
 const autoDetect = (headers) => {
   const patterns = {
-    address:  /direcci[oó]n|address|calle|domicilio|destino|ubicaci[oó]n|lugar|via/i,
-    client:   /cliente|nombre|name|destinatario|recipient|contacto/i,
-    phone:    /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
-    notes:    /notas?|notes?|observ|instruc|referencia|indicaci|detalle/i,
-    sector:   /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
-    ciudad:   /ciudad|municipio|provincia|localidad|town|city/i,
-    tracking: /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
+    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
+    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
+    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
+    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
+    notes:     /notas?|notes?|observ|instruc|detalle/i,
+    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
+    ciudad:    /ciudad|municipio|localidad|town|city/i,
+    provincia: /provincia|province|estado|state|dpto|departamento/i,
+    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
+    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
   };
   const m = {};
   headers.forEach(h => {
@@ -5419,20 +5422,43 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
     stops.filter(s => s.lat && s.lng).forEach(stop => {
       const isSelected = stop.id === selectedId;
       const col = colMap[stop.status] || "#3b82f6";
-      const label = String(stop.stopNum || "?");
+
+      // Detect co-located stops (same lat/lng rounded to 4 decimals)
+      const key = `${stop.lat?.toFixed(4)},${stop.lng?.toFixed(4)}`;
+      const colocated = stops.filter(s => s.lat && s.lng && `${s.lat?.toFixed(4)},${s.lng?.toFixed(4)}` === key);
+      const isCluster = colocated.length > 1;
+      const clusterIdx = colocated.findIndex(s => s.id === stop.id);
+      // Only render marker for the first of a cluster group (to avoid stacking)
+      if (isCluster && clusterIdx !== 0) return;
+
+      const displayStop = isCluster && selectedId
+        ? (colocated.find(s => s.id === selectedId) || colocated[0])
+        : stop;
+
+      const label = isCluster
+        ? (isSelected ? String(displayStop.stopNum || "?") : `${colocated.length}`)
+        : String(stop.stopNum || "?");
       const fs = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
       const w = isSelected ? 40 : 32;
       const filterId = isSelected ? "rdGlowSel" : "rdGlowNorm";
-      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40"><circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
+      const clusterRing = isCluster && !isSelected ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.4" stroke-dasharray="3 2"/>` : "";
+      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40">${clusterRing}<circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
       const marker = new window.google.maps.Marker({
         map: mapRef.current,
         position: { lat: stop.lat, lng: stop.lng },
         icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(w, w), anchor: new window.google.maps.Point(w/2, w/2) },
         zIndex: isSelected ? 100 : 10,
-        title: stop.displayAddr,
+        title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
       });
       marker.addListener("click", () => {
-        onSelectStop(stop.id, true);
+        if (isCluster) {
+          // Cycle through co-located stops
+          const curIdx = colocated.findIndex(s => s.id === selectedId);
+          const nextIdx = (curIdx + 1) % colocated.length;
+          onSelectStop(colocated[nextIdx].id, true);
+        } else {
+          onSelectStop(stop.id, true);
+        }
         infoRef.current.close();
       });
       markersRef.current.push(marker);
@@ -5453,62 +5479,34 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
 };
 
 // --- ADDRESS EDIT MODAL --------------------------------------------------------
-// CRÍTICO: input NO controlado (uncontrolled) para que Google Autocomplete
-// pueda escribir en él sin que React sobreescriba el valor.
+// Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
 const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const inputRef = useRef(null);
   const acRef    = useRef(null);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState(""); // feedback al usuario
+  const [saving,  setSaving]  = useState(false);
+  const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
+  const [errMsg,  setErrMsg]  = useState("");
 
+  // Inject light-mode pac-container styles
   useEffect(() => {
-    // Inyectar estilos del pac-container con z-index altísimo
-    const styleId = "pac-override-style";
-    if (!document.getElementById(styleId)) {
+    const id = "pac-light-style";
+    if (!document.getElementById(id)) {
       const s = document.createElement("style");
-      s.id = styleId;
+      s.id = id;
       s.textContent = `
-        .pac-container {
-          z-index: 99999 !important;
-          background: #0a0f1a !important;
-          border: 1px solid rgba(59,130,246,0.35) !important;
-          border-radius: 12px !important;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.95) !important;
-          margin-top: 4px !important;
-          font-family: 'Inter', sans-serif !important;
-          overflow: hidden !important;
-        }
-        .pac-item {
-          background: transparent !important;
-          color: #94a3b8 !important;
-          padding: 10px 14px !important;
-          cursor: pointer !important;
-          border-top: 1px solid rgba(255,255,255,0.04) !important;
-          font-size: 12px !important;
-        }
-        .pac-item:hover, .pac-item-selected {
-          background: rgba(59,130,246,0.12) !important;
-        }
-        .pac-item-query {
-          color: #f1f5f9 !important;
-          font-size: 13px !important;
-          font-weight: 600 !important;
-        }
-        .pac-matched { color: #3b82f6 !important; }
-        .pac-icon { display: none !important; }
-        .pac-logo:after { display: none !important; }
+        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
+        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
+        .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
+        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
+        .pac-matched { color:#2563eb!important; }
+        .pac-icon { display:none!important; }
+        .pac-logo:after { display:none!important; }
       `;
       document.head.appendChild(s);
     }
-
-    // Esperar a que Google Maps esté listo y montar Autocomplete
     loadGoogleMaps().then(() => {
       if (!inputRef.current) return;
-      // Limpiar instancia previa si existe
-      if (acRef.current) {
-        window.google.maps.event.clearInstanceListeners(acRef.current);
-        acRef.current = null;
-      }
+      if (acRef.current) { window.google.maps.event.clearInstanceListeners(acRef.current); acRef.current = null; }
       acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
         componentRestrictions: { country: "DO" },
         fields: ["formatted_address", "geometry", "name"],
@@ -5516,115 +5514,130 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       acRef.current.addListener("place_changed", () => {
         const place = acRef.current.getPlace();
         if (place?.geometry?.location) {
-          onSave({
-            display: place.formatted_address || place.name,
-            lat:     place.geometry.location.lat(),
-            lng:     place.geometry.location.lng(),
-            confidence: 97,
-          });
+          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
+          setFound(result);
+          setErrMsg("");
         }
       });
-      // Focus con pequeño delay para que el modal termine de renderizar
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 60);
     });
-
-    return () => {
-      if (acRef.current) {
-        window.google?.maps?.event?.clearInstanceListeners(acRef.current);
-        acRef.current = null;
-      }
-    };
+    return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
   }, []);
 
-  const handleManualSave = async () => {
+  const handleSearch = async () => {
     const text = inputRef.current?.value?.trim();
     if (!text) return;
-    setSaving(true);
-    setStatus("Buscando...");
-    const result = await geocodeWithGoogle(text);
-    setSaving(false);
-    if (result.ok) {
-      setStatus("✓ Encontrada");
-      onSave({ display: result.display, lat: result.lat, lng: result.lng, confidence: result.confidence });
-    } else {
-      setStatus("⚠ No encontrada, intenta otra dirección");
+    setFound(null); setErrMsg(""); setSaving(true);
+    // Coords? (18.xxx, -69.xxx)
+    const coords = detectCoords(text);
+    if (coords) {
+      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
+      setSaving(false); return;
     }
+    // Plus Code?
+    if (isPlusCode(text)) {
+      const r = await decodePlusCodeGoogle(text);
+      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
+    }
+    // Google geocoder
+    const r = await geocodeWithGoogle(text);
+    setSaving(false);
+    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
+    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
   };
 
-  return (
-    <div
-      style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.75)", backdropFilter:"blur(6px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div style={{ width:500, background:"linear-gradient(160deg,#0c1525,#080f1c)", border:"1px solid rgba(59,130,246,0.3)", borderRadius:20, padding:"26px", boxShadow:"0 50px 100px rgba(0,0,0,0.98), 0 0 0 1px rgba(59,130,246,0.08)", animation:"popIn .18s cubic-bezier(.4,0,.2,1)" }}>
+  const handleConfirm = () => { if (found) onSave(found); };
 
-        {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18 }}>
-          <div style={{ width:38, height:38, borderRadius:11, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 24px #3b82f650", flexShrink:0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+
+      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+
+      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:14, fontFamily:"'Syne',sans-serif", fontWeight:800, color:"#f1f5f9" }}>Corregir dirección</div>
-            <div style={{ fontSize:11, color:"#4b5563", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {stop.client} · parada #{stop.stopNum || "?"}
+            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+              {stop.client} · Parada #{stop.stopNum || "?"}
             </div>
           </div>
-          <button onClick={onCancel} style={{ width:28, height:28, borderRadius:8, border:"1px solid #1e2d3d", background:"transparent", color:"#4b5563", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>✕</button>
+          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
         </div>
 
-        {/* Dirección actual */}
-        <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid #131f30", borderRadius:10, padding:"9px 13px", marginBottom:14 }}>
-          <div style={{ fontSize:9, color:"#2d4a60", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1px", marginBottom:3 }}>DIRECCIÓN ACTUAL</div>
-          <div style={{ fontSize:12, color:"#4b5563", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{stop.displayAddr}</div>
-        </div>
+        <div style={{ padding:"20px 22px 22px" }}>
 
-        {/* Label */}
-        <div style={{ fontSize:9, color:"#60a5fa", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1px", marginBottom:7 }}>NUEVA DIRECCIÓN - GOOGLE MAPS</div>
+          {/* ── DIRECCIÓN ACTUAL ── */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
+            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
+              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
+              <div>
+                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
+                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
+              </div>
+            </div>
+          </div>
 
-        {/* Input UNCONTROLLED - Google Autocomplete escribe aquí directamente */}
-        <input
-          ref={inputRef}
-          defaultValue={stop.rawAddr || stop.displayAddr || ""}
-          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleManualSave(); } if (e.key === "Escape") onCancel(); }}
-          placeholder="Escribe para ver sugerencias de Google..."
-          autoComplete="off"
-          style={{
-            display:"block", width:"100%",
-            background:"#080e1a",
-            border:"2px solid #3b82f6",
-            borderRadius:11, padding:"13px 16px",
-            color:"#f1f5f9", fontSize:14,
-            fontFamily:"'Inter',sans-serif",
-            outline:"none", caretColor:"#3b82f6",
-            boxShadow:"0 0 0 4px rgba(59,130,246,0.15)",
-            marginBottom:10,
-          }}
-        />
+          {/* ── NUEVA DIRECCIÓN ── */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
+            <div style={{ display:"flex",gap:8 }}>
+              <input
+                ref={inputRef}
+                defaultValue=""
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
+                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
+                autoComplete="off"
+                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
+              />
+              <button onClick={handleSearch} disabled={saving}
+                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
+                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
+                {saving ? "..." : "Buscar"}
+              </button>
+            </div>
+            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
+              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
+            </div>
+          </div>
 
-        {/* Hint */}
-        <div style={{ fontSize:11, color:"#2d4a60", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ fontSize:14 }}>💡</span>
-          <span>Escribe y <strong style={{color:"#4b5563"}}>selecciona una sugerencia</strong> de la lista - guarda automático. O escribe y pulsa Guardar.</span>
-        </div>
+          {/* ── RESULTADO ENCONTRADO ── */}
+          {found && (
+            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
+              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
+              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
+              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
+                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
+                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
+              </div>
+            </div>
+          )}
 
-        {/* Status */}
-        {status && <div style={{ fontSize:11, color: status.includes("⚠") ? "#ef4444" : "#10b981", marginBottom:12, textAlign:"center" }}>{status}</div>}
+          {/* ── ERROR ── */}
+          {errMsg && (
+            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
+              ⚠ {errMsg}
+            </div>
+          )}
 
-        {/* Actions */}
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:10, border:"1px solid #1e2d3d", background:"transparent", color:"#4b5563", fontSize:12, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer" }}>
-            Cancelar
-          </button>
-          <button
-            onClick={handleManualSave}
-            disabled={saving}
-            style={{ flex:2, padding:"11px", borderRadius:10, border:"none", background: saving ? "#0d1420" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: saving ? "#374151" : "white", fontSize:12, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor: saving ? "not-allowed" : "pointer", boxShadow: saving ? "none" : "0 4px 20px #3b82f640", display:"flex", alignItems:"center", justifyContent:"center", gap:7, transition:"all .15s" }}
-          >
-            {saving
-              ? <><div style={{ width:13, height:13, border:"2px solid #37415150", borderTopColor:"#374151", borderRadius:"50%", animation:"spin .8s linear infinite" }}/> Buscando...</>
-              : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg> Guardar dirección</>
-            }
-          </button>
+          {/* ── ACTIONS ── */}
+          <div style={{ display:"flex",gap:8,marginTop:4 }}>
+            <button onClick={onCancel}
+              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
+              Cancelar
+            </button>
+            <button onClick={handleConfirm} disabled={!found}
+              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -5752,11 +5765,15 @@ const CircuitEngine = () => {
       if (!geocodingRef.current) break; // cancelable
 
       const row = rawRows[i];
-      const raw = String(row[col] || "").trim();
-      const sector = mapping.sector ? String(row[mapping.sector] || "").trim() : "";
-      const ciudad = mapping.ciudad ? String(row[mapping.ciudad] || "").trim() : "";
-      // Build enriched query combining address + sector + ciudad
-      const enrichedRaw = [raw, sector, ciudad].filter(Boolean).join(", ");
+      const raw      = String(row[col] || "").trim();
+      const addr2    = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
+      const sector   = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
+      const ciudad   = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
+      const provincia= mapping.provincia ? String(row[mapping.provincia] || "").trim() : "";
+      const cp       = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
+      // Build enriched query: address + addr2 + sector + ciudad + provincia
+      const enrichedParts = [raw, addr2, sector, ciudad, provincia, cp].filter(Boolean);
+      const enrichedRaw = enrichedParts.join(", ");
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
@@ -5764,10 +5781,9 @@ const CircuitEngine = () => {
         displayAddr: raw ? expandRDAddress(enrichedRaw) : "Sin dirección",
         client:      String(row[mapping.client]   || `Parada ${i + 1}`).trim(),
         phone:       String(row[mapping.phone]    || "").trim(),
-        notes:       String(row[mapping.notes]    || "").trim(),
+        notes:       [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · "),
         tracking:    String(row[mapping.tracking] || "").trim(),
-        sector,
-        ciudad,
+        sector, ciudad, provincia, cp, addr2,
         lat: null, lng: null, confidence: 0,
         status: "pending", allResults: [], issue: null,
       };
@@ -6113,13 +6129,16 @@ const CircuitEngine = () => {
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                     {[
-                      { f:"address",  l:"Dirección",          req:true,  icon:"📍" },
-                      { f:"client",   l:"Cliente / Nombre",   req:false, icon:"👤" },
-                      { f:"phone",    l:"Teléfono",           req:false, icon:"📞" },
-                      { f:"tracking", l:"Código / Tracking",  req:false, icon:"🏷" },
-                      { f:"sector",   l:"Sector / Barrio",    req:false, icon:"🗺" },
-                      { f:"ciudad",   l:"Ciudad",             req:false, icon:"🏙" },
-                      { f:"notes",    l:"Referencia / Notas", req:false, icon:"📝" },
+                      { f:"address",   l:"Dirección",            req:true,  icon:"📍" },
+                      { f:"address2",  l:"Dirección 2 / Ref.",   req:false, icon:"🏠" },
+                      { f:"client",    l:"Cliente / Nombre",     req:false, icon:"👤" },
+                      { f:"phone",     l:"Teléfono",             req:false, icon:"📞" },
+                      { f:"tracking",  l:"Código / Tracking",    req:false, icon:"🏷" },
+                      { f:"sector",    l:"Sector / Barrio",      req:false, icon:"🗺" },
+                      { f:"ciudad",    l:"Ciudad",               req:false, icon:"🏙" },
+                      { f:"provincia", l:"Provincia",            req:false, icon:"🌎" },
+                      { f:"cp",        l:"Código Postal",        req:false, icon:"📮" },
+                      { f:"notes",     l:"Referencia / Notas",   req:false, icon:"📝" },
                     ].map(({ f, l, req, icon }) => (
                       <div key={f} style={{ background: mapping[f] ? "rgba(16,185,129,0.04)" : "rgba(255,255,255,0.02)", border:`1px solid ${mapping[f] ? "rgba(16,185,129,0.18)" : req ? "rgba(59,130,246,0.2)" : "#0d1420"}`, borderRadius:9, padding:"8px 10px", transition:"border .2s" }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
@@ -6143,12 +6162,15 @@ const CircuitEngine = () => {
                   <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>RESUMEN</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
                     {[
-                      ["Dirección",  mapping.address  ? "✓" : "—", mapping.address  ? "#10b981" : "#ef4444"],
-                      ["Cliente",    mapping.client   ? "✓" : "—", mapping.client   ? "#10b981" : "#374151"],
-                      ["Teléfono",   mapping.phone    ? "✓" : "—", mapping.phone    ? "#10b981" : "#374151"],
-                      ["Tracking",   mapping.tracking ? "✓" : "—", mapping.tracking ? "#10b981" : "#374151"],
-                      ["Sector",     mapping.sector   ? "✓" : "—", mapping.sector   ? "#10b981" : "#374151"],
-                      ["Ciudad",     mapping.ciudad   ? "✓" : "—", mapping.ciudad   ? "#10b981" : "#374151"],
+                      ["Dirección",   mapping.address   ? "✓" : "—", mapping.address   ? "#10b981" : "#ef4444"],
+                      ["Dir. 2",      mapping.address2  ? "✓" : "—", mapping.address2  ? "#10b981" : "#374151"],
+                      ["Cliente",     mapping.client    ? "✓" : "—", mapping.client    ? "#10b981" : "#374151"],
+                      ["Teléfono",    mapping.phone     ? "✓" : "—", mapping.phone     ? "#10b981" : "#374151"],
+                      ["Tracking",    mapping.tracking  ? "✓" : "—", mapping.tracking  ? "#10b981" : "#374151"],
+                      ["Sector",      mapping.sector    ? "✓" : "—", mapping.sector    ? "#10b981" : "#374151"],
+                      ["Ciudad",      mapping.ciudad    ? "✓" : "—", mapping.ciudad    ? "#10b981" : "#374151"],
+                      ["Provincia",   mapping.provincia ? "✓" : "—", mapping.provincia ? "#10b981" : "#374151"],
+                      ["C.P.",        mapping.cp        ? "✓" : "—", mapping.cp        ? "#10b981" : "#374151"],
                     ].map(([l,v,c]) => (
                       <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:10, padding:"2px 0" }}>
                         <span style={{ color:"#374151",fontFamily:"'Inter',sans-serif" }}>{l}</span>
