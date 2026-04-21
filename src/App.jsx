@@ -3171,78 +3171,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           );
         })()}
 
-        {/* No route overlay — GPS PULSE ANIMATION */}
+        {/* No route overlay */}
         {!myRoute && (
-          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse 80% 60% at 50% 50%,#030810 0%,#020509 100%)",overflow:"hidden" }}>
-            <style>{`
-              @keyframes gpsPing{0%{transform:scale(0.3);opacity:0.9}100%{transform:scale(4);opacity:0}}
-              @keyframes gpsPingB{0%{transform:scale(0.5);opacity:0.6}100%{transform:scale(3.5);opacity:0}}
-              @keyframes gpsRotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-              @keyframes gpsRotateCCW{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
-              @keyframes gpsDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:0.6}}
-              @keyframes gpsBlink{0%,100%{opacity:1}50%{opacity:0.2}}
-              @keyframes gpsTextSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-              @keyframes gpsGridPulse{0%,100%{opacity:0.03}50%{opacity:0.08}}
-              @keyframes gpsSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-            `}</style>
-
-            {/* Grid fondo */}
-            <div style={{ position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.05) 1px,transparent 1px)",backgroundSize:"36px 36px",animation:"gpsGridPulse 4s ease-in-out infinite" }}/>
-
-            {/* Pulsos sonar */}
-            <div style={{ position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)" }}>
-              {[0,0.9,1.8,2.7].map((d,i)=>(
-                <div key={i} style={{ position:"absolute",top:"50%",left:"50%",width:180,height:180,marginLeft:-90,marginTop:-90,borderRadius:"50%",border:"1.5px solid rgba(59,130,246,0.4)",animation:`gpsPing 3.5s ease-out infinite`,animationDelay:`${d}s` }}/>
-              ))}
-              {[0.4,1.3,2.2].map((d,i)=>(
-                <div key={"g"+i} style={{ position:"absolute",top:"50%",left:"50%",width:280,height:280,marginLeft:-140,marginTop:-140,borderRadius:"50%",border:"1px solid rgba(16,185,129,0.2)",animation:`gpsPingB 4.5s ease-out infinite`,animationDelay:`${d}s` }}/>
-              ))}
-            </div>
-
-            {/* Icon GPS central */}
-            <div style={{ position:"relative",zIndex:2,marginBottom:28 }}>
-              {/* Anillo giratorio exterior */}
-              <div style={{ position:"absolute",inset:-16,borderRadius:"50%",border:"1.5px dashed rgba(59,130,246,0.25)",animation:"gpsRotate 12s linear infinite" }}/>
-              {/* Anillo giratorio interior CCW */}
-              <div style={{ position:"absolute",inset:-8,borderRadius:"50%",border:"1px solid rgba(59,130,246,0.15)",animation:"gpsRotateCCW 8s linear infinite" }}>
-                {/* Punto marcador en el anillo */}
-                <div style={{ position:"absolute",top:-3,left:"50%",marginLeft:-3,width:6,height:6,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f6" }}/>
-              </div>
-              {/* Línea barrido estilo radar */}
-              <div style={{ position:"absolute",inset:-8,borderRadius:"50%",overflow:"hidden",animation:"gpsSweep 4s linear infinite" }}>
-                <div style={{ position:"absolute",top:"50%",left:"50%",width:"50%",height:"50%",background:"linear-gradient(135deg,rgba(59,130,246,0.3) 0%,transparent 100%)",transformOrigin:"0% 100%" }}/>
-              </div>
-              {/* Círculo base */}
-              <div style={{ width:72,height:72,borderRadius:"50%",background:"linear-gradient(145deg,#0a1e3d,#0f2a50)",border:"1px solid rgba(59,130,246,0.5)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 30px rgba(59,130,246,0.2),inset 0 1px 0 rgba(255,255,255,0.06)",position:"relative" }}>
-                {/* Pin GPS SVG */}
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="rgba(59,130,246,0.9)" stroke="rgba(147,197,253,0.5)" strokeWidth="0.5"/>
-                  <circle cx="12" cy="9" r="3" fill="white" opacity="0.95"/>
-                </svg>
-                {/* Dot pulsante en el centro */}
-                <div style={{ position:"absolute",bottom:10,right:10,width:6,height:6,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 8px #10b981",animation:"gpsDot 2s ease-in-out infinite" }}/>
-              </div>
-            </div>
-
-            {/* Texto */}
-            <div style={{ position:"relative",zIndex:2,textAlign:"center",animation:"gpsTextSlide .6s ease" }}>
-              <div style={{ fontSize:16,fontWeight:700,color:"rgba(255,255,255,0.75)",letterSpacing:"-0.3px",marginBottom:10,fontFamily:"'Syne',sans-serif" }}>
-                Buscando señal GPS...
-              </div>
-              {/* Status bar tipo terminal */}
-              <div style={{ display:"inline-flex",alignItems:"center",gap:10,background:"rgba(59,130,246,0.07)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,padding:"8px 18px" }}>
-                <div style={{ display:"flex",gap:4 }}>
-                  {[0,0.2,0.4].map((d,i)=>(
-                    <div key={i} style={{ width:3,height:12+(i*4),borderRadius:2,background:"#3b82f6",animation:"gpsBlink 1.2s ease-in-out infinite",animationDelay:`${d}s`,opacity:0.7 }}/>
-                  ))}
-                </div>
-                <span style={{ fontSize:11,color:"rgba(59,130,246,0.85)",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.5px" }}>
-                  Esperando ruta del admin...
-                </span>
-              </div>
-              {/* Coordenadas ficticias que "buscan" */}
-              <div style={{ marginTop:12,fontSize:10,color:"rgba(255,255,255,0.15)",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"1px",animation:"gpsBlink 3s ease-in-out infinite" }}>
-                18.4861° N · 69.9312° W
+          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,background:"rgba(6,12,20,0.96)" }}>
+            <div style={{ width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30 }}>📭</div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.6)",marginBottom:6 }}>Sin ruta asignada</div>
+              <div style={{ display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 16px" }}>
+                <div style={{ width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",animation:"pulse 2s infinite" }}/>
+                <span style={{ fontSize:12,color:"rgba(255,255,255,0.35)" }}>Esperando ruta del admin...</span>
               </div>
             </div>
           </div>
@@ -6147,7 +6084,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\d{1,4}/g);
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
