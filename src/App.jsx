@@ -276,8 +276,14 @@ const PageDashboard = () => {
   };
 
   // Listen to all driver locations from Firebase
+  // FIX: Escuchar cada mensajero individualmente en Firebase Realtime Database.
+  // Cuando el mensajero escribe FB.set("locations/M-01", loc), el SSE del nodo hijo
+  // llega con data = { lat, lng, ... } (el objeto directo), no con el driverId.
+  // La solución es suscribirse a cada nodo hijo por separado y mergearlo con su key.
   useEffect(() => {
-    // Initial load
+    const DRIVER_IDS = DRIVERS.map(d => d.id);
+
+    // ── Carga inicial del nodo raíz ──────────────────────────────────────
     FB.get("locations").then(data => {
       if (data && typeof data === "object") {
         setLiveLocations(data);
@@ -285,23 +291,46 @@ const PageDashboard = () => {
         Object.assign(window.__rdLocations, data);
       }
     });
-    // Real-time updates via SSE
-    const unsub = FB.listen("locations", (data) => {
-      if (data && typeof data === "object") {
+
+    // ── SSE nodo raíz (detecta when el nodo entero cambia) ───────────────
+    const unsubRoot = FB.listen("locations", (data) => {
+      if (!data) return;
+      if (typeof data === "object" && !data.lat) {
         setLiveLocations(prev => ({ ...prev, ...data }));
         if (!window.__rdLocations) window.__rdLocations = {};
         Object.assign(window.__rdLocations, data);
       }
     });
-    // Polling backup every 5s
+
+    // ── FIX PRINCIPAL: escuchar cada mensajero individualmente ───────────
+    // Cuando el mensajero hace FB.set("locations/M-01", loc) el SSE del child
+    // llega con data = { lat, lng, ... } — mergeamos con el driverId correcto.
+    const unsubDrivers = DRIVER_IDS.map(driverId =>
+      FB.listen(`locations/${driverId}`, (loc) => {
+        if (!loc || !loc.lat) return;
+        const locWithId = { ...loc, driverId };
+        setLiveLocations(prev => ({ ...prev, [driverId]: locWithId }));
+        if (!window.__rdLocations) window.__rdLocations = {};
+        window.__rdLocations[driverId] = locWithId;
+      })
+    );
+
+    // ── Polling cada 3s como backup robusto ──────────────────────────────
     const t = setInterval(() => {
       FB.get("locations").then(data => {
         if (data && typeof data === "object") {
           setLiveLocations(prev => ({ ...prev, ...data }));
+          if (!window.__rdLocations) window.__rdLocations = {};
+          Object.assign(window.__rdLocations, data);
         }
       });
-    }, 5000);
-    return () => { unsub(); clearInterval(t); };
+    }, 3000);
+
+    return () => {
+      unsubRoot();
+      unsubDrivers.forEach(u => u());
+      clearInterval(t);
+    };
   }, []);
 
   // Update driver markers on map when locations change
@@ -495,8 +524,117 @@ const PageDashboard = () => {
     navigator.clipboard?.writeText(txt).catch(() => {});
   };
 
+  // ── Ticker de "hace X min" para la barra GPS ─────────────────
+  const [gpsTick, setGpsTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setGpsTick(p => p + 1), 10000);
+    return () => clearInterval(t);
+  }, []);
+  const [gpsExpanded, setGpsExpanded] = useState(false);
+
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" }}>
+
+      {/* ══ PANEL GPS ADMIN ═══════════════════════════════════════════════════════ */}
+      <div style={{
+        background:"linear-gradient(135deg,#070d16,#0a1220)",
+        borderBottom:"1px solid #0f1e2e",
+        padding: gpsExpanded ? "10px 16px 14px" : "7px 16px",
+        flexShrink:0,
+        transition:"padding .2s",
+      }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: gpsExpanded ? 10 : 0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ position:"relative", width:8, height:8 }}>
+              <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"#22c55e", animation:"pulse 2s infinite", opacity:0.4 }}/>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:"#22c55e", boxShadow:"0 0 6px #22c55e", position:"relative" }}/>
+            </div>
+            <span style={{ fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:800, letterSpacing:"1.5px", color:"rgba(255,255,255,0.4)", textTransform:"uppercase" }}>
+              GPS en Tiempo Real
+            </span>
+            {(() => {
+              const onlineCount = Object.values(liveLocations).filter(l => l && l.online !== false && (Date.now()-(l.ts||0)) < 120000).length;
+              const totalWithLoc = Object.keys(liveLocations).length;
+              return totalWithLoc > 0 ? (
+                <div style={{ display:"flex", gap:5 }}>
+                  <span style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.25)", borderRadius:5, padding:"1px 7px", fontSize:9, color:"#22c55e", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>
+                    {onlineCount} online
+                  </span>
+                  {totalWithLoc - onlineCount > 0 && (
+                    <span style={{ background:"rgba(55,65,81,0.3)", border:"1px solid rgba(55,65,81,0.4)", borderRadius:5, padding:"1px 7px", fontSize:9, color:"#6b7280", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>
+                      {totalWithLoc - onlineCount} offline
+                    </span>
+                  )}
+                </div>
+              ) : null;
+            })()}
+          </div>
+          <button onClick={() => setGpsExpanded(e => !e)}
+            style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:7, padding:"3px 10px", color:"rgba(255,255,255,0.3)", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer" }}>
+            {gpsExpanded ? "▲ Colapsar" : "▼ Detalle"}
+          </button>
+        </div>
+
+        <div style={{
+          display:"flex", gap:8, flexWrap: gpsExpanded ? "wrap" : "nowrap",
+          overflowX: gpsExpanded ? "visible" : "auto",
+          marginTop: gpsExpanded ? 0 : 8,
+        }}>
+          {(() => {
+            const mensajeros = window.__rdMensajeros || DEFAULT_MENSAJEROS;
+            const allIds = [...new Set([...mensajeros.map(m => m.id), ...Object.keys(liveLocations)])];
+            return allIds.map(driverId => {
+              const loc = liveLocations[driverId];
+              const mens = mensajeros.find(m => m.id === driverId);
+              const name = loc && loc.driverName ? loc.driverName : (mens ? mens.name : driverId);
+              const initials = mens ? (mens.initials || name.slice(0,2).toUpperCase()) : name.slice(0,2).toUpperCase();
+              const hasLoc = !!(loc && loc.lat);
+              const isOnline = hasLoc && loc.online !== false && (Date.now() - (loc.ts||0)) < 120000;
+              const mins = loc && loc.ts ? Math.round((Date.now() - loc.ts) / 60000) : null;
+              const timeStr = mins === null ? "sin GPS" : mins === 0 ? "ahora" : mins < 60 ? mins+"m" : Math.floor(mins/60)+"h";
+              return (
+                <div key={driverId}
+                  onClick={() => { if (gMapRef.current && hasLoc) { gMapRef.current.panTo({ lat: loc.lat, lng: loc.lng }); gMapRef.current.setZoom(16); } }}
+                  style={{
+                    display:"flex", alignItems:"center", gap: gpsExpanded ? 10 : 7,
+                    background: isOnline ? "rgba(34,197,94,0.07)" : "rgba(255,255,255,0.03)",
+                    border:"1px solid "+(isOnline ? "rgba(34,197,94,0.22)" : "rgba(255,255,255,0.06)"),
+                    borderRadius:10, padding: gpsExpanded ? "10px 14px" : "5px 10px",
+                    cursor: hasLoc ? "pointer" : "default", flexShrink:0,
+                    minWidth: gpsExpanded ? 190 : "auto",
+                    transition:"all .15s",
+                  }}>
+                  <div style={{ width: gpsExpanded ? 34 : 26, height: gpsExpanded ? 34 : 26, borderRadius:"50%", background: isOnline ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#1f2937", display:"flex", alignItems:"center", justifyContent:"center", fontSize: gpsExpanded ? 12 : 9, fontWeight:800, color:"white", flexShrink:0, position:"relative" }}>
+                    {initials}
+                    <div style={{ position:"absolute", bottom:-1, right:-1, width:8, height:8, borderRadius:"50%", background: isOnline ? "#22c55e" : hasLoc ? "#f59e0b" : "#374151", border:"1.5px solid #070d16", boxShadow: isOnline ? "0 0 5px #22c55e" : "none" }}/>
+                  </div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize: gpsExpanded ? 12 : 10, fontWeight:700, color: isOnline ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth: gpsExpanded ? 120 : 75 }}>
+                      {name.split(" ")[0]}
+                    </div>
+                    {gpsExpanded && <div style={{ fontSize:10, color: isOnline ? "#22c55e" : "#4b5563", marginTop:2 }}>{isOnline ? "🟢 Online" : hasLoc ? "🟡 Hace "+timeStr : "⚫ Sin GPS"}</div>}
+                    {gpsExpanded && loc && loc.routeName && <div style={{ fontSize:9, color:"rgba(59,130,246,0.7)", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:120 }}>📦 {loc.routeName}</div>}
+                    {gpsExpanded && hasLoc && <div style={{ fontSize:9, color:"rgba(255,255,255,0.18)", marginTop:2, fontFamily:"'DM Mono',monospace" }}>{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>}
+                  </div>
+                  {!gpsExpanded && <span style={{ fontSize:9, color: isOnline ? "rgba(34,197,94,0.6)" : "rgba(255,255,255,0.2)", fontFamily:"'DM Mono',monospace", flexShrink:0 }}>{timeStr}</span>}
+                  {gpsExpanded && hasLoc && (
+                    <div style={{ marginLeft:"auto", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill={isOnline?"#22c55e":"#4b5563"}><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                      <span style={{ fontSize:8, color:"rgba(255,255,255,0.2)" }}>{timeStr}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
+          {Object.keys(liveLocations).length === 0 && (
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.2)", padding:"5px 4px", fontStyle:"italic" }}>
+              Esperando que los mensajeros activen su GPS...
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Search bar overlay */}
       <div style={{ position:"absolute", top:16, left:"50%", transform:"translateX(-50%)", zIndex:10, width:"min(560px,90%)" }}>
         <div style={{ background:"rgba(6,11,16,0.95)", border:"1px solid #1e2d3d", borderRadius:14, boxShadow:"0 8px 40px rgba(0,0,0,0.7)", backdropFilter:"blur(12px)", overflow:"hidden" }}>
@@ -2250,6 +2388,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // ── UBICACIÓN EN TIEMPO REAL ────────────────────────────────
   const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied
   const [myLocation,     setMyLocation]     = useState(null);   // { lat, lng, accuracy, ts }
+  const [mapReady,       setMapReady]       = useState(false);  // FIX: declarado aquí, antes de los useEffects que lo usan
   const watchIdRef = useRef(null);
   const locationMarkerRef = useRef(null); // marker azul del mensajero en el mapa
   const locationAccuracyRef = useRef(null); // círculo de precisión
@@ -2286,7 +2425,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,       // acepta cache de hasta 5s
+        maximumAge: 0,          // FIX: 0 = siempre pide posición fresca, nunca usa cache
         timeout: 15000,          // timeout de 15s
       }
     );
@@ -2318,6 +2457,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   }, []); // eslint-disable-line
 
   // Actualizar el marker del mensajero en el mapa cuando cambia su posición
+  // FIX: usar mapReady (estado) como dependencia, no gMapRef.current (ref mutable)
   useEffect(() => {
     if (!myLocation || !gMapRef.current || !window.google) return;
     const { lat, lng, accuracy } = myLocation;
@@ -2370,7 +2510,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         },
       });
     }
-  }, [myLocation, gMapRef.current]); // eslint-disable-line
+
+    // FIX GPS: Centrar el mapa suavemente en la posición actual del mensajero
+    // panTo anima el movimiento — el mensajero siempre está centrado en pantalla
+    gMapRef.current.panTo(pos);
+
+  }, [myLocation, mapReady]); // FIX: mapReady es estado → React re-ejecuta al detectar cambio
 
   // -- Sync ruta en TIEMPO REAL desde Firebase --
   // REGLA FUNDAMENTAL: los stops en pantalla NUNCA retroceden.
@@ -2533,10 +2678,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   }, []);
 
   // -- Re-render markers after map becomes ready --------------------------------
-  const [mapReady, setMapReady] = useState(false);
+  // mapReady se declara junto a los otros estados (arriba) — ver línea ~2388
   useEffect(() => {
     loadGoogleMaps().then(() => {
-      // Poll until gMapRef is set (handles async init)
       const check = setInterval(() => {
         if (gMapRef.current) { setMapReady(true); clearInterval(check); }
       }, 100);
