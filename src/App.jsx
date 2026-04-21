@@ -2026,6 +2026,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const splitRef = useRef({ startY:0, startPct:40 });
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [filterMode, setFilterMode] = useState("all");
+  const [driverViewMode, setDriverViewMode] = useState("list"); // "list" | "carousel"
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
   // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
   const [pendingRoutes, setPendingRoutes] = useState(() => {
@@ -2573,8 +2574,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   {myRoute.routeName || "Ruta del día"}
                 </div>
 
-                {/* Filter chips row */}
-                <div style={{ display:"flex",gap:5,marginBottom:10,overflowX:"auto",paddingBottom:2 }}>
+                {/* Filter chips row + toggle lista/carrusel */}
+                <div style={{ display:"flex",gap:5,marginBottom:10,overflowX:"auto",paddingBottom:2,alignItems:"center" }}>
                   {[
                     {id:"all",label:"Todas",count:stops.length},
                     {id:"pending",label:"Pendientes",count:pending.length},
@@ -2587,6 +2588,17 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       {chip.count>0 && <span style={{ fontSize:11,color:filterMode===chip.id?"#2563eb":"#9ca3af",fontWeight:700 }}>{chip.count}</span>}
                     </button>
                   ))}
+                  {/* Toggle */}
+                  <div style={{ display:"flex",background:"#f3f4f6",border:"1.5px solid #e5e7eb",borderRadius:20,padding:2,gap:2,marginLeft:"auto",flexShrink:0 }}>
+                    <button onClick={()=>setDriverViewMode("list")} className="rd-btn"
+                      style={{ padding:"4px 10px",borderRadius:16,border:"none",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:700,background:driverViewMode==="list"?"#2563eb":"transparent",color:driverViewMode==="list"?"white":"#9ca3af",transition:"all .15s" }}>
+                      ☰
+                    </button>
+                    <button onClick={()=>{ setDriverViewMode("carousel"); if(!selStop&&currentStop) setSelStop(currentStop); }} className="rd-btn"
+                      style={{ padding:"4px 10px",borderRadius:16,border:"none",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:700,background:driverViewMode==="carousel"?"#2563eb":"transparent",color:driverViewMode==="carousel"?"white":"#9ca3af",transition:"all .15s" }}>
+                      ⊟
+                    </button>
+                  </div>
                 </div>
 
                 {/* Progress bar */}
@@ -2626,7 +2638,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             </div>
           )}
 
-          {/* - Stops list - */}
+          {/* - Stops list OR carousel - */}
+          {driverViewMode === "list" ? (
           <div style={{ flex:1,overflow:"auto",paddingBottom:80 }}>
             {!myRoute && (
               <div style={{ textAlign:"center",padding:"52px 24px",color:"rgba(255,255,255,0.2)" }}>
@@ -2755,6 +2768,139 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               );
             })}
           </div>
+          ) : (
+          /* ══ MODO CARRUSEL ══ */
+          <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
+            {/* Mapa a pantalla completa ya visible arriba — aquí va el bottom sheet */}
+            {(() => {
+              const ordered = stops.filter(s => s.stopNum != null).sort((a,b) => (a.stopNum||99)-(b.stopNum||99));
+              const total = ordered.length;
+              if (total === 0) return (
+                <div style={{ padding:"52px 24px", textAlign:"center", color:"#9ca3af" }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>📋</div>
+                  <div style={{ fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight:700 }}>Sin paradas</div>
+                </div>
+              );
+              const cur = selStop ? ordered.find(s=>s.id===selStop.id) || ordered[0] : (currentStop || ordered[0]);
+              const curIdx = ordered.findIndex(s=>s.id===cur.id);
+              const goTo = (idx) => {
+                const t = ordered[Math.max(0, Math.min(total-1, idx))];
+                if (t) { setSelStop(t); if(gMapRef.current&&t.lat&&t.lng){gMapRef.current.panTo({lat:t.lat,lng:t.lng});gMapRef.current.setZoom(16);} }
+              };
+              const isDone = cur.driverStatus==="delivered";
+              const isProb = cur.driverStatus==="problema";
+              const isCur  = cur===currentStop;
+              const cardBorder = isDone?"#86efac":isProb?"#fca5a5":isCur?"#93c5fd":"#e5e7eb";
+              const cardBg     = isDone?"#f0fdf4":isProb?"#fff5f5":isCur?"#eff6ff":"#ffffff";
+
+              return (
+                <div style={{ display:"flex", flexDirection:"column", height:"100%", padding:"10px 10px 16px" }}>
+                  {/* Dots */}
+                  <div style={{ display:"flex", justifyContent:"center", gap:5, marginBottom:10 }}>
+                    {ordered.slice(Math.max(0,curIdx-3), Math.min(total,curIdx+4)).map((s,i) => {
+                      const abs = Math.max(0,curIdx-3)+i;
+                      return <div key={s.id} style={{ width:abs===curIdx?22:6, height:6, borderRadius:3, background:abs===curIdx?"#2563eb":"#d1d5db", transition:"all .2s" }}/>;
+                    })}
+                  </div>
+
+                  {/* Card */}
+                  <div style={{ background:cardBg, border:`1.5px solid ${cardBorder}`, borderRadius:16, boxShadow:"0 4px 24px rgba(0,0,0,0.08)", flex:1, display:"flex", flexDirection:"column", overflow:"hidden", animation:"slideIn .18s ease" }}>
+
+                    {/* Header */}
+                    <div style={{ padding:"14px 14px 10px", borderBottom:"1px solid #f3f4f6" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <div style={{ width:42, height:42, borderRadius:12, background:isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:"white", fontFamily:"'DM Mono',monospace", flexShrink:0 }}>
+                          {cur.stopNum||"?"}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:15, fontFamily:"'DM Sans',sans-serif", fontWeight:700, color:isDone?"#16a34a":isProb?"#dc2626":isCur?"#1d4ed8":"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            {cur.client || `Parada ${cur.stopNum}`}
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
+                            <span style={{ fontSize:11, color:"#2563eb", fontFamily:"'DM Sans',sans-serif", fontWeight:800 }}>{curIdx+1}/{total}</span>
+                            {cur.tracking && <span style={{ fontSize:10, color:"#9ca3af", fontFamily:"'DM Mono',monospace" }}>{cur.tracking}</span>}
+                            {isCur && !isDone && <span style={{ fontSize:9, color:"white", background:"#2563eb", borderRadius:4, padding:"1px 6px", fontFamily:"'DM Sans',sans-serif", fontWeight:700 }}>ACTUAL</span>}
+                            {isDone && <span style={{ fontSize:9, color:"white", background:"#16a34a", borderRadius:4, padding:"1px 6px", fontFamily:"'DM Sans',sans-serif", fontWeight:700 }}>ENTREGADO</span>}
+                            {isProb && <span style={{ fontSize:9, color:"white", background:"#dc2626", borderRadius:4, padding:"1px 6px", fontFamily:"'DM Sans',sans-serif", fontWeight:700 }}>PROBLEMA</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ padding:"10px 14px", flex:1, display:"flex", flexDirection:"column", gap:8 }}>
+                      {/* Dirección */}
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}>{cur.displayAddr||cur.rawAddr||"Sin dirección"}</span>
+                      </div>
+                      {/* Teléfono */}
+                      {cur.phone && (
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{flexShrink:0}}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5a2 2 0 0 1 1.99-2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.91a16 16 0 0 0 6 6l.92-1.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17z"/></svg>
+                          <a href={`tel:${cur.phone}`} style={{ fontSize:12, color:"#2563eb", fontWeight:600, fontFamily:"'DM Mono',monospace", textDecoration:"none" }}>{cur.phone}</a>
+                        </div>
+                      )}
+                      {/* Notas */}
+                      {cur.notes && (
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          <span style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif", fontStyle:"italic" }}>{cur.notes}</span>
+                        </div>
+                      )}
+                      {isProb && cur.issue && (
+                        <div style={{ fontSize:12, color:"#dc2626", background:"#fff5f5", border:"1px solid #fca5a5", borderRadius:8, padding:"8px 10px", fontFamily:"'DM Sans',sans-serif" }}>⚠ {cur.issue}</div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    {!isDone && !isProb && (
+                      <div style={{ padding:"0 14px 10px", display:"flex", flexDirection:"column", gap:7 }}>
+                        <div style={{ display:"flex", gap:6 }}>
+                          {[
+                            { href:`https://waze.com/ul?ll=${cur.lat},${cur.lng}&navigate=yes`, label:"Waze" },
+                            { href:`https://maps.google.com/?q=${cur.lat},${cur.lng}`, label:"Maps" },
+                            { href:`https://wa.me/${cur.phone?.replace(/\D/g,"")}`, label:"WA" },
+                          ].map(({href,label}) => (
+                            <a key={label} href={href} target="_blank" rel="noreferrer" className="rd-btn"
+                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"10px 4px",borderRadius:10,background:"#f9fafb",border:"1.5px solid #e5e7eb",color:"#374151",fontSize:12,textDecoration:"none",fontFamily:"'DM Sans',sans-serif",fontWeight:700 }}>
+                              {label}
+                            </a>
+                          ))}
+                        </div>
+                        <div style={{ display:"flex", gap:6 }}>
+                          <button className="rd-btn" onClick={()=>setShowProb(cur.id)}
+                            style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"11px 4px",borderRadius:10,border:"1.5px solid #fca5a5",background:"#fff5f5",color:"#dc2626",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>
+                            ✕ Fallido
+                          </button>
+                          <button className="rd-btn" onClick={()=>{ markDelivered(cur.id); const ni=Math.min(curIdx+1,total-1); goTo(ni); }}
+                            style={{ flex:2,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 4px",borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(22,163,74,0.3)" }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                            Entregado
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Prev / Next */}
+                    <div style={{ display:"flex", borderTop:"1px solid #f3f4f6" }}>
+                      <button onClick={()=>goTo(curIdx-1)} disabled={curIdx===0} className="rd-btn"
+                        style={{ flex:1,padding:"13px 0",background:"transparent",border:"none",borderRight:"1px solid #f3f4f6",color:curIdx===0?"#d1d5db":"#2563eb",fontSize:12,cursor:curIdx===0?"default":"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                        Anterior
+                      </button>
+                      <button onClick={()=>goTo(curIdx+1)} disabled={curIdx===total-1} className="rd-btn"
+                        style={{ flex:1,padding:"13px 0",background:"transparent",border:"none",color:curIdx===total-1?"#d1d5db":"#2563eb",fontSize:12,cursor:curIdx===total-1?"default":"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                        Siguiente
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+          )}
         </div>
       )}
 
