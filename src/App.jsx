@@ -112,6 +112,13 @@ const LS = {
   getPending:    (id)  => _memStore.pendingRoutes[id] || [],
   setPending:    (id, arr) => { _memStore.pendingRoutes[id] = arr; FB.set(`pendingRoutes/${id}`, arr); },
   getAllPending:  ()    => ({ ..._memStore.pendingRoutes }),
+  // Ubicaciones en tiempo real de mensajeros
+  setLocation: (driverId, loc) => {
+    if (!window.__rdLocations) window.__rdLocations = {};
+    window.__rdLocations[driverId] = loc;
+    FB.set(`locations/${driverId}`, loc);
+  },
+  getLocations: () => window.__rdLocations || {},
 };
 
 if (typeof window !== "undefined") {
@@ -240,6 +247,138 @@ const PageDashboard = () => {
   const markerRef = useRef(null);
   const infoRef   = useRef(null);
   const inputRef  = useRef(null);
+
+  // ── LIVE DRIVER LOCATIONS ────────────────────────────────────
+  const [liveLocations, setLiveLocations] = useState({}); // { driverId: loc }
+  const driverMarkersRef = useRef({});  // { driverId: { marker, circle, label } }
+  const infoWindowRef    = useRef(null);
+
+  // Motor SVG icon for each driver
+  const makeDriverSvg = (initials, isOnline) => {
+    const color = isOnline ? "#3b82f6" : "#374151";
+    const glow  = isOnline ? "rgba(59,130,246,0.4)" : "rgba(55,65,81,0.3)";
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
+      <defs>
+        <radialGradient id="dg" cx="40%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="${isOnline?"#93c5fd":"#6b7280"}"/>
+          <stop offset="100%" stop-color="${color}"/>
+        </radialGradient>
+        <filter id="dglow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="${isOnline?3:1.5}" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      ${isOnline ? `<circle cx="26" cy="26" r="25" fill="${glow}" filter="url(#dglow)"/>` : ""}
+      <circle cx="26" cy="26" r="20" fill="url(#dg)" stroke="white" stroke-width="2.5"/>
+      <text x="26" y="22" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="900" fill="white" font-family="-apple-system,sans-serif">${initials}</text>
+      <text x="26" y="35" text-anchor="middle" font-size="14" font-family="-apple-system,sans-serif">🏍</text>
+    </svg>`;
+  };
+
+  // Listen to all driver locations from Firebase
+  useEffect(() => {
+    // Initial load
+    FB.get("locations").then(data => {
+      if (data && typeof data === "object") {
+        setLiveLocations(data);
+        if (!window.__rdLocations) window.__rdLocations = {};
+        Object.assign(window.__rdLocations, data);
+      }
+    });
+    // Real-time updates via SSE
+    const unsub = FB.listen("locations", (data) => {
+      if (data && typeof data === "object") {
+        setLiveLocations(prev => ({ ...prev, ...data }));
+        if (!window.__rdLocations) window.__rdLocations = {};
+        Object.assign(window.__rdLocations, data);
+      }
+    });
+    // Polling backup every 5s
+    const t = setInterval(() => {
+      FB.get("locations").then(data => {
+        if (data && typeof data === "object") {
+          setLiveLocations(prev => ({ ...prev, ...data }));
+        }
+      });
+    }, 5000);
+    return () => { unsub(); clearInterval(t); };
+  }, []);
+
+  // Update driver markers on map when locations change
+  useEffect(() => {
+    if (!gMapRef.current || !window.google) return;
+    const mensajeros = window.__rdMensajeros || DEFAULT_MENSAJEROS;
+
+    Object.entries(liveLocations).forEach(([driverId, loc]) => {
+      if (!loc || !loc.lat || !loc.lng) return;
+      const pos = { lat: loc.lat, lng: loc.lng };
+      const isOnline = loc.online !== false && (Date.now() - (loc.ts||0)) < 120000; // online si actualizó en <2min
+      const mens = mensajeros.find(m => m.id === driverId);
+      const initials = mens?.initials || driverId.slice(-2).toUpperCase();
+
+      if (driverMarkersRef.current[driverId]) {
+        // Update existing marker position
+        const { marker, circle } = driverMarkersRef.current[driverId];
+        marker.setPosition(pos);
+        if (circle) {
+          circle.setCenter(pos);
+          circle.setRadius(loc.accuracy || 30);
+        }
+        // Update icon if online status changed
+        const svg = makeDriverSvg(initials, isOnline);
+        marker.setIcon({
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new window.google.maps.Size(52, 52),
+          anchor: new window.google.maps.Point(26, 26),
+        });
+      } else {
+        // Create new marker
+        const svg = makeDriverSvg(initials, isOnline);
+        const marker = new window.google.maps.Marker({
+          map: gMapRef.current,
+          position: pos,
+          zIndex: 9999,
+          title: loc.driverName || driverId,
+          icon: {
+            url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+            scaledSize: new window.google.maps.Size(52, 52),
+            anchor: new window.google.maps.Point(26, 26),
+          },
+        });
+        // Accuracy circle
+        const circle = new window.google.maps.Circle({
+          map: gMapRef.current,
+          center: pos,
+          radius: loc.accuracy || 30,
+          fillColor: "#3b82f6",
+          fillOpacity: 0.06,
+          strokeColor: "#3b82f6",
+          strokeOpacity: 0.2,
+          strokeWeight: 1,
+          zIndex: 100,
+        });
+        // Click to show info
+        marker.addListener("click", () => {
+          if (!infoWindowRef.current) {
+            infoWindowRef.current = new window.google.maps.InfoWindow();
+          }
+          const mins = Math.round((Date.now() - (loc.ts||0)) / 60000);
+          const timeAgo = mins === 0 ? "ahora mismo" : mins === 1 ? "hace 1 min" : `hace ${mins} min`;
+          infoWindowRef.current.setContent(`
+            <div style="font-family:-apple-system,sans-serif;padding:4px 6px;min-width:160px">
+              <div style="font-weight:800;font-size:13px;margin-bottom:3px">${loc.driverName||driverId}</div>
+              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">🕐 Actualizado ${timeAgo}</div>
+              ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6">📦 ${loc.routeName}</div>` : ""}
+              ${loc.accuracy ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">Precisión: ±${loc.accuracy}m</div>` : ""}
+              <div style="font-size:10px;color:#9ca3af">${loc.lat?.toFixed(5)}, ${loc.lng?.toFixed(5)}</div>
+            </div>
+          `);
+          infoWindowRef.current.open({ map: gMapRef.current, anchor: marker });
+        });
+        driverMarkersRef.current[driverId] = { marker, circle };
+      }
+    });
+  }, [liveLocations, mapReady]); // eslint-disable-line
 
   // Load Google Maps and init map
   useEffect(() => {
@@ -420,6 +559,63 @@ const PageDashboard = () => {
       {!mapReady && (
         <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#060b10", color:"#1e3550", fontSize:13, fontFamily:"'Syne',sans-serif" }}>
           Cargando mapa...
+        </div>
+      )}
+
+      {/* ── Live drivers panel (bottom-left overlay) ── */}
+      {Object.keys(liveLocations).length > 0 && (
+        <div style={{
+          position:"absolute", bottom:16, left:14,
+          background:"rgba(6,11,16,0.92)",
+          border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:14, padding:"10px 12px",
+          backdropFilter:"blur(16px)",
+          minWidth:180, maxWidth:240,
+          boxShadow:"0 8px 32px rgba(0,0,0,0.5)",
+        }}>
+          <div style={{ fontSize:9, fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1.5px", color:"rgba(255,255,255,0.3)", marginBottom:8 }}>
+            MENSAJEROS EN CAMPO
+          </div>
+          {Object.entries(liveLocations).map(([driverId, loc]) => {
+            if (!loc || !loc.lat) return null;
+            const isOnline = loc.online !== false && (Date.now() - (loc.ts||0)) < 120000;
+            const mens = (window.__rdMensajeros || DEFAULT_MENSAJEROS).find(m => m.id === driverId);
+            const name = loc.driverName || mens?.name || driverId;
+            const mins = Math.round((Date.now() - (loc.ts||0)) / 60000);
+            const timeStr = mins === 0 ? "ahora" : `${mins}m`;
+            return (
+              <div key={driverId}
+                onClick={() => {
+                  if (gMapRef.current && loc.lat) {
+                    gMapRef.current.panTo({ lat: loc.lat, lng: loc.lng });
+                    gMapRef.current.setZoom(16);
+                  }
+                }}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", transition:"background .1s" }}>
+                {/* Status dot */}
+                <div style={{
+                  width:8, height:8, borderRadius:"50%", flexShrink:0,
+                  background: isOnline ? "#22c55e" : "#374151",
+                  boxShadow: isOnline ? "0 0 6px #22c55e" : "none",
+                  animation: isOnline ? "pulse 2s infinite" : "none",
+                }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color: isOnline?"rgba(255,255,255,0.85)":"rgba(255,255,255,0.35)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {name.split(" ")[0]}
+                  </div>
+                  {loc.routeName && (
+                    <div style={{ fontSize:9, color:"rgba(59,130,246,0.7)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{loc.routeName}</div>
+                  )}
+                </div>
+                <span style={{ fontSize:9, color:"rgba(255,255,255,0.25)", fontFamily:"'DM Mono',monospace", flexShrink:0 }}>{timeStr}</span>
+                {/* Arrow to pan */}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            );
+          })}
+          <div style={{ fontSize:9, color:"rgba(255,255,255,0.2)", marginTop:6, textAlign:"center" }}>
+            Toca un mensajero para centrar el mapa
+          </div>
         </div>
       )}
     </div>
@@ -2051,6 +2247,131 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
 
+  // ── UBICACIÓN EN TIEMPO REAL ────────────────────────────────
+  const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied
+  const [myLocation,     setMyLocation]     = useState(null);   // { lat, lng, accuracy, ts }
+  const watchIdRef = useRef(null);
+  const locationMarkerRef = useRef(null); // marker azul del mensajero en el mapa
+  const locationAccuracyRef = useRef(null); // círculo de precisión
+
+  // Solicitar y activar tracking de ubicación
+  const startLocationTracking = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      return;
+    }
+    setLocationStatus("requesting");
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const loc = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          ts: Date.now(),
+          driverName: driver.name || "Mensajero",
+          driverId: myKey,
+          routeName: myRoute?.routeName || null,
+          online: true,
+        };
+        setMyLocation(loc);
+        setLocationStatus("active");
+        // Publicar en Firebase para que el admin la vea
+        LS.setLocation(myKey, loc);
+      },
+      (err) => {
+        console.warn("Geolocation error:", err.code, err.message);
+        setLocationStatus(err.code === 1 ? "denied" : "error");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,       // acepta cache de hasta 5s
+        timeout: 15000,          // timeout de 15s
+      }
+    );
+  };
+
+  const stopLocationTracking = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    // Marcar offline en Firebase
+    LS.setLocation(myKey, { ...myLocation, online: false, ts: Date.now() });
+    setLocationStatus("idle");
+    setMyLocation(null);
+  };
+
+  // Iniciar tracking automáticamente al montar (pide permiso una sola vez)
+  useEffect(() => {
+    startLocationTracking();
+    return () => {
+      // Al salir, marcar offline
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (myKey) {
+        FB.set(`locations/${myKey}`, { online: false, ts: Date.now(), driverId: myKey });
+      }
+    };
+  }, []); // eslint-disable-line
+
+  // Actualizar el marker del mensajero en el mapa cuando cambia su posición
+  useEffect(() => {
+    if (!myLocation || !gMapRef.current || !window.google) return;
+    const { lat, lng, accuracy } = myLocation;
+    const pos = { lat, lng };
+
+    // Círculo de precisión
+    if (locationAccuracyRef.current) {
+      locationAccuracyRef.current.setCenter(pos);
+      locationAccuracyRef.current.setRadius(accuracy || 20);
+    } else {
+      locationAccuracyRef.current = new window.google.maps.Circle({
+        map: gMapRef.current,
+        center: pos,
+        radius: accuracy || 20,
+        fillColor: "#3b82f6",
+        fillOpacity: 0.08,
+        strokeColor: "#3b82f6",
+        strokeOpacity: 0.25,
+        strokeWeight: 1.5,
+        zIndex: 200,
+      });
+    }
+
+    // Icono de motor (moto) animado
+    const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+      <defs>
+        <radialGradient id="lg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#60a5fa"/>
+          <stop offset="100%" stop-color="#1d4ed8"/>
+        </radialGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <circle cx="24" cy="24" r="23" fill="rgba(59,130,246,0.18)" filter="url(#glow)"/>
+      <circle cx="24" cy="24" r="17" fill="url(#lg)" stroke="white" stroke-width="2.5"/>
+      <text x="24" y="29" text-anchor="middle" font-size="16" font-weight="900" fill="white" font-family="-apple-system,sans-serif">🏍</text>
+    </svg>`;
+
+    if (locationMarkerRef.current) {
+      locationMarkerRef.current.setPosition(pos);
+    } else {
+      locationMarkerRef.current = new window.google.maps.Marker({
+        map: gMapRef.current,
+        position: pos,
+        zIndex: 9999,
+        title: driver.name || "Mi ubicación",
+        icon: {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(motorSvg),
+          scaledSize: new window.google.maps.Size(48, 48),
+          anchor: new window.google.maps.Point(24, 24),
+        },
+      });
+    }
+  }, [myLocation, gMapRef.current]); // eslint-disable-line
+
   // -- Sync ruta en TIEMPO REAL desde Firebase --
   // REGLA FUNDAMENTAL: los stops en pantalla NUNCA retroceden.
   // Solo Firebase puede actualizar si trae un sentAt distinto (ruta nueva del admin).
@@ -2544,9 +2865,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           <div style={{ fontSize:14,fontWeight:700,color:"#f1f5f9",letterSpacing:"-0.2px",lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {driver.name||"Mensajero"}
           </div>
-          <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:1 }}>
-            <div style={{ width:6,height:6,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 6px #22c55e" }}/>
-            <span style={{ fontSize:10,color:"#22c55e",fontWeight:600,letterSpacing:"0.2px" }}>En línea</span>
+          <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:1 }}>
+            <div style={{ width:6,height:6,borderRadius:"50%",
+              background: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151",
+              boxShadow: locationStatus==="active"?"0 0 6px #22c55e":locationStatus==="requesting"?"0 0 6px #f59e0b":"none",
+              animation: locationStatus==="requesting"?"pulse 1s infinite":"none",
+            }}/>
+            <span style={{ fontSize:10,fontWeight:600,letterSpacing:"0.2px",
+              color: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"rgba(255,255,255,0.3)"
+            }}>
+              {locationStatus==="active"?"GPS activo":locationStatus==="requesting"?"Obteniendo GPS...":locationStatus==="denied"?"GPS denegado":"En línea"}
+            </span>
+            {/* Botón tap para activar GPS si fue denegado */}
+            {(locationStatus==="denied"||locationStatus==="idle") && (
+              <button onClick={startLocationTracking}
+                style={{ background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:5,padding:"1px 6px",fontSize:9,color:"#60a5fa",cursor:"pointer",fontWeight:700 }}>
+                Activar
+              </button>
+            )}
           </div>
         </div>
 
