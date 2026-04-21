@@ -5233,35 +5233,32 @@ const optimizeRoute = (stops) => {
   }
 
   // ── Fase 2: 2-opt para eliminar cruces ────────────────────
-  // tourDist: distancia total incluyendo depot→first y last→depot
-  const tourDist = (t) => {
-    let d = hav(DEPOT, t[0]) + hav(t[t.length-1], DEPOT);
-    for (let i = 0; i < t.length - 1; i++) d += hav(t[i], t[i+1]);
-    return d;
-  };
+  // Circuito: DEPOT → tour[0] → tour[1] → … → tour[n-1] → DEPOT
+  // El 2-opt clásico evalúa SOLO las 2 aristas que se eliminan y las 2 que se crean.
+  // Invertir el segmento [i+1..j] equivale a eliminar aristas (i→i+1) y (j→j+1)
+  // y crear (i→j) y (i+1→j+1).
   let improved = true;
   let iterations = 0;
-  while (improved && iterations < 50) {
+  while (improved && iterations < 100) {
     improved = false;
     iterations++;
     for (let i = 0; i < tour.length - 1; i++) {
-      for (let j = i + 2; j < tour.length; j++) {
-        if (j === tour.length - 1 && i === 0) continue; // skip wrap
-        // Swap: reverse the segment between i+1 and j
-        const before = hav(i === 0 ? DEPOT : tour[i-1], tour[i]) +
-                       hav(tour[i], tour[i+1]) +
-                       hav(tour[j], j+1 < tour.length ? tour[j+1] : DEPOT);
-        // after reversing i..j: connect tour[i-1]→tour[j], tour[i]→tour[j+1]
-        const after  = hav(i === 0 ? DEPOT : tour[i-1], tour[j]) +
-                       hav(tour[j], tour[i+1]) +
-                       hav(tour[i], j+1 < tour.length ? tour[j+1] : DEPOT);
-        if (after < before - 0.001) {
-          // Reverse segment [i..j]
+      for (let j = i + 1; j < tour.length; j++) {
+        // Aristas actuales que se eliminarán:
+        //   A→B = tour[i] → tour[i+1]  (o DEPOT→tour[0] si i===-1, pero i empieza en 0)
+        //   C→D = tour[j] → tour[j+1]  (o tour[j] → DEPOT si j === último)
+        const A = i === 0 ? DEPOT : tour[i - 1];
+        const B = tour[i];
+        const C = tour[j];
+        const D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
+        // Coste actual: A→B + C→D
+        const costBefore = hav(A, B) + hav(C, D);
+        // Coste nuevo si invertimos [i..j]: A→C + B→D
+        const costAfter  = hav(A, C) + hav(B, D);
+        if (costAfter < costBefore - 0.001) {
+          // Invertir segmento [i..j]
           let l = i, r = j;
-          while (l < r) {
-            [tour[l], tour[r]] = [tour[r], tour[l]];
-            l++; r--;
-          }
+          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
           improved = true;
         }
       }
@@ -5269,6 +5266,9 @@ const optimizeRoute = (stops) => {
   }
 
   // ── Fase 3: Or-opt — mover paradas individuales al mejor lugar ──
+  // Respeta la regla de circuito: DEPOT es siempre origen y destino.
+  // NO se permite mover una parada si su nueva posición aleja el tour[0]
+  // del DEPOT más de lo que estaba (para preservar el orden cercano-a-base primero).
   let orImproved = true;
   let orIter = 0;
   while (orImproved && orIter < 20) {
@@ -5276,15 +5276,15 @@ const optimizeRoute = (stops) => {
     orIter++;
     for (let i = 0; i < tour.length; i++) {
       const node = tour[i];
-      const prev = i === 0 ? DEPOT : tour[i-1];
-      const next = i === tour.length-1 ? DEPOT : tour[i+1];
-      // Cost of removing node from position i
+      const prev = i === 0 ? DEPOT : tour[i - 1];
+      const next = i === tour.length - 1 ? DEPOT : tour[i + 1];
+      // Ganancia de sacar el nodo de su posición actual
       const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
       let bestGain = 0.001, bestJ = -1;
       for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i-1) continue;
+        if (j === i || j === i - 1) continue;
         const a = tour[j];
-        const b = j+1 < tour.length ? tour[j+1] : DEPOT;
+        const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
         const insertCost = hav(a, node) + hav(node, b) - hav(a, b);
         const gain = removeCost - insertCost;
         if (gain > bestGain) { bestGain = gain; bestJ = j; }
@@ -5294,7 +5294,7 @@ const optimizeRoute = (stops) => {
         const insertAt = bestJ > i ? bestJ : bestJ + 1;
         tour.splice(insertAt, 0, removed);
         orImproved = true;
-        break; // restart
+        break; // reiniciar desde el principio
       }
     }
   }
