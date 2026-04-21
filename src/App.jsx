@@ -2029,6 +2029,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [sheetH,      setSheetH]      = useState(null); // null = use snap
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [filterMode, setFilterMode] = useState("all");
+  const [driverNotif, setDriverNotif] = useState(null); // banner: nueva ruta del admin
 
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
   // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
@@ -2128,17 +2129,52 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const unsubChat    = FB.listen(`chats/${myKey}`,   applyChat);
     const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
 
+    // 3) Listener de notificaciones del admin → mensajero (ruta asignada)
+    let lastNotifKeys = new Set();
+    const unsubDriverNotifs = FB.listen(`driverNotifs/${myKey}`, (data) => {
+      if (!data) return;
+      Object.entries(data).forEach(([k, notif]) => {
+        if (lastNotifKeys.has(k) || notif.read) return;
+        lastNotifKeys.add(k);
+        if (notif.type === "route_assigned") {
+          // Mostrar banner nativo del navegador si tiene permiso
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification(notif.title, { body: notif.body, icon: "/favicon.ico" });
+          }
+          // Banner en pantalla
+          if (typeof window.__rdShowDriverNotif === "function") {
+            window.__rdShowDriverNotif(notif);
+          }
+          // Marcar como leída
+          FB.set(`driverNotifs/${myKey}/${k}`, { ...notif, read: true });
+        }
+      });
+    });
+
     // SIN polling — el polling era el que revertía los estados
 
     window.__rdSetPending = (driverId, queue) => {
       if (driverId === myKey) applyPending(queue);
     };
 
-    return () => { unsubRoute(); unsubChat(); unsubPending(); };
+    return () => { unsubRoute(); unsubChat(); unsubPending(); unsubDriverNotifs(); };
   }, [myKey]); // eslint-disable-line
 
   useEffect(() => { const t=setInterval(()=>setTime(new Date()),1000); return()=>clearInterval(t); },[]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [chatLog]);
+
+  // Registrar handler para mostrar banner de notificación de ruta asignada
+  useEffect(() => {
+    window.__rdShowDriverNotif = (notif) => {
+      setDriverNotif(notif);
+      setTimeout(() => setDriverNotif(null), 8000);
+    };
+    // Pedir permiso para notificaciones nativas del navegador
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    return () => { window.__rdShowDriverNotif = null; };
+  }, []);
 
   // -- Detectar nueva ruta via React state (misma pestana/admin envia) ----------
   // NOTA: El admin ya maneja la cola antes de llamar a __rdSetRoute,
@@ -2505,9 +2541,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             {driver.name||"Mensajero"}
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:1 }}>
+            <div style={{ width:6,height:6,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 6px #22c55e" }}/>
             <span style={{ fontSize:10,color:"#22c55e",fontWeight:600,letterSpacing:"0.2px" }}>En línea</span>
-            <span style={{ fontSize:10,color:"rgba(255,255,255,0.2)" }}>·</span>
-            <span style={{ fontSize:10,color:"rgba(255,255,255,0.35)",fontWeight:500 }}>{driver.zone||"DN Norte"}</span>
           </div>
         </div>
 
@@ -2535,8 +2570,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         </button>
       </div>
 
-      {/* ══ MAP SECTION — takes remaining space, always visible ══ */}
-      <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14" }}>
+      {/* ══ MAP SECTION — solo visible en tab ruta ══ */}
+      <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "route" ? "block" : "none" }}>
         <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
 
         {/* map controls bottom-right */}
@@ -2566,66 +2601,88 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         {/* ══ DRAWER LATERAL ══ */}
         {menuOpen && (
           <div onClick={()=>setMenuOpen(false)}
-            style={{ position:"fixed",inset:0,zIndex:9000,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(3px)" }}>
+            style={{ position:"fixed",inset:0,zIndex:9000,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)" }}>
             <div onClick={e=>e.stopPropagation()}
-              style={{ position:"absolute",top:0,left:0,width:280,height:"100%",background:"#0e0e0e",borderRight:"1px solid rgba(255,255,255,0.06)",animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column" }}>
+              style={{ position:"absolute",top:0,left:0,width:288,height:"100%",background:"#0a0a0a",borderRight:"1px solid rgba(255,255,255,0.07)",animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column",overflow:"hidden" }}>
 
-              {/* ── Avatar + info ── */}
-              <div style={{ padding:"52px 22px 22px",borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                {/* Avatar grande cuadrado redondeado */}
-                <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1c1c1c,#2a2a2a)",border:"1.5px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-1px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.5)" }}>
+              {/* ── Perfil ── */}
+              <div style={{ padding:"56px 24px 24px",background:"linear-gradient(180deg,#141414 0%,#0a0a0a 100%)",borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+                {/* Avatar */}
+                <div style={{ width:64,height:64,borderRadius:20,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-1px",marginBottom:16,boxShadow:"0 8px 24px rgba(59,130,246,0.3)" }}>
                   {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
                 </div>
-                {/* Nombre en mayúsculas */}
-                <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"0.2px",lineHeight:1.2,marginBottom:3 }}>
+                {/* Nombre */}
+                <div style={{ fontSize:17,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-0.3px",lineHeight:1.2,marginBottom:4 }}>
                   {(driver.name||"Mensajero").toUpperCase()}
                 </div>
                 {/* Email */}
-                <div style={{ fontSize:11.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",marginBottom:10 }}>
+                <div style={{ fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Mono',monospace",marginBottom:12 }}>
                   {driver.email||driver.phone||"mensajero@rapdrive.do"}
                 </div>
-                {/* Badge EN LÍNEA */}
-                <div style={{ display:"inline-flex",alignItems:"center",gap:6 }}>
-                  <div style={{ width:7,height:7,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 8px #22c55e" }}/>
+                {/* Status pill */}
+                <div style={{ display:"inline-flex",alignItems:"center",gap:7,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:20,padding:"5px 12px" }}>
+                  <div style={{ width:7,height:7,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 8px #22c55e",animation:"pulse 2s infinite" }}/>
                   <span style={{ fontSize:11,color:"#22c55e",fontFamily:"'DM Sans',sans-serif",fontWeight:700,letterSpacing:"0.5px" }}>EN LÍNEA</span>
                 </div>
               </div>
 
+              {/* Resumen rápido */}
+              {stops.length > 0 && (
+                <div style={{ padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"flex",gap:10 }}>
+                  {[
+                    { val: pending.length,   label:"Pendientes", color:"#f59e0b" },
+                    { val: delivered.length, label:"Entregadas",  color:"#22c55e" },
+                    { val: problems.length,  label:"Problemas",   color:"#ef4444" },
+                  ].map(({val,label,color}) => (
+                    <div key={label} style={{ flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"10px 8px",textAlign:"center" }}>
+                      <div style={{ fontSize:18,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color,lineHeight:1 }}>{val}</div>
+                      <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",marginTop:4,fontWeight:600 }}>{label.toUpperCase()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* ── Items ── */}
-              <div style={{ flex:1,overflowY:"auto",padding:"10px 12px" }}>
+              <div style={{ flex:1,overflowY:"auto",padding:"10px 14px" }}>
                 {[
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-                    label:"Mi ruta de hoy", badge:stops.filter(s=>s.stopNum).length, badgeColor:null,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+                    label:"Mi ruta de hoy", badge:stops.filter(s=>s.stopNum).length, badgeColor:"#3b82f6",
+                    active: tab==="route",
                     action:()=>{setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="20 6 9 17 4 12"/></svg>,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="20 6 9 17 4 12"/></svg>,
                     label:"Entregas completadas", badge:delivered.length, badgeColor:"#22c55e",
+                    active: false,
                     action:()=>{setFilterMode("delivered");setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
                     label:"Problemas reportados", badge:problems.length, badgeColor:"#ef4444",
+                    active: false,
                     action:()=>{setFilterMode("problema");setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
                     label:"Chat con admin", badge:chatLog.filter(m=>m.from==="admin"&&!m.read).length, badgeColor:"#3b82f6",
+                    active: tab==="chat",
                     action:()=>{setTab("chat");setMenuOpen(false);} },
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
                     label:"Rutas pendientes", badge:pendingRoutes.length, badgeColor:"#f59e0b",
+                    active: tab==="pending",
                     action:()=>{setTab("pending");setMenuOpen(false);} },
-                  { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
                     label:"Mi historial", badge:0, badgeColor:"#8b5cf6",
+                    active: tab==="history",
                     action:()=>{setTab("history");setMenuOpen(false);} },
                 ].map((item,i) => (
                   <button key={i} onClick={item.action} className="rd-menu-item"
-                    style={{ display:"flex",alignItems:"center",gap:13,padding:"13px 12px",borderRadius:11,border:"none",background:"transparent",cursor:"pointer",width:"100%",textAlign:"left",transition:"background .12s",animation:`fadeUp .18s ${i*30}ms ease both` }}>
-                    {/* Icon box */}
-                    <div style={{ width:38,height:38,borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"rgba(255,255,255,0.5)" }}>
+                    style={{ display:"flex",alignItems:"center",gap:13,padding:"13px 12px",borderRadius:13,border:"none",background:item.active?"rgba(59,130,246,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",transition:"background .12s",animation:`fadeUp .18s ${i*25}ms ease both`,marginBottom:2,borderLeft:item.active?"2.5px solid #3b82f6":"2.5px solid transparent" }}>
+                    {/* Icon */}
+                    <div style={{ width:40,height:40,borderRadius:12,background:item.active?"rgba(59,130,246,0.15)":"rgba(255,255,255,0.05)",border:`1px solid ${item.active?"rgba(59,130,246,0.3)":"rgba(255,255,255,0.07)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:item.active?"#60a5fa":"rgba(255,255,255,0.45)",transition:"all .15s" }}>
                       {item.icon}
                     </div>
                     {/* Label */}
-                    <span style={{ flex:1,fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:600,color:"rgba(255,255,255,0.82)",letterSpacing:"-0.1px" }}>
+                    <span style={{ flex:1,fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:item.active?700:500,color:item.active?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.7)",letterSpacing:"-0.1px" }}>
                       {item.label}
                     </span>
                     {/* Badge */}
                     {item.badge>0 && (
-                      <div style={{ minWidth:22,height:22,borderRadius:11,background:item.badgeColor||"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",flexShrink:0 }}>
+                      <div style={{ minWidth:22,height:22,borderRadius:11,background:item.badgeColor||"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",flexShrink:0 }}>
                         {item.badge}
                       </div>
                     )}
@@ -2633,10 +2690,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 ))}
               </div>
 
+              {/* ── App version ── */}
+              <div style={{ padding:"8px 24px",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <span style={{ fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Mono',monospace" }}>RAP DRIVE v2.0</span>
+              </div>
+
               {/* ── Cerrar sesión ── */}
-              <div style={{ padding:"12px 16px 36px",borderTop:"1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ padding:"0 16px 40px",borderTop:"1px solid rgba(255,255,255,0.05)" }}>
                 <button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn"
-                  style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.45)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,transition:"all .15s" }}>
+                  style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:"14px",borderRadius:13,border:"1px solid rgba(239,68,68,0.15)",background:"rgba(239,68,68,0.06)",color:"rgba(239,68,68,0.7)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,transition:"all .15s",marginTop:12 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                   Cerrar sesión
                 </button>
@@ -2646,6 +2708,20 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         )}
 
 
+
+        {/* ── Banner: Nueva ruta asignada por el admin ── */}
+        {driverNotif && (
+          <div style={{ position:"absolute",top:16,left:16,right:16,zIndex:200,animation:"slideIn .3s cubic-bezier(.4,0,.2,1)" }}>
+            <div style={{ background:"linear-gradient(135deg,rgba(29,78,216,0.97),rgba(59,130,246,0.97))",border:"1px solid rgba(147,197,253,0.3)",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 32px rgba(59,130,246,0.4)",backdropFilter:"blur(20px)" }}>
+              <div style={{ fontSize:26,flexShrink:0 }}>📦</div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",marginBottom:2 }}>{driverNotif.title}</div>
+                <div style={{ fontSize:11,color:"rgba(255,255,255,0.75)",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{driverNotif.body}</div>
+              </div>
+              <button onClick={()=>setDriverNotif(null)} style={{ width:28,height:28,borderRadius:8,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0 }}>✕</button>
+            </div>
+          </div>
+        )}
 
         {/* Route complete banner */}
         {showCompletedBanner && tab!=="chat" && tab!=="pending" && (
@@ -6574,6 +6650,17 @@ const CircuitEngine = () => {
                         // Guardar también en historial de rutas (keyed by routeId, no por driverId)
                         FB.set(`routeHistory/${route.routeId}`, { ...route, sentAt: route.sentAt });
                         if (typeof window.__rdSetRoute === "function") window.__rdSetRoute(driverId, route);
+                        // ── Notificación Firebase al mensajero ──
+                        const driverNotifId = "dn"+Date.now();
+                        FB.set(`driverNotifs/${driverId}/${driverNotifId}`, {
+                          id: driverNotifId,
+                          type: "route_assigned",
+                          title: "📦 Nueva ruta asignada",
+                          body: `${routeName} · ${confirmed.length} paradas · ${km} km`,
+                          routeId: route.routeId,
+                          sentAt: new Date().toISOString(),
+                          read: false,
+                        });
                         // Chat automático
                         if (!window.__rdChatStore) window.__rdChatStore = {};
                         const chatNote = { from:"admin", text:`📦 Ruta "${routeName}" asignada - ${confirmed.length} paradas · ${km} km`, time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}) };
