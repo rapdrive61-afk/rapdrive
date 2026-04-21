@@ -529,7 +529,7 @@ const PageRoutes = () => {
         const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
           <circle cx="16" cy="16" r="14" fill="${color}" opacity="${isDone?0.7:1}" stroke="white" stroke-width="2"/>
-          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${isDone?"✓":isProb?"!":stop.stopNum||"?"}</text>
+          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
         </svg>`;
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
@@ -1952,7 +1952,7 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif" }}>
+    <div style={{ position:"fixed",inset:0,background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
         @keyframes dlFU{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -2021,9 +2021,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [search,     setSearch]     = useState("");
   const [selStop,    setSelStop]    = useState(null);
   const [mapExpanded, setMapExpanded] = useState(false);
-  const [splitPct, setSplitPct]       = useState(42); // % height for map (like mapExpanded 42%)
-  const [splitDrag, setSplitDrag]     = useState(false);
-  const splitRef = useRef({ startY:0, startPct:42 });
+  const [splitPct,    setSplitPct]    = useState(40);
+  const [splitDrag,   setSplitDrag]   = useState(false);
+  const splitRef = useRef({ startY:0, startPct:40 });
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [filterMode, setFilterMode] = useState("all");
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
@@ -2157,14 +2157,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         styles: [
           {featureType:"poi",stylers:[{visibility:"off"}]},
           {featureType:"transit",stylers:[{visibility:"off"}]},
-          {elementType:"labels.text.fill",stylers:[{color:"#333333"}]},
-          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
           {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
-          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#eeeeee"}]},
-          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e0e0e0"}]},
-          {featureType:"water",elementType:"geometry",stylers:[{color:"#aad3df"}]},
-          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f5f5f5"}]},
-          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#c0c0c0"}]},
+          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
+          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
+          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
         ],
       });
     });
@@ -2198,7 +2198,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       const size    = isNow ? 44 : 34;
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
         <circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${color}" opacity="${isDone?0.5:1}" stroke="white" stroke-width="2"/>
-        <text x="${size/2}" y="${size/2+4}" text-anchor="middle" font-size="${isNow?13:10}" font-weight="800" fill="white" font-family="sans-serif">${isDone?"✓":isProb?"!":stop.stopNum||"?"}</text>
+        <text x="${size/2}" y="${size/2+4}" text-anchor="middle" font-size="${isNow?13:10}" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
       </svg>`;
       const marker = new window.google.maps.Marker({
         map: gMapRef.current,
@@ -2368,7 +2368,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const routeKm = myRoute?.km || 0;
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"#0a0a0a",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",color:"white",overflow:"hidden" }}>
+    <div
+      style={{ position:"fixed",inset:0,background:"#f4f5f7",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",color:"#111",overflow:"hidden" }}
+      onPointerMove={e => {
+        if (!splitDrag) return;
+        const pct = Math.min(90, Math.max(10, splitRef.current.startPct + ((e.clientY - splitRef.current.startY) / window.innerHeight) * 100));
+        setSplitPct(Math.round(pct));
+      }}
+      onPointerUp={() => setSplitDrag(false)}
+      onPointerLeave={() => setSplitDrag(false)}
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#222 transparent}
@@ -2389,11 +2398,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       `}</style>
 
       {/* ══ MAP SECTION ══ */}
-      <div style={{ position:"relative", height: tab==="chat"?"0px": (splitPct+"%"), flexShrink:0, transition: splitDrag?"none":"height .25s ease", overflow:"hidden", background:"#e8eaed" }}>
+      <div style={{ position:"relative", height: (tab==="chat"||tab==="pending"||tab==="history")?"0px":(splitPct+"%"), flexShrink:0, transition:splitDrag?"none":"height .25s ease", overflow:"hidden", background:"#e8eaed" }}>
         <div ref={mapRef} style={{ width:"100%", height:"100%" }}/>
 
         {/* Top gradient overlay */}
-        <div style={{ position:"absolute",top:0,left:0,right:0,height:70,background:"linear-gradient(to bottom,rgba(10,10,10,0.9) 0%,transparent 100%)",pointerEvents:"none" }}/>
+        <div style={{ position:"absolute",top:0,left:0,right:0,height:70,background:"linear-gradient(to bottom,rgba(0,0,0,0.15) 0%,transparent 100%)",pointerEvents:"none" }}/>
 
         {/* -- TOP-LEFT: Hamburger Menu -- */}
         <button onClick={()=>setMenuOpen(o=>!o)} className="rd-btn"
@@ -2518,26 +2527,18 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ ROUTE PANEL ══ */}
       {tab === "route" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#ffffff",position:"relative" }}>
-          {/* ── Drag divider ── */}
+        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#f8f9fb" }}>
+          {/* Drag divider */}
           <div
             onPointerDown={e => {
               e.currentTarget.setPointerCapture(e.pointerId);
-              splitRef.current = { startY: e.clientY, startPct: splitPct };
+              splitRef.current = { startY:e.clientY, startPct:splitPct };
               setSplitDrag(true);
             }}
-            onPointerMove={e => {
-              if (!splitDrag) return;
-              const screenH = window.innerHeight;
-              const delta   = e.clientY - splitRef.current.startY;
-              const newPct  = Math.min(75, Math.max(20, splitRef.current.startPct + (delta / screenH) * 100));
-              setSplitPct(Math.round(newPct));
-            }}
-            onPointerUp={() => setSplitDrag(false)}
-            style={{ height:16, display:"flex", alignItems:"center", justifyContent:"center",
-              cursor:"ns-resize", flexShrink:0, background:"#f3f4f6",
-              borderBottom:"1px solid #e5e7eb", touchAction:"none" }}>
-            <div style={{ width:36, height:4, borderRadius:4, background:"#d1d5db" }}/>
+            style={{ height:18,display:"flex",alignItems:"center",justifyContent:"center",
+              cursor:"ns-resize",flexShrink:0,background:"#ffffff",
+              borderBottom:"1px solid #e5e7eb",touchAction:"none",userSelect:"none" }}>
+            <div style={{ width:40,height:4,borderRadius:4,background:"#d1d5db" }}/>
           </div>
 
           {/* - Header area - */}
@@ -2547,7 +2548,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             <div style={{ position:"relative",marginBottom:10 }}>
               <svg style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
-                style={{ width:"100%",background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:12,padding:"10px 36px 10px 36px",color:"#111827",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"#111827",transition:"border-color .15s" }}/>
+                style={{ width:"100%",background:"#ffffff",border:"1.5px solid #e5e7eb",borderRadius:12,padding:"10px 36px 10px 36px",color:"#111827",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"#2563eb",transition:"border-color .15s" }}/>
               {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",padding:2,fontSize:14 }}>✕</button>}
             </div>
 
@@ -2555,7 +2556,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             {myRoute && (
               <>
                 <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3 }}>
-                  <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",gap:5,fontFamily:"'DM Sans',sans-serif" }}>
+                  <div style={{ fontSize:12,color:"#9ca3af",display:"flex",alignItems:"center",gap:5,fontFamily:"'DM Sans',sans-serif" }}>
                     {estFinish() && <><span>Finaliza <b style={{color:"rgba(255,255,255,0.5)"}}>{estFinish()}</b></span><span style={{color:"rgba(255,255,255,0.1)"}}>·</span></>}
                     <span><b style={{color:"rgba(255,255,255,0.5)"}}>{stops.filter(s=>s.stopNum).length} paradas</b></span>
                     {routeKm>0 && <><span style={{color:"rgba(255,255,255,0.1)"}}>·</span><span><b style={{color:"rgba(255,255,255,0.5)"}}>{routeKm} km</b></span></>}
@@ -2575,7 +2576,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     {id:"problema",label:"Problemas",count:problems.length},
                   ].map(chip => (
                     <button key={chip.id} onClick={()=>setFilterMode(chip.id)} className="rd-filter-chip rd-btn"
-                      style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1px solid ${filterMode===chip.id?"#2563eb":"#e5e7eb"}`,background:filterMode===chip.id?"#eff6ff":"#f9fafb",color:filterMode===chip.id?"#2563eb":"#6b7280",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",flexShrink:0,transition:"all .15s" }}>
+                      style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${filterMode===chip.id?"#2563eb":"#e5e7eb"}`,background:filterMode===chip.id?"#eff6ff":"#ffffff",color:filterMode===chip.id?"#2563eb":"#6b7280",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer",flexShrink:0,transition:"all .15s" }}>
                       {chip.label}
                       {chip.count>0 && <span style={{ fontSize:11,color:filterMode===chip.id?"#2563eb":"#9ca3af",fontWeight:700 }}>{chip.count}</span>}
                     </button>
@@ -2651,8 +2652,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   <div style={{ display:"flex",alignItems:"flex-start",gap:10,padding:"12px 10px" }}>
                     {/* Stop number */}
                     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:0,flexShrink:0,paddingTop:1 }}>
-                      <div style={{ width:30,height:30,borderRadius:"50%",background:isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#6b7280",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"white",fontFamily:"'DM Mono',monospace",boxShadow:`0 1px 4px ${isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#6b7280"}55` }}>
-                        {isDone?"✓":isProb?"!":stop.stopNum||"?"}
+                      <div style={{ width:32,height:32,borderRadius:"50%",background:isDone?"#16a34a":isProb?"#dc2626":isCur?"#2563eb":"#9ca3af",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"white",fontFamily:"'DM Mono',monospace" }}>
+                        {stop.stopNum||"?"}
                       </div>
                       {i < filteredStops.length-1 && <div style={{ width:1,height:10,background:"rgba(255,255,255,0.05)",marginTop:2 }}/>}
                     </div>
@@ -2664,7 +2665,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:isDone?"#16a34a":isProb?"#dc2626":isCur?"#1d4ed8":"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"center" }}>
                           {stop.client||"—"}
                         </div>
-                        {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"#2563eb",borderRadius:4,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
+                        {isCur && !isDone && <div style={{ fontSize:9,color:"white",background:"#2563eb",borderRadius:4,padding:"2px 7px",fontFamily:"'DM Sans',sans-serif",fontWeight:700,flexShrink:0,letterSpacing:"0.5px" }}>ACTUAL</div>}
                       </div>
                       {/* TELÉFONO + TRACKING - centrado debajo del nombre */}
                       {(stop.phone || stop.tracking) && (
@@ -2711,7 +2712,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                               { href:`https://wa.me/${stop.phone?.replace(/\D/g,"")}`, label:"WA" },
                             ].map(({href,label}) => (
                               <a key={label} href={href} target="_blank" rel="noreferrer" className="rd-btn"
-                                style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"9px 4px",borderRadius:10,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",fontSize:12,textDecoration:"none",fontFamily:"'DM Sans',sans-serif",fontWeight:600,transition:"all .15s" }}>
+                                style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"10px 4px",borderRadius:10,background:"#f9fafb",border:"1.5px solid #e5e7eb",color:"#374151",fontSize:12,textDecoration:"none",fontFamily:"'DM Sans',sans-serif",fontWeight:700 }}>
                                 {label}
                               </a>
                             ))}
@@ -2719,11 +2720,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {/* Fila 2: Fallido · Entregado */}
                           <div style={{ display:"flex",gap:6 }}>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();setShowProb(stop.id);}}
-                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 4px",borderRadius:10,border:"1px solid rgba(239,68,68,0.45)",background:"rgba(239,68,68,0.18)",color:"rgba(239,68,68,1)",fontSize:12,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s" }}>
+                              style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"11px 4px",borderRadius:10,border:"1.5px solid #fca5a5",background:"#fff5f5",color:"#dc2626",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>
                               ✕ Fallido
                             </button>
                             <button className="rd-btn" onClick={e=>{e.stopPropagation();markDelivered(stop.id);}}
-                              style={{ flex:2,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"10px 4px",borderRadius:10,border:"none",background:"white",color:"black",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s" }}>
+                              style={{ flex:2,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 4px",borderRadius:10,border:"none",background:"#16a34a",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(22,163,74,0.3)" }}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
                               Entregado
                             </button>
@@ -2753,12 +2754,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ CHAT TAB ══ */}
       {tab === "chat" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0a0a0a" }}>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0d0d0d" }}>
           {/* Chat header */}
-          <div style={{ padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
+          <div style={{ padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
             <div style={{ width:34,height:34,borderRadius:10,background:"#1a1a1a",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"white",fontWeight:700,fontFamily:"'DM Sans',sans-serif" }}>AD</div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white" }}>Admin Rap Drive</div>
+              <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.85)" }}>Admin Rap Drive</div>
               <div style={{ display:"flex",alignItems:"center",gap:5 }}>
                 <div style={{ width:5,height:5,borderRadius:"50%",background:"#22c55e",animation:"pulse 2s infinite" }}/>
                 <span style={{ fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",fontWeight:500 }}>EN LÍNEA</span>
@@ -2783,12 +2784,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             ))}
             <div ref={chatEndRef}/>
           </div>
-          <div style={{ padding:"10px 14px 16px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",gap:8,flexShrink:0 }}>
+          <div style={{ padding:"10px 14px 16px",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",gap:8,flexShrink:0 }}>
             <input value={chatMsg} onChange={e=>setChatMsg(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendChat()}
               placeholder="Mensaje al administrador..."
-              style={{ flex:1,background:"#161616",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"10px 13px",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white" }}/>
+              style={{ flex:1,background:"#1a1a1a",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"10px 13px",color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"#3b82f6" }}/>
             <button className="rd-btn" onClick={sendChat} disabled={!chatMsg.trim()}
-              style={{ width:42,height:42,borderRadius:12,border:"none",background:chatMsg.trim()?"white":"#161616",color:chatMsg.trim()?"black":"rgba(255,255,255,0.2)",cursor:chatMsg.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s" }}>
+              style={{ width:42,height:42,borderRadius:12,border:"none",background:chatMsg.trim()?"#2563eb":"#f3f4f6",color:chatMsg.trim()?"white":"#9ca3af",cursor:chatMsg.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
@@ -2797,14 +2798,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ TAB: RUTAS PENDIENTES ══ */}
       {tab === "pending" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0a0a0a",paddingBottom:60 }}>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#0d0d0d",paddingBottom:60 }}>
           {/* Header */}
-          <div style={{ padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
-            <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <div style={{ padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
+            <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white" }}>Rutas pendientes</div>
+              <div style={{ fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.9)" }}>Rutas pendientes</div>
               <div style={{ fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif" }}>
                 {pendingRoutes.length === 0 ? "Sin rutas en cola" : `${pendingRoutes.length} ruta${pendingRoutes.length>1?"s":""} esperando`}
               </div>
@@ -2817,17 +2818,17 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           {/* Info banner */}
           <div style={{ margin:"12px 14px 0",padding:"10px 13px",background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:12,display:"flex",gap:9,alignItems:"flex-start" }}>
             <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>ℹ️</span>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.45)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5 }}>
-              Estas rutas fueron enviadas mientras tenías trabajo activo. <strong style={{color:"rgba(255,255,255,0.7)"}}>Termina tu ruta actual</strong> y luego activa la siguiente desde aquí.
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5 }}>
+              Estas rutas fueron enviadas mientras tenías trabajo activo. <strong style={{color:"rgba(255,255,255,0.85)"}}>Termina tu ruta actual</strong> y luego activa la siguiente desde aquí.
             </div>
           </div>
 
           {/* Lista de rutas pendientes */}
           <div style={{ flex:1,overflow:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:10 }}>
             {pendingRoutes.length === 0 ? (
-              <div style={{ textAlign:"center",padding:"48px 0",color:"rgba(255,255,255,0.15)" }}>
-                <div style={{ fontSize:36,marginBottom:12,opacity:0.4 }}>📋</div>
-                <div style={{ fontSize:14,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",fontWeight:600 }}>Sin rutas pendientes</div>
+              <div style={{ textAlign:"center",padding:"48px 0" }}>
+                <div style={{ fontSize:36,marginBottom:12,opacity:0.3 }}>📋</div>
+                <div style={{ fontSize:14,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",fontWeight:600 }}>Sin rutas pendientes</div>
                 <div style={{ fontSize:12,color:"rgba(255,255,255,0.15)",marginTop:6,fontFamily:"'DM Sans',sans-serif" }}>El admin enviará rutas aquí cuando tengas trabajo activo</div>
               </div>
             ) : pendingRoutes.map((route, idx) => {
@@ -2837,7 +2838,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               const hasActiveWork = stops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
               return (
                 <div key={route.routeId||route.sentAt||idx}
-                  style={{ background:"#111",border:`1px solid ${isFirst?"rgba(245,158,11,0.3)":"rgba(255,255,255,0.06)"}`,borderRadius:16,padding:"14px",animation:"fadeUp .25s ease both" }}>
+                  style={{ background:"#161616",border:`1.5px solid ${isFirst?"rgba(245,158,11,0.4)":"rgba(255,255,255,0.08)"}`,borderRadius:16,padding:"14px",animation:"fadeUp .25s ease both" }}>
                   {/* Badge posición en cola */}
                   <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
                     <div style={{ width:22,height:22,borderRadius:6,background:isFirst?"rgba(245,158,11,0.2)":"rgba(255,255,255,0.05)",border:`1px solid ${isFirst?"rgba(245,158,11,0.4)":"rgba(255,255,255,0.08)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:isFirst?"#f59e0b":"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif" }}>
@@ -2850,7 +2851,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   </div>
 
                   {/* Nombre de ruta */}
-                  <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:4 }}>
+                  <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.9)",marginBottom:4 }}>
                     {route.routeName || "Ruta sin nombre"}
                   </div>
 
@@ -2942,13 +2943,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ TAB: HISTORIAL ══ */}
       {tab === "history" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0a0a0a", paddingBottom:60 }}>
-          <div style={{ padding:"14px 16px", borderBottom:"1px solid rgba(255,255,255,0.06)", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-            <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0d0d", paddingBottom:60 }}>
+          <div style={{ padding:"14px 16px", borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+            <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight:700, color:"white" }}>Mi historial</div>
+              <div style={{ fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight:700, color:"rgba(255,255,255,0.9)" }}>Mi historial</div>
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>{routeHistory.length} ruta{routeHistory.length!==1?"s":""} completada{routeHistory.length!==1?"s":""}</div>
             </div>
           </div>
@@ -2987,7 +2988,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   const statusLabel = isDone ? "Entregado" : isProb ? "Problema" : "Pendiente";
                   const statusIcon  = isDone ? "✓" : isProb ? "✕" : "○";
                   return (
-                    <div key={i} style={{ margin:"10px 14px", borderRadius:14, background:"#111", border:`1px solid ${statusColor}22`, overflow:"hidden" }}>
+                    <div key={i} style={{ margin:"10px 14px", borderRadius:14, background:"#ffffff", border:`1.5px solid ${statusColor}33`, overflow:"hidden" }}>
                       {/* Status bar top */}
                       <div style={{ background:`${statusColor}12`, borderBottom:`1px solid ${statusColor}20`, padding:"7px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -3070,7 +3071,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 const timeStr = r.completedAt ? new Date(r.completedAt).toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"}) : "";
                 return (
                   <div key={r.histId||i} onClick={()=>setHistSelRoute(r)}
-                    style={{ margin:"10px 14px", borderRadius:16, background:"#111", border:"1px solid rgba(255,255,255,0.07)", overflow:"hidden", cursor:"pointer", transition:"border-color .15s", animation:`fadeUp .2s ${i*30}ms ease both` }}>
+                    style={{ margin:"10px 14px", borderRadius:16, background:"#ffffff", border:"1px solid #e5e7eb", overflow:"hidden", cursor:"pointer", transition:"border-color .15s", animation:`fadeUp .2s ${i*30}ms ease both` }}>
                     {/* Top strip */}
                     <div style={{ background:"rgba(255,255,255,0.03)", borderBottom:"1px solid rgba(255,255,255,0.06)", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                       <div>
@@ -3148,9 +3149,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         return (
           <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(8px)",zIndex:9000,display:"flex",alignItems:"flex-end",justifyContent:"center" }}
             onClick={e=>{if(e.target===e.currentTarget){setShowProb(null);setProbNote("");}}}>
-            <div style={{ width:"100%",maxWidth:520,background:"#111",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",animation:"slideUp .25s cubic-bezier(.4,0,.2,1)" }}>
+            <div style={{ width:"100%",maxWidth:520,background:"#ffffff",border:"1.5px solid #fca5a5",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",animation:"slideUp .25s cubic-bezier(.4,0,.2,1)" }}>
               <div style={{ width:32,height:3,background:"rgba(255,255,255,0.12)",borderRadius:2,margin:"0 auto 16px" }}/>
-              <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:3 }}>
+              <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"#111827",marginBottom:3 }}>
                 Marcar como fallido · #{probStop?.stopNum}
               </div>
               <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginBottom:14,fontFamily:"'DM Sans',sans-serif" }}>
@@ -3169,7 +3170,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               <textarea value={probNote==="Nadie en casa"||probNote==="Dirección incorrecta"||probNote==="Cliente canceló"||probNote==="Negocio cerrado"||probNote==="Acceso no disponible"||probNote==="Paquete dañado" ? "" : probNote}
                 onChange={e=>setProbNote(e.target.value)}
                 placeholder="Otro motivo o detalle adicional..."
-                style={{ width:"100%",background:"#0a0a0a",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"11px 13px",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white",resize:"none",height:70,marginBottom:14,boxSizing:"border-box" }}/>
+                style={{ width:"100%",background:"#f9fafb",border:"1.5px solid #e5e7eb",borderRadius:12,padding:"11px 13px",color:"#111827",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",caretColor:"white",resize:"none",height:70,marginBottom:14,boxSizing:"border-box" }}/>
               <div style={{ display:"flex",gap:8 }}>
                 <button onClick={()=>{setShowProb(null);setProbNote("");}} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer" }}>Cancelar</button>
                 <button onClick={()=>{ if(!probNote.trim()){alert("Selecciona o escribe un motivo");return;} markProblem(showProb);}} style={{ flex:2,padding:"13px",borderRadius:12,border:"none",background:"rgba(239,68,68,0.85)",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>Confirmar fallido</button>
@@ -3182,13 +3183,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       {/* -- Logout confirm -- */}
       {logoutConf && (
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(10px)",zIndex:9500,display:"flex",alignItems:"center",justifyContent:"center" }}>
-          <div style={{ width:320,background:"#111",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"28px 24px",boxShadow:"0 40px 80px rgba(0,0,0,0.9)",animation:"popIn .2s ease" }}>
-            <div style={{ width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",margin:"0 auto 16px" }}>{driver.avatar||(driver.name||"").slice(0,2).toUpperCase()}</div>
-            <div style={{ fontSize:16,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:4,textAlign:"center" }}>¿Cerrar sesión?</div>
-            <div style={{ fontSize:13,color:"rgba(255,255,255,0.3)",textAlign:"center",marginBottom:24,fontFamily:"'DM Sans',sans-serif" }}>{driver.name}</div>
+          <div style={{ width:320,background:"#111",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:"28px 24px",boxShadow:"0 40px 80px rgba(0,0,0,0.9)",animation:"popIn .2s ease" }}>
+            <div style={{ width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.8)",margin:"0 auto 16px" }}>{driver.avatar||(driver.name||"").slice(0,2).toUpperCase()}</div>
+            <div style={{ fontSize:16,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.9)",marginBottom:4,textAlign:"center" }}>¿Cerrar sesión?</div>
+            <div style={{ fontSize:13,color:"rgba(255,255,255,0.35)",textAlign:"center",marginBottom:24,fontFamily:"'DM Sans',sans-serif" }}>{driver.name}</div>
             <div style={{ display:"flex",gap:8 }}>
-              <button className="rd-btn" onClick={()=>setLogoutConf(false)} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer" }}>Cancelar</button>
-              <button className="rd-btn" onClick={onLogout} style={{ flex:1,padding:"13px",borderRadius:12,border:"none",background:"white",color:"black",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer" }}>Salir</button>
+              <button className="rd-btn" onClick={()=>setLogoutConf(false)} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"rgba(255,255,255,0.5)",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:600,cursor:"pointer" }}>Cancelar</button>
+              <button className="rd-btn" onClick={onLogout} style={{ flex:1,padding:"13px",borderRadius:12,border:"none",background:"rgba(239,68,68,0.85)",color:"white",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(239,68,68,0.3)" }}>Salir</button>
             </div>
           </div>
         </div>
@@ -3466,53 +3467,69 @@ const LoginScreen = ({ onLogin }) => {
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",overflow:"hidden" }}>
+    <div style={{ position:"fixed",inset:0,background:"#080a0f",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",overflow:"hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@500&display=swap');
-        @keyframes lCard{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes lLogo{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes lSuccess{0%{transform:scale(1)}40%{transform:scale(1.04)}100%{transform:scale(1)}}
+        @keyframes lCard{from{opacity:0;transform:translateY(32px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes lLogo{from{opacity:0;transform:translateY(-16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes lSuccess{0%{transform:scale(1)}30%{transform:scale(1.03)}70%{transform:scale(0.99)}100%{transform:scale(1)}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes lOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.04)}}
+        @keyframes lOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.06) translateY(-8px)}}
+        @keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.1)}66%{transform:translate(-20px,20px) scale(0.95)}}
+        @keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,25px) scale(1.05)}66%{transform:translate(30px,-35px) scale(1.08)}}
+        @keyframes orb3{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,40px)}}
+        @keyframes shimmer{0%{opacity:0.03}50%{opacity:0.07}100%{opacity:0.03}}
+        @keyframes inputGlow{from{box-shadow:0 0 0 0 rgba(59,130,246,0)}to{box-shadow:0 0 0 3px rgba(59,130,246,0.15)}}
       `}</style>
 
-      {/* Background glow spots */}
+      {/* Animated background orbs */}
       <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:"-30%",left:"50%",transform:"translateX(-50%)",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,0.018) 0%,transparent 65%)"}}/>
+        <div style={{position:"absolute",top:"10%",left:"20%",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.08) 0%,transparent 70%)",animation:"orb1 12s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",bottom:"15%",right:"15%",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,0.06) 0%,transparent 70%)",animation:"orb2 15s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",top:"50%",left:"50%",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(16,185,129,0.04) 0%,transparent 70%)",transform:"translate(-50%,-50%)",animation:"orb3 18s ease-in-out infinite"}}/>
+        {/* Grid pattern */}
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)",backgroundSize:"60px 60px",animation:"shimmer 4s ease-in-out infinite"}}/>
       </div>
 
       <div style={{
         width:380, position:"relative", zIndex:1,
-        animation: success ? "lOut .6s ease forwards" : "lCard .55s cubic-bezier(.22,1,.36,1) both",
+        animation: success ? "lOut .5s ease forwards" : "lCard .6s cubic-bezier(.16,1,.3,1) both",
       }}>
-        {/* Logo — fuera del card, centrado arriba */}
-        <div style={{ textAlign:"center", marginBottom:24, animation:"lLogo .5s .1s ease both", opacity:0 }}>
-          <div style={{ width:54,height:54,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",boxShadow:"0 0 40px rgba(255,255,255,0.08)" }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="black"/>
-              <path d="M2 17l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round"/>
-              <path d="M2 12l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round" opacity="0.35"/>
-            </svg>
+        {/* Logo */}
+        <div style={{ textAlign:"center", marginBottom:28, animation:"lLogo .6s .08s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
+          <div style={{ position:"relative",width:60,height:60,margin:"0 auto 14px" }}>
+            <div style={{ position:"absolute",inset:-4,borderRadius:20,background:"linear-gradient(135deg,rgba(59,130,246,0.3),rgba(99,102,241,0.2))",filter:"blur(8px)" }}/>
+            <div style={{ position:"relative",width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(59,130,246,0.4)" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
+                <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
+                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.45"/>
+              </svg>
+            </div>
           </div>
-          <div style={{ fontSize:24,fontWeight:700,color:"white",letterSpacing:"-0.6px" }}>Rap Drive</div>
-          <div style={{ fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:3,letterSpacing:"2.5px",fontWeight:600 }}>GESTIÓN DE ENTREGAS</div>
+          <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Entregas</div>
         </div>
 
-        {/* Card — todo dentro */}
+        {/* Card */}
         <div style={{
-          background:"#111", border:"1px solid rgba(255,255,255,0.07)", borderRadius:20,
-          padding:"28px 26px 24px", boxShadow:"0 40px 80px rgba(0,0,0,0.7)",
-          animation: success ? "lSuccess .6s ease" : "none",
+          background:"rgba(255,255,255,0.04)",
+          border:"1px solid rgba(255,255,255,0.08)",
+          borderRadius:22,
+          padding:"28px 26px 24px",
+          boxShadow:"0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+          backdropFilter:"blur(20px)",
+          animation: success ? "lSuccess .5s ease" : "none",
         }}>
           {/* Header */}
           <div style={{textAlign:"center", marginBottom:26}}>
-            <div style={{fontSize:18,fontWeight:700,color:"white",letterSpacing:"-0.3px"}}>Bienvenido de vuelta</div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,0.28)",marginTop:4}}>Inicia sesión para continuar</div>
+            <div style={{fontSize:17,fontWeight:700,color:"rgba(255,255,255,0.92)",letterSpacing:"-0.3px"}}>Bienvenido de vuelta</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.25)",marginTop:4}}>Inicia sesión para continuar</div>
           </div>
 
           {/* Email */}
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:10,color:"rgba(255,255,255,0.22)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CORREO</label>
+            <label style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CORREO</label>
             <input
               value={email}
               onChange={e=>{setEmail(e.target.value);setError("");}}
@@ -3521,18 +3538,19 @@ const LoginScreen = ({ onLogin }) => {
               placeholder="tu@rapdrive.do"
               type="email"
               style={{
-                width:"100%", background:focused==="email"?"#1c1c1c":"#171717",
-                border:`1.5px solid ${focused==="email"?"rgba(255,255,255,0.22)":"rgba(255,255,255,0.06)"}`,
-                borderRadius:12, padding:"13px 14px", color:"white",
+                width:"100%", background:focused==="email"?"rgba(255,255,255,0.07)":"rgba(255,255,255,0.04)",
+                border:`1.5px solid ${focused==="email"?"rgba(59,130,246,0.6)":"rgba(255,255,255,0.08)"}`,
+                borderRadius:13, padding:"13px 14px", color:"white",
                 fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none",
-                caretColor:"white", transition:"all .2s", boxSizing:"border-box",
+                caretColor:"#3b82f6", transition:"all .2s", boxSizing:"border-box",
+                boxShadow: focused==="email"?"0 0 0 3px rgba(59,130,246,0.12)":"none",
               }}
             />
           </div>
 
           {/* Password */}
           <div style={{marginBottom:22}}>
-            <label style={{fontSize:10,color:"rgba(255,255,255,0.22)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CONTRASEÑA</label>
+            <label style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CONTRASEÑA</label>
             <div style={{position:"relative"}}>
               <input
                 value={password}
@@ -3542,15 +3560,16 @@ const LoginScreen = ({ onLogin }) => {
                 placeholder="••••••••"
                 type={showPass?"text":"password"}
                 style={{
-                  width:"100%", background:focused==="pass"?"#1c1c1c":"#171717",
-                  border:`1.5px solid ${focused==="pass"?"rgba(255,255,255,0.22)":"rgba(255,255,255,0.06)"}`,
-                  borderRadius:12, padding:"13px 44px 13px 14px", color:"white",
+                  width:"100%", background:focused==="pass"?"rgba(255,255,255,0.07)":"rgba(255,255,255,0.04)",
+                  border:`1.5px solid ${focused==="pass"?"rgba(59,130,246,0.6)":"rgba(255,255,255,0.08)"}`,
+                  borderRadius:13, padding:"13px 44px 13px 14px", color:"white",
                   fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none",
-                  caretColor:"white", transition:"all .2s", boxSizing:"border-box",
+                  caretColor:"#3b82f6", transition:"all .2s", boxSizing:"border-box",
+                  boxShadow: focused==="pass"?"0 0 0 3px rgba(59,130,246,0.12)":"none",
                 }}
               />
               <button onClick={()=>setShowPass(s=>!s)}
-                style={{position:"absolute",right:13,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"rgba(255,255,255,0.2)",cursor:"pointer",padding:4,display:"flex",alignItems:"center",justifyContent:"center",transition:"color .15s"}}>
+                style={{position:"absolute",right:13,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"rgba(255,255,255,0.25)",cursor:"pointer",padding:4,display:"flex",alignItems:"center",justifyContent:"center",transition:"color .15s"}}>
                 {showPass
                   ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                   : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -3561,8 +3580,8 @@ const LoginScreen = ({ onLogin }) => {
 
           {/* Error */}
           {error && (
-            <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:10,padding:"10px 13px",marginBottom:16,fontSize:12,color:"#ef4444",display:"flex",alignItems:"center",gap:7}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:12,padding:"11px 14px",marginBottom:16,fontSize:12,color:"#f87171",display:"flex",alignItems:"center",gap:8,animation:"fadeUp .2s ease"}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               {error}
             </div>
           )}
@@ -3572,26 +3591,32 @@ const LoginScreen = ({ onLogin }) => {
             onClick={handleSubmit}
             disabled={loading||!email||!password}
             style={{
-              width:"100%", padding:"14px", borderRadius:12, border:"none",
-              background: success ? "#10b981" : !loading&&email&&password ? "white" : "rgba(255,255,255,0.05)",
-              color: success ? "white" : !loading&&email&&password ? "black" : "rgba(255,255,255,0.12)",
+              width:"100%", padding:"14px", borderRadius:13, border:"none",
+              background: success
+                ? "linear-gradient(135deg,#059669,#10b981)"
+                : !loading&&email&&password
+                  ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+                  : "rgba(255,255,255,0.05)",
+              color: !loading&&email&&password ? "white" : "rgba(255,255,255,0.15)",
               fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
               cursor:!loading&&email&&password?"pointer":"not-allowed",
-              transition:"all .3s", display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-              boxSizing:"border-box",
+              transition:"all .3s cubic-bezier(.4,0,.2,1)",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+              boxSizing:"border-box", letterSpacing:"-0.2px",
+              boxShadow: !loading&&email&&password&&!success ? "0 8px 24px rgba(37,99,235,0.4)" : "none",
             }}>
             {success
-              ? <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>Entrando...</>
+              ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>¡Entrando!</>
               : loading
-                ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(0,0,0,0.15)",borderTopColor:"black",animation:"spin .8s linear infinite"}}/>Verificando...</>
-                : "Iniciar sesión →"
+                ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,0.2)",borderTopColor:"white",animation:"spin .7s linear infinite"}}/>Verificando...</>
+                : <>Ingresar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></>
             }
           </button>
 
-          {/* Firma dentro del card */}
-          <div style={{textAlign:"center",marginTop:20,paddingTop:18,borderTop:"1px solid rgba(255,255,255,0.05)"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",fontWeight:500,letterSpacing:"0.3px"}}>
-              Developer: <span style={{color:"rgba(255,255,255,0.6)",fontWeight:600}}>Adonis Castillo</span>
+          {/* Footer */}
+          <div style={{textAlign:"center",marginTop:20,paddingTop:16,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
+              Developer: <span style={{color:"rgba(255,255,255,0.45)",fontWeight:600}}>Adonis Castillo</span>
             </div>
           </div>
         </div>
@@ -4824,6 +4849,33 @@ const geocodeWithGoogle = async (rawAddress) => {
       }
     } catch { /* try next variant */ }
   }
+  // Fallback: Nominatim (OpenStreetMap) for addresses Google couldn't find
+  try {
+    const encoded = encodeURIComponent(raw + ", República Dominicana");
+    const nm = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=3&countrycodes=do`, {
+      headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" }
+    });
+    if (nm.ok) {
+      const nmData = await nm.json();
+      if (nmData && nmData.length > 0) {
+        const top = nmData[0];
+        const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+        if (lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3) {
+          return {
+            ok: true, lat, lng,
+            display: top.display_name,
+            confidence: top.type === "house" ? 85 : top.class === "highway" ? 72 : 60,
+            types: [top.type || "nominatim"],
+            allResults: nmData.slice(0,3).map(r => ({
+              display: r.display_name,
+              lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+              confidence: 55,
+            })),
+          };
+        }
+      }
+    }
+  } catch { /* nominatim failed too */ }
   return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
 };
 
@@ -5009,11 +5061,21 @@ const scoreGoogleResult = (result, original) => {
   // Bonus: la dirección formateada contiene la ciudad/sector del original
   const origLower = (original || "").toLowerCase();
   const addrLower = addr.toLowerCase();
-  if (/santo domingo|santiago|la romana|punta cana/.test(origLower)) {
-    const city = origLower.match(/santo domingo|santiago|la romana|punta cana/)?.[0];
-    if (city && addrLower.includes(city)) score = Math.min(score + 4, 99);
-    else if (city && !addrLower.includes(city)) score = Math.max(score - 6, 5);
+  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
+    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
+    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
+    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
   }
+
+  // Bonus: resultado tiene número de calle cuando el original también lo tiene
+  const numInOrig = (original || "").match(/\d{1,4}/g);
+  if (numInOrig) {
+    const anyMatch = numInOrig.some(n => addr.includes(n));
+    if (anyMatch) score = Math.min(score + 3, 99);
+  }
+
+  // Penalizar si el resultado es solo país/provincia (demasiado vago)
+  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
 
   return Math.min(Math.max(score, 1), 99);
 };
@@ -5095,35 +5157,92 @@ const hav = (a, b) => {
 const optimizeRoute = (stops) => {
   if (!stops || stops.length === 0) return [];
 
-  // Separar válidas (con coords) de inválidas (sin coords)
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
   const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
 
-  if (valid.length === 0) {
-    return invalid.map(s => ({ ...s, stopNum: null }));
-  }
-  if (valid.length === 1) {
-    return [
-      { ...valid[0], stopNum: 1 },
-      ...invalid.map(s => ({ ...s, stopNum: null })),
-    ];
-  }
+  if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
+  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
-  // Greedy nearest-neighbor desde el DEPOT
-  let current = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const remaining = [...valid];
+  // ── Fase 1: Nearest Neighbor desde DEPOT ──────────────────
+  let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
+  const rem = [...valid];
   const tour = [];
-
-  while (remaining.length > 0) {
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const d = hav(current, remaining[i]);
-      if (d < bestDist) { bestDist = d; bestIdx = i; }
+  while (rem.length > 0) {
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < rem.length; i++) {
+      const d = hav(cur, rem[i]);
+      if (d < bd) { bd = d; bi = i; }
     }
-    const [next] = remaining.splice(bestIdx, 1);
+    const [next] = rem.splice(bi, 1);
     tour.push(next);
-    current = { lat: next.lat, lng: next.lng }; // actualiza posición actual
+    cur = next;
+  }
+
+  // ── Fase 2: 2-opt para eliminar cruces ────────────────────
+  // tourDist: distancia total incluyendo depot→first y last→depot
+  const tourDist = (t) => {
+    let d = hav(DEPOT, t[0]) + hav(t[t.length-1], DEPOT);
+    for (let i = 0; i < t.length - 1; i++) d += hav(t[i], t[i+1]);
+    return d;
+  };
+  let improved = true;
+  let iterations = 0;
+  while (improved && iterations < 50) {
+    improved = false;
+    iterations++;
+    for (let i = 0; i < tour.length - 1; i++) {
+      for (let j = i + 2; j < tour.length; j++) {
+        if (j === tour.length - 1 && i === 0) continue; // skip wrap
+        // Swap: reverse the segment between i+1 and j
+        const before = hav(i === 0 ? DEPOT : tour[i-1], tour[i]) +
+                       hav(tour[i], tour[i+1]) +
+                       hav(tour[j], j+1 < tour.length ? tour[j+1] : DEPOT);
+        // after reversing i..j: connect tour[i-1]→tour[j], tour[i]→tour[j+1]
+        const after  = hav(i === 0 ? DEPOT : tour[i-1], tour[j]) +
+                       hav(tour[j], tour[i+1]) +
+                       hav(tour[i], j+1 < tour.length ? tour[j+1] : DEPOT);
+        if (after < before - 0.001) {
+          // Reverse segment [i..j]
+          let l = i, r = j;
+          while (l < r) {
+            [tour[l], tour[r]] = [tour[r], tour[l]];
+            l++; r--;
+          }
+          improved = true;
+        }
+      }
+    }
+  }
+
+  // ── Fase 3: Or-opt — mover paradas individuales al mejor lugar ──
+  let orImproved = true;
+  let orIter = 0;
+  while (orImproved && orIter < 20) {
+    orImproved = false;
+    orIter++;
+    for (let i = 0; i < tour.length; i++) {
+      const node = tour[i];
+      const prev = i === 0 ? DEPOT : tour[i-1];
+      const next = i === tour.length-1 ? DEPOT : tour[i+1];
+      // Cost of removing node from position i
+      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
+      let bestGain = 0.001, bestJ = -1;
+      for (let j = 0; j < tour.length; j++) {
+        if (j === i || j === i-1) continue;
+        const a = tour[j];
+        const b = j+1 < tour.length ? tour[j+1] : DEPOT;
+        const insertCost = hav(a, node) + hav(node, b) - hav(a, b);
+        const gain = removeCost - insertCost;
+        if (gain > bestGain) { bestGain = gain; bestJ = j; }
+      }
+      if (bestJ >= 0) {
+        const removed = tour.splice(i, 1)[0];
+        const insertAt = bestJ > i ? bestJ : bestJ + 1;
+        tour.splice(insertAt, 0, removed);
+        orImproved = true;
+        break; // restart
+      }
+    }
   }
 
   return [
@@ -5172,24 +5291,16 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
         zoom: 12,
         mapTypeId: "roadmap",
         styles: [
-          { elementType:"geometry",            stylers:[{color:"#04080f"}] },
-          { elementType:"labels.text.stroke",  stylers:[{color:"#04080f"}] },
-          { elementType:"labels.text.fill",    stylers:[{color:"#1a3050"}] },
-          { featureType:"administrative",           elementType:"geometry",        stylers:[{visibility:"off"}] },
-          { featureType:"administrative.locality",  elementType:"labels.text.fill",stylers:[{color:"#1a3050"}] },
-          { featureType:"road",                     elementType:"geometry",        stylers:[{color:"#0b1828"}] },
-          { featureType:"road",                     elementType:"geometry.stroke", stylers:[{color:"#060e1a"}] },
-          { featureType:"road.arterial",            elementType:"geometry",        stylers:[{color:"#0f2035"}] },
-          { featureType:"road.highway",             elementType:"geometry",        stylers:[{color:"#152840"}] },
-          { featureType:"road.highway",             elementType:"geometry.stroke", stylers:[{color:"#0b1a2c"}] },
-          { featureType:"road.highway",             elementType:"labels.text.fill",stylers:[{color:"#1e3a5f"}] },
-          { featureType:"road.local",               elementType:"labels",          stylers:[{visibility:"off"}] },
-          { featureType:"water",                    elementType:"geometry",        stylers:[{color:"#020508"}] },
-          { featureType:"water",                    elementType:"labels.text.fill",stylers:[{color:"#0a1726"}] },
-          { featureType:"poi",                      stylers:[{visibility:"off"}] },
-          { featureType:"transit",                  stylers:[{visibility:"off"}] },
-          { featureType:"landscape",                elementType:"geometry",        stylers:[{color:"#050c16"}] },
-          { featureType:"administrative.neighborhood", elementType:"labels",       stylers:[{visibility:"off"}] },
+          {featureType:"poi",stylers:[{visibility:"off"}]},
+          {featureType:"transit",stylers:[{visibility:"off"}]},
+          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
+          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
+          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
+          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
         ],
         disableDefaultUI: true,
         zoomControl: true,
@@ -5816,52 +5927,73 @@ const CircuitEngine = () => {
         {/* ════ UPLOAD ════ */}
         {phase === "upload" && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-            <div style={{ maxWidth: 520, width: "100%", animation: "fadeUp .4s ease" }}>
+            <div style={{ maxWidth: 560, width: "100%", animation: "fadeUp .4s ease" }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <div style={{ fontSize: 20, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6 }}>Importar entregas del mensajero</div>
-                <div style={{ fontSize: 12, color: "#4b5563" }}>Sube el Excel o CSV. El motor lee las direcciones, las geocodifica con Google Maps y optimiza la ruta automáticamente.</div>
+                <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)" }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas — Circuit Mode</div>
+                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa tu Excel o CSV. El motor geocodifica cada dirección con Google Maps<br/>y optimiza la ruta automáticamente con algoritmo Nearest-Neighbor + 2-opt.</div>
               </div>
+
+              {/* Feature pills */}
+              <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:22, flexWrap:"wrap" }}>
+                {[["📍","Geocodificación real"],["🔢","Optimización 2-opt"],["📦","Cola de rutas"],["📱","Push al mensajero"]].map(([ic,lb])=>(
+                  <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:20,padding:"4px 12px" }}>
+                    <span style={{ fontSize:11 }}>{ic}</span>
+                    <span style={{ fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Drop zone */}
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) parseFile(f); }}
                 onClick={() => fileRef.current?.click()}
-                style={{ border: `2px dashed ${dragOver ? "#3b82f6" : "#1e2d3d"}`, borderRadius: 16, padding: "44px 28px", textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(59,130,246,0.05)" : "transparent", transition: "all .2s", marginBottom: 14 }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
-                <div style={{ fontSize: 14, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 5 }}>Arrastra tu Excel o CSV aquí</div>
-                <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 16 }}>o haz clic para buscar en tu computadora</div>
+                style={{ border: `2px dashed ${dragOver ? "#3b82f6" : "#1e2d3d"}`, borderRadius: 18, padding: "44px 28px", textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(59,130,246,0.08)" : "rgba(255,255,255,0.01)", transition: "all .2s", marginBottom: 14, position:"relative", overflow:"hidden" }}>
+                {dragOver && <div style={{ position:"absolute",inset:0,background:"rgba(59,130,246,0.04)",animation:"pulse .8s ease infinite" }}/>}
+                <div style={{ fontSize: 48, marginBottom: 12, filter:"grayscale(0.2)" }}>📂</div>
+                <div style={{ fontSize: 15, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6 }}>{dragOver?"¡Suelta aquí!":"Arrastra tu Excel o CSV"}</div>
+                <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>o haz clic para buscar en tu computadora</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                  {[".xlsx", ".xls", ".csv"].map(e => <span key={e} style={{ background: "#0a1019", border: "1px solid #1e2d3d", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#4b5563", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>{e}</span>)}
+                  {[".xlsx",".xls",".csv"].map(e => <span key={e} style={{ background: "#0a1019", border: "1px solid #1e2d3d", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#60a5fa", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>{e}</span>)}
                 </div>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) parseFile(e.target.files[0]); }} />
               </div>
-              {/* Demo route */}
-              <div style={{ marginTop:14, padding:"12px 16px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.15)", borderRadius:12, display:"flex", alignItems:"center", gap:12 }}>
-                <span style={{ fontSize:20 }}>🧪</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, color:"#6ee7b7", fontFamily:"'Syne',sans-serif", fontWeight:700, marginBottom:2 }}>Probar el flujo sin archivo</div>
-                  <div style={{ fontSize:11, color:"#4b5563" }}>Carga una ruta demo de 5 paradas en Santo Domingo para testear el puente admin → mensajero</div>
+
+              {/* Bottom row: Demo + Template */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                {/* Demo route */}
+                <div style={{ padding:"14px 16px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.15)", borderRadius:14, display:"flex", flexDirection:"column", gap:8 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                    <span style={{ fontSize:18 }}>🧪</span>
+                    <div style={{ fontSize:12, color:"#6ee7b7", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>Ruta de prueba</div>
+                  </div>
+                  <div style={{ fontSize:11, color:"#4b5563", lineHeight:1.5 }}>5 paradas reales en Santo Domingo para testear el flujo completo</div>
+                  <button onClick={loadDemoRoute} style={{ background:"linear-gradient(135deg,#059669,#10b981)", border:"none", borderRadius:9, padding:"9px", color:"white", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer", boxShadow:"0 4px 16px rgba(16,185,129,0.3)", width:"100%" }}>
+                    ▶ Cargar demo
+                  </button>
                 </div>
-                <button onClick={loadDemoRoute} style={{ background:"linear-gradient(135deg,#059669,#10b981)", border:"none", borderRadius:9, padding:"8px 14px", color:"white", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", boxShadow:"0 4px 16px rgba(16,185,129,0.3)" }}>
-                  ▶ Demo
-                </button>
-              </div>
-              {/* Template */}
-              <div style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 24 }}>💡</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: "#93c5fd", fontFamily: "'Syne',sans-serif", fontWeight: 700, marginBottom: 2 }}>Descarga la plantilla oficial con formato RD</div>
-                  <div style={{ fontSize: 11, color: "#4b5563" }}>Incluye ejemplos reales: Sector, Avenida, Plus Code, Coordenadas</div>
+
+                {/* Plantilla */}
+                <div style={{ padding:"14px 16px", background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, display:"flex", flexDirection:"column", gap:8 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                    <span style={{ fontSize:18 }}>💡</span>
+                    <div style={{ fontSize:12, color:"#93c5fd", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>Plantilla oficial</div>
+                  </div>
+                  <div style={{ fontSize:11, color:"#4b5563", lineHeight:1.5 }}>Formato RD con ejemplos de sectores, Plus Codes y coordenadas</div>
+                  <button onClick={e => {
+                    e.stopPropagation();
+                    const csv = `Dirección,Cliente,Teléfono,Notas,Prioridad\n"Calle Miguel Angel Monclus No 3, Mirador Norte, Santo Domingo",Henry Franco,8097077979,Edificio Los Arroyos 7 piso 4,normal\n"Calle Leonor Feltz #5, Mirador Sur, Santo Domingo DN",Jonathan Diaz,8492030863,,alta\n"calle Marginal Sarasota, Torre Atlantic III Apto 7-B Mirador Sur",Yan Vargas,8098204793,,normal\n"Sector 30 de Mayo Calle Juan Pablo Duarte #87",Blsdi Martinez,8092574449,,normal\n"Avenida Independencia Km 6 1/2, cerca Calle Luperon #74",Adily Bonilla,8097171086,,urgente\n"G2F8+7G3, Santo Domingo",Pedro García,8091234567,Palma Real - depósito,normal\n"18.4722, -69.9514",Ana Rodríguez,8094567890,Residencial Los Prados,alta`;
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a"); a.href = url; a.download = "plantilla_rapdrive_RD.csv"; a.click();
+                  }} style={{ background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", border: "none", borderRadius: 9, padding: "9px", color: "white", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", width:"100%", boxShadow:"0 4px 14px rgba(59,130,246,0.3)" }}>
+                    ↓ Descargar plantilla
+                  </button>
                 </div>
-                <button onClick={e => {
-                  e.stopPropagation();
-                  const csv = `Dirección,Cliente,Teléfono,Notas,Prioridad\n"Calle Miguel Angel Monclus No 3, Mirador Norte, Santo Domingo",Henry Franco,8097077979,Edificio Los Arroyos 7 piso 4,normal\n"Calle Leonor Feltz #5, Mirador Sur, Santo Domingo DN",Jonathan Diaz,8492030863,,alta\n"calle Marginal Sarasota, Torre Atlantic III Apto 7-B Mirador Sur",Yan Vargas,8098204793,,normal\n"Sector 30 de Mayo Calle Juan Pablo Duarte #87",Blsdi Martinez,8092574449,,normal\n"Avenida Independencia Km 6 1/2, cerca Calle Luperon #74",Adily Bonilla,8097171086,,urgente\n"G2F8+7G3, Santo Domingo",Pedro García,8091234567,Palma Real - depósito,normal\n"18.4722, -69.9514",Ana Rodríguez,8094567890,Residencial Los Prados,alta`;
-                  const blob = new Blob([csv], { type: "text/csv" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "plantilla_rapdrive_RD.csv"; a.click();
-                }} style={{ background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", border: "none", borderRadius: 9, padding: "8px 14px", color: "white", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  ↓ Plantilla RD
-                </button>
               </div>
             </div>
           </div>
@@ -5952,42 +6084,70 @@ const CircuitEngine = () => {
 
         {/* ════ GEOCODING ════ */}
         {phase === "geocoding" && (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background:"linear-gradient(135deg,#060b10,#080e16)" }}>
             <style>{`
-              @keyframes orbit1{from{transform:rotate(0deg) translateX(36px) rotate(0deg)}to{transform:rotate(360deg) translateX(36px) rotate(-360deg)}}
-              @keyframes orbit2{from{transform:rotate(120deg) translateX(36px) rotate(-120deg)}to{transform:rotate(480deg) translateX(36px) rotate(-480deg)}}
-              @keyframes orbit3{from{transform:rotate(240deg) translateX(36px) rotate(-240deg)}to{transform:rotate(600deg) translateX(36px) rotate(-600deg)}}
-              @keyframes geoRing{0%{transform:scale(1);opacity:0.5}50%{transform:scale(1.18);opacity:0.15}100%{transform:scale(1);opacity:0.5}}
-              @keyframes geoPulseText{0%,100%{opacity:1}50%{opacity:0.5}}
+              @keyframes orbit1{from{transform:rotate(0deg) translateX(44px) rotate(0deg)}to{transform:rotate(360deg) translateX(44px) rotate(-360deg)}}
+              @keyframes orbit2{from{transform:rotate(120deg) translateX(32px) rotate(-120deg)}to{transform:rotate(480deg) translateX(32px) rotate(-480deg)}}
+              @keyframes orbit3{from{transform:rotate(240deg) translateX(52px) rotate(-240deg)}to{transform:rotate(600deg) translateX(52px) rotate(-600deg)}}
+              @keyframes geoRing1{0%,100%{transform:scale(1);opacity:0.4}50%{transform:scale(1.22);opacity:0.08}}
+              @keyframes geoRing2{0%,100%{transform:scale(1);opacity:0.25}50%{transform:scale(1.35);opacity:0.05}}
+              @keyframes geoRing3{0%,100%{transform:scale(1);opacity:0.12}50%{transform:scale(1.5);opacity:0.03}}
+              @keyframes geoPulseText{0%,100%{opacity:1}50%{opacity:0.6}}
+              @keyframes geoShimmer{0%{background-position:200% center}100%{background-position:-200% center}}
+              @keyframes geoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+              @keyframes scanLine{0%{transform:translateY(-100%);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(300%);opacity:0}}
+              @keyframes addressFly{0%{opacity:0;transform:translateX(-10px)}20%{opacity:1;transform:translateX(0)}80%{opacity:1}100%{opacity:0;transform:translateX(10px)}}
             `}</style>
-            <div style={{ maxWidth: 440, width: "100%", padding: 32, textAlign: "center", animation: "fadeUp .3s ease" }}>
-              {/* Orbital animation */}
-              <div style={{ width: 100, height: 100, position: "relative", margin: "0 auto 24px" }}>
+            <div style={{ maxWidth: 460, width: "100%", padding: "36px 32px", textAlign: "center", animation: "fadeUp .3s ease" }}>
+
+              {/* Orbital core */}
+              <div style={{ width: 120, height: 120, position: "relative", margin: "0 auto 28px", animation:"geoFloat 3s ease-in-out infinite" }}>
                 {/* Pulse rings */}
-                <div style={{ position:"absolute", inset:-14, borderRadius:"50%", border:"1.5px solid #3b82f630", animation:"geoRing 2s ease-in-out infinite" }}/>
-                <div style={{ position:"absolute", inset:-6, borderRadius:"50%", border:"1.5px solid #3b82f640", animation:"geoRing 2s .4s ease-in-out infinite" }}/>
-                {/* Center core */}
-                <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 30px #3b82f660" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <div style={{ position:"absolute", inset:-22, borderRadius:"50%", border:"1px solid #3b82f640", animation:"geoRing1 2.2s ease-in-out infinite" }}/>
+                <div style={{ position:"absolute", inset:-38, borderRadius:"50%", border:"1px solid #3b82f625", animation:"geoRing2 2.2s .5s ease-in-out infinite" }}/>
+                <div style={{ position:"absolute", inset:-54, borderRadius:"50%", border:"1px solid #3b82f612", animation:"geoRing3 2.2s 1s ease-in-out infinite" }}/>
+                {/* Glow */}
+                <div style={{ position:"absolute", inset:-8, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,0.2) 0%,transparent 70%)" }}/>
+                {/* Core */}
+                <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 40px rgba(59,130,246,0.7), 0 0 80px rgba(59,130,246,0.3)", overflow:"hidden" }}>
+                  {/* Scan line */}
+                  <div style={{ position:"absolute", left:0, right:0, height:2, background:"rgba(255,255,255,0.4)", animation:"scanLine 2s linear infinite" }}/>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
                 {/* Orbiting dots */}
-                <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background:"#60a5fa", boxShadow:"0 0 8px #60a5fa", animation:"orbit1 1.6s linear infinite" }}/>
-                </div>
-                <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:"#818cf8", boxShadow:"0 0 6px #818cf8", animation:"orbit2 1.6s linear infinite" }}/>
-                </div>
-                <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ width:6, height:6, borderRadius:"50%", background:"#a5b4fc", boxShadow:"0 0 5px #a5b4fc", animation:"orbit3 1.6s linear infinite" }}/>
+                {[
+                  {size:10,color:"#60a5fa",shadow:"#60a5fa",anim:"orbit1",dur:"1.8s"},
+                  {size:7,color:"#818cf8",shadow:"#818cf8",anim:"orbit2",dur:"2.2s"},
+                  {size:8,color:"#34d399",shadow:"#34d399",anim:"orbit3",dur:"1.5s"},
+                ].map((d,i)=>(
+                  <div key={i} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <div style={{ width:d.size,height:d.size,borderRadius:"50%",background:d.color,boxShadow:`0 0 10px ${d.shadow}`,animation:`${d.anim} ${d.dur} linear infinite` }}/>
+                  </div>
+                ))}
+              </div>
+
+              {/* Title */}
+              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Geolocalizando con Google Maps</div>
+              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>Procesando calles · sectores · referencias · Plus Codes</div>
+
+              {/* Address flying by */}
+              <div style={{ height:22, overflow:"hidden", marginBottom:18 }}>
+                <div key={geoStatus} style={{ fontSize:11, color:"#3b82f6", fontFamily:"'Inter',monospace", animation:"addressFly 2s ease-in-out", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", padding:"0 20px" }}>{geoStatus || "Iniciando..."}</div>
+              </div>
+
+              {/* Progress bar - enhanced */}
+              <div style={{ height: 8, background: "#0d1420", borderRadius: 8, marginBottom: 10, overflow: "hidden", border:"1px solid #131f30" }}>
+                <div style={{ height:"100%", borderRadius: 8, width: `${geoProgress}%`, background: "linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa,#3b82f6)", backgroundSize: "300% 100%", animation: "geoShimmer 2s linear infinite", transition: "width .6s cubic-bezier(.4,0,.2,1)", boxShadow:"0 0 12px rgba(59,130,246,0.5)" }} />
+              </div>
+
+              {/* Stats row */}
+              <div style={{ display:"flex", justifyContent:"center", gap:16, marginTop:8 }}>
+                <div style={{ fontSize: 24, fontFamily: "'Syne',sans-serif", fontWeight: 900, color: "#3b82f6", animation:"geoPulseText 1.8s ease-in-out infinite" }}>{geoProgress}%</div>
+                <div style={{ display:"flex", flexDirection:"column", justifyContent:"center", gap:2, textAlign:"left" }}>
+                  <div style={{ fontSize:10, color:"#10b981", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✓ {stops.filter(s=>s.status==="ok"||s.confidence>=70).length} geocodificadas</div>
+                  {stops.filter(s=>s.status==="error").length > 0 && <div style={{ fontSize:10, color:"#ef4444", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✕ {stops.filter(s=>s.status==="error").length} con error</div>}
                 </div>
               </div>
-              <div style={{ fontSize: 17, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 5 }}>Geocodificando con Google Maps...</div>
-              <div style={{ fontSize: 11, color: "#4b5563", marginBottom: 18 }}>Leyendo calles, sectores, referencias y Plus Codes</div>
-              <div style={{ height: 6, background: "#131f30", borderRadius: 6, marginBottom: 8, overflow: "hidden" }}>
-                <div style={{ height: 6, borderRadius: 6, width: `${geoProgress}%`, background: "linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa)", backgroundSize: "200% 100%", animation: "shimmer 1.5s linear infinite", transition: "width .5s" }} />
-              </div>
-              <div style={{ fontSize: 20, fontFamily: "'Syne',sans-serif", fontWeight: 800, color: "#3b82f6", animation:"geoPulseText 1.5s ease-in-out infinite" }}>{geoProgress}%</div>
-              <div style={{ fontSize: 10, color: "#2d4a60", marginTop: 8, wordBreak: "break-all", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding:"0 10px" }}>{geoStatus}</div>
             </div>
           </div>
         )}
