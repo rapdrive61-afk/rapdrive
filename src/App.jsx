@@ -2293,9 +2293,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         <circle cx="${r}" cy="${r}" r="${ri}" fill="url(#g${stop.stopNum||'x'})" stroke="rgba(255,255,255,${isNow?'0.55':'0.35'})" stroke-width="${isNow?2:1.5}"/>
         <ellipse cx="${r*0.7}" cy="${r*0.55}" rx="${ri*0.38}" ry="${ri*0.2}" fill="rgba(255,255,255,0.28)" transform="rotate(-20,${r*0.7},${r*0.55})"/>
         ${isDone
-          ? `<path d="M${r-5} ${r+1}l3.5 3.5 6.5-6.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>`
+          ? `<text x="${r}" y="${r-2}" text-anchor="middle" dominant-baseline="central" font-size="${fs-1}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">${label}</text>
+             <path d="M${r-4} ${r+5}l2.8 2.8 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>`
           : isProb
-            ? `<text x="${r}" y="${r+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs+2}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">!</text>`
+            ? `<text x="${r}" y="${r-1}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">${label}</text>
+               <text x="${r}" y="${r+7}" text-anchor="middle" font-size="8" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.85">!</text>`
             : `<text x="${r}" y="${r+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">${label}</text>`
         }
       </svg>`;
@@ -2591,101 +2593,98 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           const s = mapPinPopup;
           const isDone = s.driverStatus === "delivered";
           const isProb = s.driverStatus === "problema";
-          const isNow  = s.driverStatus === "en_ruta" || s.driverStatus === "pending";
-          const ac = isDone?"#10b981":isProb?"#ef4444":"#3b82f6";
+          const ac = isDone ? "#10b981" : isProb ? "#ef4444" : "#3b82f6";
           return (
-            <div style={{ position:"absolute",bottom:24,left:12,right:12,zIndex:200,animation:"slideUp .2s cubic-bezier(.4,0,.2,1)" }}>
-              <div style={{ background:"rgba(8,15,24,0.97)",backdropFilter:"blur(20px)",borderRadius:20,border:`1px solid ${ac}33`,boxShadow:`0 8px 40px rgba(0,0,0,0.7),0 0 0 1px ${ac}18`,overflow:"hidden" }}>
+            /* ── Info card: top-left, no obstruction, read-only ── */
+            <div style={{
+              position:"absolute", top:14, left:12, zIndex:200,
+              width: Math.min(280, window.innerWidth - 24),
+              animation:"slideUp .2s cubic-bezier(.4,0,.2,1)",
+              pointerEvents:"auto",
+            }}>
+              <div style={{
+                background:"rgba(6,12,22,0.96)",
+                backdropFilter:"blur(24px)",
+                WebkitBackdropFilter:"blur(24px)",
+                borderRadius:16,
+                border:`1px solid ${ac}30`,
+                boxShadow:`0 4px 24px rgba(0,0,0,0.7), 0 0 0 1px ${ac}15`,
+                overflow:"hidden",
+              }}>
+                {/* Accent bar */}
+                <div style={{ height:2, background:`linear-gradient(90deg,${ac},${ac}22)` }}/>
 
-                {/* Color accent top bar */}
-                <div style={{ height:3,background:`linear-gradient(90deg,${ac},${ac}44)` }}/>
+                <div style={{ padding:"11px 13px 13px" }}>
 
-                <div style={{ padding:"14px 16px 16px" }}>
-                  {/* Header row */}
-                  <div style={{ display:"flex",alignItems:"flex-start",gap:12,marginBottom:12 }}>
-                    {/* Stop number badge */}
-                    <div style={{ width:44,height:44,borderRadius:13,background:`${ac}18`,border:`1.5px solid ${ac}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                      {isDone
-                        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ac} strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                        : isProb
-                          ? <span style={{ fontSize:20,color:ac }}>!</span>
-                          : <span style={{ fontSize:16,fontWeight:900,color:ac,fontFamily:"'DM Mono',monospace" }}>{s.stopNum}</span>}
+                  {/* Row 1: # parada + nombre + close */}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:9, marginBottom:10 }}>
+                    {/* Número de parada — siempre visible */}
+                    <div style={{
+                      minWidth:34, height:34, borderRadius:10,
+                      background:`${ac}15`, border:`1.5px solid ${ac}35`,
+                      display:"flex", flexDirection:"column",
+                      alignItems:"center", justifyContent:"center",
+                      flexShrink:0, gap:0,
+                    }}>
+                      <span style={{ fontSize:11, fontWeight:900, color:ac, fontFamily:"'DM Mono',monospace", lineHeight:1 }}>
+                        {s.stopNum||"?"}
+                      </span>
+                      {isDone && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ac} strokeWidth="3" style={{marginTop:1}}>
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      )}
+                      {isProb && <span style={{ fontSize:9, color:ac, lineHeight:1, marginTop:1 }}>!</span>}
                     </div>
-                    {/* Client info */}
-                    <div style={{ flex:1,minWidth:0 }}>
-                      <div style={{ fontSize:15,fontWeight:700,color:"#f8fafc",letterSpacing:"-0.3px",lineHeight:1.2,marginBottom:2 }}>
-                        {s.client||`Parada ${s.stopNum}`}
+
+                    {/* Nombre cliente */}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#f1f5f9", letterSpacing:"-0.2px", lineHeight:1.25, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {s.client || `Parada ${s.stopNum}`}
                       </div>
-                      {s.tracking && (
-                        <div style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:"rgba(96,165,250,0.8)",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:5,padding:"1px 7px",display:"inline-block",marginBottom:3 }}>
-                          {s.tracking}
+                      {/* Estado si entregado/problema */}
+                      {(isDone || isProb) && (
+                        <div style={{ fontSize:10, color:ac, fontWeight:600, marginTop:2 }}>
+                          {isDone ? `✓ Entregado${s.deliveredAt ? " · " + s.deliveredAt : ""}` : `⚠ Problema`}
                         </div>
                       )}
-                      <div style={{ fontSize:11.5,color:"rgba(255,255,255,0.45)",lineHeight:1.4,marginTop:2 }}>
-                        📍 {s.displayAddr||s.rawAddr||"Sin dirección"}
-                      </div>
                     </div>
-                    {/* Close */}
-                    <button onClick={()=>setMapPinPopup(null)}
-                      style={{ width:28,height:28,borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.4)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>
+
+                    {/* Cerrar */}
+                    <button onClick={() => setMapPinPopup(null)}
+                      style={{ width:26, height:26, borderRadius:7, border:"1px solid rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.35)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0, lineHeight:1 }}>
                       ✕
                     </button>
                   </div>
 
-                  {/* Phone row */}
-                  {s.phone && (
-                    <div style={{ display:"flex",gap:7,marginBottom:11 }}>
-                      <a href={`tel:${s.phone.replace(/\D/g,"")}`}
-                        style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.75)",fontSize:12,textDecoration:"none",fontWeight:600 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                        Llamar · {s.phone}
-                      </a>
-                      <a href={`https://wa.me/${s.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
-                        style={{ width:44,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:11,background:"rgba(37,211,102,0.1)",border:"1px solid rgba(37,211,102,0.25)",flexShrink:0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#22c55e"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-                      </a>
+                  {/* Row 2: SP code */}
+                  {s.tracking && (
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
+                      <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase", flexShrink:0 }}>SP</span>
+                      <span style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"rgba(96,165,250,0.85)", background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.18)", borderRadius:5, padding:"1px 7px", letterSpacing:"0.4px" }}>
+                        {s.tracking}
+                      </span>
                     </div>
                   )}
 
-                  {/* Action buttons */}
-                  {!isDone && !isProb && (
-                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:9 }}>
-                      {[
-                        {href:`https://waze.com/ul?ll=${s.lat},${s.lng}&navigate=yes`,label:"Waze",icon:"🚗"},
-                        {href:`https://maps.google.com/?q=${s.lat},${s.lng}`,label:"Maps",icon:"🗺"},
-                      ].map(({href,label,icon})=>(
-                        <a key={label} href={href} target="_blank" rel="noreferrer"
-                          style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px",borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",fontSize:12,textDecoration:"none",fontWeight:600 }}>
-                          {icon} {label}
-                        </a>
-                      ))}
-                      <button onClick={()=>{ setMapPinPopup(null); setSelStop(s); setSheetSnap("half"); setSheetH(null); }}
-                        style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px",borderRadius:11,background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.25)",color:"#60a5fa",fontSize:12,fontWeight:700,cursor:"pointer" }}>
-                        📋 Ver
-                      </button>
+                  {/* Row 3: Teléfono (solo texto, no botón) */}
+                  {s.phone && (
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      <span style={{ fontSize:12, color:"rgba(255,255,255,0.6)", fontFamily:"'DM Mono',monospace", letterSpacing:"0.3px" }}>
+                        {s.phone}
+                      </span>
                     </div>
                   )}
-                  {/* Mark delivered / problem from popup */}
-                  {!isDone && !isProb && (
-                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
-                      <button onClick={()=>{ markDelivered(s.id); setMapPinPopup(null); }} className="rd-btn"
-                        style={{ padding:"11px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,boxShadow:"0 4px 16px rgba(16,185,129,0.35)" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                        Entregado
-                      </button>
-                      <button onClick={()=>{ setMapPinPopup(null); setSelStop(s); setShowProb(s.id); }} className="rd-btn"
-                        style={{ padding:"11px",borderRadius:12,border:"1px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.1)",color:"#f87171",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        Fallido
-                      </button>
-                    </div>
-                  )}
-                  {(isDone||isProb) && (
-                    <div style={{ padding:"8px 12px",borderRadius:10,background:`${ac}10`,border:`1px solid ${ac}25`,fontSize:12,color:ac,fontWeight:600,textAlign:"center" }}>
-                      {isDone ? "✓ Entregado" : `⚠ Problema${s.issue?`: ${s.issue}`:""}`}
-                      {s.deliveredAt && <span style={{ color:"rgba(255,255,255,0.3)",fontFamily:"'DM Mono',monospace",marginLeft:8,fontSize:10 }}>{s.deliveredAt}</span>}
-                    </div>
-                  )}
+
+                  {/* Row 4: Dirección completa */}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span style={{ fontSize:11.5, color:"rgba(255,255,255,0.45)", lineHeight:1.45 }}>
+                      {s.displayAddr || s.rawAddr || "Sin dirección"}
+                    </span>
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -3015,10 +3014,18 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       flexShrink:0, zIndex:1,
                       boxShadow: (isCur||isDone||isProb) ? `0 0 0 4px ${dotGlow.replace("0.55","0.13")}, 0 4px 18px ${dotGlow}` : "none",
                     }}>
-                      {isDone
-                        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                        : <span style={{ fontSize:13,fontWeight:800,color:isCur?"white":isProb?"white":"rgba(255,255,255,0.45)",fontFamily:"'DM Mono',monospace",letterSpacing:"-0.5px" }}>{stop.stopNum||"?"}</span>
-                      }
+                      {/* Número SIEMPRE visible — check pequeño debajo si entregado */}
+                      <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}>
+                        <span style={{ fontSize:isDone?11:13, fontWeight:800, color: isDone?"rgba(255,255,255,0.9)":isCur?"white":isProb?"white":"rgba(255,255,255,0.45)", fontFamily:"'DM Mono',monospace", letterSpacing:"-0.5px", lineHeight:1 }}>
+                          {stop.stopNum||"?"}
+                        </span>
+                        {isDone && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" style={{opacity:0.9}}>
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        )}
+                        {isProb && <span style={{ fontSize:10,color:"white",lineHeight:1,fontWeight:800 }}>!</span>}
+                      </div>
                     </div>
                     {!isLast && <div style={{ width:2,flex:1,minHeight:14,background:lineColor,marginTop:3,borderRadius:1 }}/>}
                   </div>
