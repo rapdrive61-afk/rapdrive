@@ -5691,6 +5691,7 @@ const CircuitEngine = () => {
   const [mapsReady, setMapsReady] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [addrEditStop, setAddrEditStop] = useState(null); // stop being edited in modal
+  const [viewMode, setViewMode] = useState("list"); // "list" | "carousel"
   const fileRef = useRef(null);
 
   // -- RUTA DE PRUEBA - para testear el puente admin→mensajero sin subir archivo -
@@ -6310,8 +6311,8 @@ const CircuitEngine = () => {
         {(phase === "review" || phase === "route") && (
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-            {/* Left panel: stops list */}
-            <div style={{ width: 360, borderRight: "1px solid #0d1420", display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0 }}>
+            {/* Left panel: stops list — oculto en modo carrusel */}
+            <div style={{ width: viewMode==="carousel" ? 0 : 360, borderRight: viewMode==="carousel" ? "none" : "1px solid #0d1420", display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0, transition:"width .2s ease" }}>
               {/* Header */}
               <div style={{ padding: "12px 16px", borderBottom: "1px solid #0d1420", flexShrink: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -6319,9 +6320,20 @@ const CircuitEngine = () => {
                     <div style={{ fontSize: 13, fontFamily: "'Syne',sans-serif", fontWeight: 800 }}>{routeName || "Nueva Ruta"}</div>
                     {driverName && <div style={{ fontSize: 11, color: "#4b5563" }}>{(window.__rdMensajeros||DEFAULT_MENSAJEROS).find(m=>m.id===driverName)?.name || driverName}</div>}
                   </div>
-                  <div style={{ textAlign: "right" }}>
+                  <div style={{ textAlign: "right", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
                     <div style={{ fontSize: 13, fontFamily: "'Syne',sans-serif", fontWeight: 800, color: "#3b82f6" }}>{stops.filter(s => s.stopNum).length} paradas</div>
                     {km > 0 && <div style={{ fontSize: 10, color: "#4b5563" }}>{km} km</div>}
+                    {/* Toggle lista / carrusel */}
+                    <div style={{ display:"flex", background:"#0a0f18", border:"1px solid #1e2d3d", borderRadius:8, padding:2, gap:2 }}>
+                      <button onClick={()=>setViewMode("list")}
+                        style={{ padding:"3px 9px", borderRadius:6, border:"none", cursor:"pointer", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, background: viewMode==="list" ? "#1d4ed8" : "transparent", color: viewMode==="list" ? "white" : "#374151", transition:"all .15s" }}>
+                        ☰ Lista
+                      </button>
+                      <button onClick={()=>setViewMode("carousel")}
+                        style={{ padding:"3px 9px", borderRadius:6, border:"none", cursor:"pointer", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, background: viewMode==="carousel" ? "#1d4ed8" : "transparent", color: viewMode==="carousel" ? "white" : "#374151", transition:"all .15s" }}>
+                        ⊟ Carrusel
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {/* Status pills */}
@@ -6573,6 +6585,114 @@ const CircuitEngine = () => {
                   </div></>}
                 </div>
               )}
+
+              {/* ── CARRUSEL bottom sheet ── visible solo en modo carrusel */}
+              {viewMode === "carousel" && (() => {
+                const ordered = stops.filter(s => s.stopNum != null).sort((a,b) => (a.stopNum||99)-(b.stopNum||99));
+                const total = ordered.length;
+                if (total === 0) return null;
+                const curIdx = selectedId ? Math.max(0, ordered.findIndex(s => s.id === selectedId)) : 0;
+                const stop = ordered[curIdx < 0 ? 0 : curIdx];
+                const goTo = (idx) => {
+                  const t = ordered[Math.max(0, Math.min(total-1, idx))];
+                  if (t) setSelectedId(t.id);
+                };
+                return (
+                  <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:40 }}>
+                    {/* Dots indicator */}
+                    <div style={{ display:"flex", justifyContent:"center", gap:5, paddingBottom:8 }}>
+                      {ordered.slice(Math.max(0,curIdx-2), Math.min(total,curIdx+3)).map((s,i) => {
+                        const abs = Math.max(0,curIdx-2)+i;
+                        return <div key={s.id} style={{ width:abs===curIdx?22:6, height:6, borderRadius:3, background:abs===curIdx?"#3b82f6":"rgba(255,255,255,0.2)", transition:"all .2s" }}/>;
+                      })}
+                    </div>
+                    {/* Card */}
+                    <div style={{ margin:"0 10px 10px", background:"rgba(6,11,16,0.97)", backdropFilter:"blur(18px)", border:"1px solid #1e2d3d", borderRadius:20, boxShadow:"0 -8px 40px rgba(0,0,0,0.75)", overflow:"hidden" }}>
+                      {/* Drag handle */}
+                      <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 4px" }}>
+                        <div style={{ width:36, height:4, borderRadius:2, background:"#1e2d3d" }}/>
+                      </div>
+                      {/* Header */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 16px 10px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, color:"white", fontFamily:"'Syne',sans-serif", fontWeight:800, flexShrink:0 }}>
+                            {stop.stopNum}
+                          </div>
+                          <div>
+                            <div style={{ fontSize:15, fontFamily:"'Syne',sans-serif", fontWeight:800, color:"#f1f5f9", letterSpacing:"-0.3px", lineHeight:1.2, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                              {stop.client || `Parada ${stop.stopNum}`}
+                            </div>
+                            <div style={{ fontSize:10.5, marginTop:2, display:"flex", alignItems:"center", gap:6 }}>
+                              <span style={{ color:"#3b82f6", fontFamily:"'Syne',sans-serif", fontWeight:800 }}>{curIdx+1}/{total}</span>
+                              {stop.tracking && <span style={{ color:"#374151", fontFamily:"monospace", fontSize:9.5 }}>{stop.tracking}</span>}
+                              {stop.status==="error" && <span style={{ color:"#ef4444", fontSize:9.5 }}>⚠ Sin geocodificar</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <button onClick={()=>setViewMode("list")}
+                          style={{ width:28, height:28, borderRadius:8, border:"1px solid #1e2d3d", background:"#0a1019", color:"#374151", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>✕</button>
+                      </div>
+
+                      {/* Divider */}
+                      <div style={{ height:1, background:"#0d1420", margin:"0 16px" }}/>
+
+                      {/* Info rows */}
+                      <div style={{ padding:"10px 16px 6px", display:"flex", flexDirection:"column", gap:7 }}>
+                        {/* Address */}
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:9 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          <span style={{ fontSize:12, color:"#94a3b8", lineHeight:1.4, cursor:"pointer" }} onClick={()=>setAddrEditStop(stop)}>
+                            {stop.displayAddr || stop.rawAddr || "Sin dirección"}
+                          </span>
+                        </div>
+                        {/* Phone */}
+                        {stop.phone && (
+                          <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="2" style={{flexShrink:0}}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5a2 2 0 0 1 1.99-2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.91a16 16 0 0 0 6 6l.92-1.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17z"/></svg>
+                            <span style={{ fontSize:12, color:"#3b82f6", fontWeight:600 }}>{stop.phone}</span>
+                          </div>
+                        )}
+                        {/* Notes */}
+                        {stop.notes && (
+                          <div style={{ display:"flex", alignItems:"flex-start", gap:9 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            <span style={{ fontSize:11, color:"#64748b", lineHeight:1.4 }}>{stop.notes}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display:"flex", gap:8, padding:"8px 16px 12px" }}>
+                        {stop.phone && (
+                          <button onClick={()=>window.open(`https://wa.me/${stop.phone.replace(/\D/g,"")}`, "_blank")}
+                            style={{ flex:1, padding:"9px 0", borderRadius:10, border:"1px solid rgba(37,211,102,0.25)", background:"rgba(37,211,102,0.07)", color:"#22c55e", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            WhatsApp
+                          </button>
+                        )}
+                        <button onClick={()=>setAddrEditStop(stop)}
+                          style={{ flex:1, padding:"9px 0", borderRadius:10, border:"1px solid #1e2d3d", background:"transparent", color:"#64748b", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer" }}>
+                          ✏ Editar dirección
+                        </button>
+                      </div>
+
+                      {/* Prev / Next navigation */}
+                      <div style={{ display:"flex", borderTop:"1px solid #0d1420" }}>
+                        <button onClick={()=>goTo(curIdx-1)} disabled={curIdx===0}
+                          style={{ flex:1, padding:"13px 0", background:"transparent", border:"none", borderRight:"1px solid #0d1420", color:curIdx===0?"#1e2d3d":"#3b82f6", fontSize:12, cursor:curIdx===0?"default":"pointer", fontFamily:"'Syne',sans-serif", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"color .1s" }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                          Anterior
+                        </button>
+                        <button onClick={()=>goTo(curIdx+1)} disabled={curIdx===total-1}
+                          style={{ flex:1, padding:"13px 0", background:"transparent", border:"none", color:curIdx===total-1?"#1e2d3d":"#3b82f6", fontSize:12, cursor:curIdx===total-1?"default":"pointer", fontFamily:"'Syne',sans-serif", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"color .1s" }}>
+                          Siguiente
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
