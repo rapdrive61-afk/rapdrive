@@ -34,6 +34,8 @@ const DEFAULT_MENSAJEROS = [
   { id:"M-04", name:"CARLOS ALFREDO",       initials:"CA", phone:"8091000004", color:"#3b82f6", active:true },
   { id:"M-05", name:"ERIBERTO REYNOSO",     initials:"ER", phone:"8091000005", color:"#3b82f6", active:true },
   { id:"M-06", name:"DOUGLAS SANTIAGO",     initials:"DS", phone:"8091000006", color:"#3b82f6", active:true },
+  { id:"M-07", name:"ADONIS CASTILLO",      initials:"AC", phone:"",           color:"#3b82f6", active:true },
+  { id:"M-08", name:"STARLIN GUZMAN",       initials:"SG", phone:"",           color:"#3b82f6", active:true },
 ];
 
 const USERS = [
@@ -44,6 +46,8 @@ const USERS = [
   { id:"U-05", name:"CARLOS ALFREDO",          email:"calfredo@rapdrive.do",  password:"driver123",     role:"driver", avatar:"CA", zone:"DN Oeste",   color:"#10b981", driverId:"M-04" },
   { id:"U-06", name:"DOUGLAS SANTIAGO",        email:"dsantiago@rapdrive.do", password:"driver123",     role:"driver", avatar:"DS", zone:"DN Central", color:"#10b981", driverId:"M-06" },
   { id:"U-07", name:"ERIBERTO REYNOSO",        email:"ereynoso@rapdrive.do",  password:"driver123",     role:"driver", avatar:"ER", zone:"Santiago",   color:"#10b981", driverId:"M-05" },
+  { id:"U-08", name:"ADONIS CASTILLO",         email:"acastillo@rapdrive.do", password:"driver123",     role:"driver", avatar:"AC", zone:"DN",         color:"#10b981", driverId:"M-07" },
+  { id:"U-09", name:"STARLIN GUZMAN",          email:"sguzman@rapdrive.do",   password:"driver123",     role:"driver", avatar:"SG", zone:"DN",         color:"#10b981", driverId:"M-08" },
 ];
 
 const ROLE_CONFIG = {
@@ -106,7 +110,17 @@ const LS = {
     _memStore.chats[id] = c;
     FB.set(`chats/${id}`, c);
   },
-  getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
+  getMens:   () => {
+    // Si hay mensajeros en memoria, merge con defaults para no perder ninguno del código
+    if (_memStore.mens && _memStore.mens.length > 0) {
+      const merged = [..._memStore.mens];
+      DEFAULT_MENSAJEROS.forEach(d => {
+        if (!merged.find(m => m.id === d.id)) merged.push(d);
+      });
+      return merged;
+    }
+    return [...DEFAULT_MENSAJEROS];
+  },
   setMens:   (m) => { _memStore.mens = m; FB.set("mens", m); },
   // Cola de rutas pendientes por mensajero (array ordenado por sentAt)
   getPending:    (id)  => _memStore.pendingRoutes[id] || [],
@@ -137,24 +151,50 @@ if (typeof window !== "undefined") {
   FB.get("pendingRoutes").then(data => {
     if (data) { _memStore.pendingRoutes = data; window.__rdPendingRoutes = data; }
   });
-  // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
-  FB.get("mens").then(data => {
-    if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
-  });
-  FB.get("users").then(data => {
-    if (data && typeof data === "object") {
-      Object.values(data).forEach(u => {
-        if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+
+  // ── MENSAJEROS: merge DEFAULT_MENSAJEROS + Firebase (nunca se pierden) ────
+  // Regla: DEFAULT_MENSAJEROS siempre está. Firebase puede tener extras creados
+  // por el admin. El resultado es la unión — Firebase gana si hay conflicto de id.
+  FB.get("mens").then(fbMens => {
+    const base = [...DEFAULT_MENSAJEROS];
+    if (fbMens && Array.isArray(fbMens)) {
+      fbMens.forEach(fm => {
+        if (!base.find(b => b.id === fm.id)) base.push(fm);
+        else {
+          // Actualizar datos del default con los de Firebase (por si el admin editó)
+          const idx = base.findIndex(b => b.id === fm.id);
+          if (idx >= 0) base[idx] = { ...base[idx], ...fm };
+        }
       });
     }
+    _memStore.mens = base;
+    window.__rdMensajeros = base;
+    // Reescribir Firebase con la lista completa (garantiza que los defaults siempre estén)
+    FB.set("mens", base);
   });
-  FB.get("mens_users").then(data => {
-    if (data && typeof data === "object") {
-      Object.values(data).forEach(u => {
-        if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-      });
-    }
-  });
+
+  // ── USUARIOS: merge USERS + Firebase (el login nunca pierde usuarios) ──────
+  // También escribir los nuevos usuarios del código en Firebase para que persistan
+  const syncUsersToFirebase = async () => {
+    const fbUsers   = await FB.get("users")     || {};
+    const fbMensU   = await FB.get("mens_users") || {};
+    const allFB = { ...fbUsers, ...fbMensU };
+
+    // Agregar usuarios de Firebase que no estén en USERS local
+    Object.values(allFB).forEach(u => {
+      if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+    });
+
+    // Escribir en Firebase todos los usuarios del código que no estén allí
+    // (esto persiste acastillo y sguzman en la BD aunque nunca se loguearon)
+    USERS.forEach(u => {
+      if (u.role === "driver" && !allFB[u.id]) {
+        FB.set(`users/${u.id}`, u);
+        if (u.driverId) FB.set(`mens_users/${u.driverId}`, u);
+      }
+    });
+  };
+  syncUsersToFirebase();
 }
 
 const STATUS = {
@@ -4335,7 +4375,7 @@ const LoginScreen = ({ onLogin }) => {
   const [focused,  setFocused]  = useState("");
   const [success,  setSuccess]  = useState(false);
 
-  // Carga usuarios de Firebase al montar (para que mensajeros nuevos funcionen)
+  // Carga usuarios de Firebase al montar — merge completo: código + Firebase
   useEffect(() => {
     const loadFBUsers = async () => {
       try {
@@ -4343,16 +4383,23 @@ const LoginScreen = ({ onLogin }) => {
           FB.get("users"),
           FB.get("mens_users"),
         ]);
-        if (usersData && typeof usersData === "object") {
-          Object.values(usersData).forEach(u => {
-            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-          });
-        }
-        if (mensUsersData && typeof mensUsersData === "object") {
-          Object.values(mensUsersData).forEach(u => {
-            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-          });
-        }
+        const allFB = [
+          ...Object.values(usersData || {}),
+          ...Object.values(mensUsersData || {}),
+        ];
+        allFB.forEach(u => {
+          if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+        });
+        // Garantizar que todos los usuarios del código estén en Firebase
+        USERS.forEach(u => {
+          if (u.role === "driver") {
+            const inFB = allFB.find(f => f && f.id === u.id);
+            if (!inFB) {
+              FB.set(`users/${u.id}`, u);
+              if (u.driverId) FB.set(`mens_users/${u.driverId}`, u);
+            }
+          }
+        });
       } catch(e) { /* Firebase no disponible, usa USERS local */ }
     };
     loadFBUsers();
