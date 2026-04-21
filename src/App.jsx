@@ -2398,7 +2398,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const applyRoute = (nr) => {
       if (!nr || !nr.stops) return;
       if (writingRef.current) return; // ignorar Firebase mientras estamos escribiendo
-      const isDifferentRoute = nr.sentAt !== lastSentAt.current;
+      // Normalizar stops: Firebase puede devolver objeto {0:{},1:{}} en vez de array
+      const normalizedStops = Array.isArray(nr.stops)
+        ? nr.stops
+        : Object.values(nr.stops || {});
+      const route = { ...nr, stops: normalizedStops };
+      const isDifferentRoute = route.sentAt !== lastSentAt.current;
       if (!isDifferentRoute) return; // misma ruta → nunca sobreescribir estado del mensajero
 
       // Es una ruta diferente → verificar si hay trabajo activo antes de reemplazar
@@ -2409,8 +2414,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         if (hasActive) {
           // Encolar, no reemplazar
           setPendingRoutes(prev => {
-            if (prev.some(r => r.sentAt === nr.sentAt)) return prev;
-            const updated = [...prev, nr];
+            if (prev.some(r => r.sentAt === route.sentAt)) return prev;
+            const updated = [...prev, route];
             if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
             window.__rdPendingRoutes[myKey] = updated;
             LS.setPending(myKey, updated);
@@ -2419,13 +2424,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           return currentStops;
         }
         // Sin trabajo activo: aplicar nueva ruta
-        lastSentAt.current = nr.sentAt;
+        lastSentAt.current = route.sentAt;
         if (!window.__rdRouteStore) window.__rdRouteStore = {};
-        window.__rdRouteStore[myKey] = nr;
-        _memStore.routes[myKey] = nr;
-        onUpdateRoute(myKey, nr);
-        try { localStorage.setItem(LS_KEY, JSON.stringify(nr)); } catch(e) {}
-        return nr.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
+        window.__rdRouteStore[myKey] = route;
+        _memStore.routes[myKey] = route;
+        onUpdateRoute(myKey, route);
+        try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
+        return route.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
       });
     };
 
@@ -2435,10 +2440,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     };
 
     const applyPending = (queue) => {
-      if (!Array.isArray(queue)) return;
-      setPendingRoutes([...queue]);
+      // Firebase puede devolver array o objeto numérico {0:{...},1:{...}}
+      let arr = queue;
+      if (queue && !Array.isArray(queue) && typeof queue === "object") {
+        arr = Object.values(queue);
+      }
+      if (!Array.isArray(arr)) return;
+      setPendingRoutes([...arr]);
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = queue;
+      window.__rdPendingRoutes[myKey] = arr;
     };
 
     // 1) Leer desde Firebase al montar (para rutas nuevas del admin)
@@ -2453,33 +2463,58 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
     // 3) Listener de notificaciones del admin → mensajero (ruta asignada)
     let lastNotifKeys = new Set();
+    const checkNotifs = async () => {
+      try {
+        const data = await FB.get(`driverNotifs/${myKey}`);
+        if (!data) return;
+        Object.entries(data).forEach(([k, notif]) => {
+          if (lastNotifKeys.has(k) || notif.read) return;
+          lastNotifKeys.add(k);
+          if (notif.type === "route_assigned") {
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              new Notification(notif.title, { body: notif.body, icon: "/favicon.ico" });
+            }
+            if (typeof window.__rdShowDriverNotif === "function") {
+              window.__rdShowDriverNotif(notif);
+            }
+            FB.set(`driverNotifs/${myKey}/${k}`, { ...notif, read: true });
+          }
+        });
+      } catch(e) {}
+    };
     const unsubDriverNotifs = FB.listen(`driverNotifs/${myKey}`, (data) => {
       if (!data) return;
       Object.entries(data).forEach(([k, notif]) => {
         if (lastNotifKeys.has(k) || notif.read) return;
         lastNotifKeys.add(k);
         if (notif.type === "route_assigned") {
-          // Mostrar banner nativo del navegador si tiene permiso
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             new Notification(notif.title, { body: notif.body, icon: "/favicon.ico" });
           }
-          // Banner en pantalla
           if (typeof window.__rdShowDriverNotif === "function") {
             window.__rdShowDriverNotif(notif);
           }
-          // Marcar como leída
           FB.set(`driverNotifs/${myKey}/${k}`, { ...notif, read: true });
         }
       });
     });
 
-    // SIN polling — el polling era el que revertía los estados
+    // Polling de respaldo cada 8s para rutas + notifs (por si SSE falla)
+    const pollInterval = setInterval(() => {
+      if (!writingRef.current) {
+        FB.get(`routes/${myKey}`).then(applyRoute);
+        FB.get(`pendingRoutes/${myKey}`).then(applyPending);
+      }
+      checkNotifs();
+    }, 8000);
+    // Primera verificación de notificaciones al montar
+    checkNotifs();
 
     window.__rdSetPending = (driverId, queue) => {
       if (driverId === myKey) applyPending(queue);
     };
 
-    return () => { unsubRoute(); unsubChat(); unsubPending(); unsubDriverNotifs(); };
+    return () => { unsubRoute(); unsubChat(); unsubPending(); unsubDriverNotifs(); clearInterval(pollInterval); };
   }, [myKey]); // eslint-disable-line
 
   useEffect(() => { const t=setInterval(()=>setTime(new Date()),1000); return()=>clearInterval(t); },[]);
@@ -7058,9 +7093,9 @@ const CircuitEngine = () => {
                 <button onClick={() => setPhase(phase === "review" ? "route" : "review")} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#059669,#10b981)", color: "white", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", boxShadow: "0 3px 12px #10b98130", minWidth: 100 }}>
                   {phase === "review" ? "Ver ruta →" : "← Revisar"}
                 </button>
-                {phase === "route" && (
+                  {phase === "route" && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const confirmed = stops.filter(s => s.stopNum != null);
                       const allMens = window.__rdMensajeros || DEFAULT_MENSAJEROS;
                       const norm = (s) => (s||"").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -7077,17 +7112,23 @@ const CircuitEngine = () => {
                       };
 
                       // ── LÓGICA DE COLA ─────────────────────────────────────────
-                      // Si el mensajero ya tiene una ruta activa con paradas pendientes,
-                      // la nueva va a la cola. Si no, se asigna directamente como activa.
-                      const currentActive = (window.__rdRouteStore||{})[driverId];
-                      const hasActiveStops = currentActive?.stops?.some(
+                      // Verificar trabajo activo DESDE FIREBASE (fuente de verdad real)
+                      const fbRoute = await FB.get(`routes/${driverId}`);
+                      const fbStops = fbRoute?.stops
+                        ? (Array.isArray(fbRoute.stops) ? fbRoute.stops : Object.values(fbRoute.stops))
+                        : [];
+                      const hasActiveStops = fbStops.some(
                         s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
                       );
 
                       if (hasActiveStops) {
                         // → Agregar a la cola de rutas pendientes
+                        // Leer cola actual desde Firebase también
+                        const fbQueue = await FB.get(`pendingRoutes/${driverId}`);
+                        const currentQueue = Array.isArray(fbQueue) ? fbQueue
+                          : fbQueue && typeof fbQueue === "object" ? Object.values(fbQueue) : [];
                         if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                        const queue = [...(window.__rdPendingRoutes[driverId] || []), route];
+                        const queue = [...currentQueue, route];
                         window.__rdPendingRoutes[driverId] = queue;
                         LS.setPending(driverId, queue);
                         // Notificar al mensajero de la nueva ruta en cola
