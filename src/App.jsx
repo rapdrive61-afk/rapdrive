@@ -2194,17 +2194,23 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       const isDone  = stop.driverStatus === "delivered";
       const isProb  = stop.driverStatus === "problema";
       const isNow   = stop === (stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending"));
+      // Color: verde entregado, rojo fallido, azul activo, amarillo pendiente
       const color   = isDone ? "#10b981" : isProb ? "#ef4444" : isNow ? "#3b82f6" : "#f59e0b";
-      const size    = isNow ? 44 : 34;
+      const size    = isNow ? 44 : 36;
+      const label   = String(stop.stopNum || "?");
+      const fs      = label.length > 2 ? 9 : label.length > 1 ? 11 : 13;
+      // Siempre muestra el número, solo cambia color y opacidad
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-        <circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${color}" opacity="${isDone?0.5:1}" stroke="white" stroke-width="2"/>
-        <text x="${size/2}" y="${size/2+4}" text-anchor="middle" font-size="${isNow?13:10}" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+        <circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${color}" opacity="${isDone||isProb?0.85:1}" stroke="white" stroke-width="${isNow?2.5:1.8}"/>
+        ${isDone ? `<circle cx="${size/2}" cy="${size/2}" r="${size/2-6}" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>` : ""}
+        ${isProb ? `<line x1="${size/2-5}" y1="${size/2-5}" x2="${size/2+5}" y2="${size/2+5}" stroke="white" stroke-width="1.5" opacity="0.5"/><line x1="${size/2+5}" y1="${size/2-5}" x2="${size/2-5}" y2="${size/2+5}" stroke="white" stroke-width="1.5" opacity="0.5"/>` : ""}
+        <text x="${size/2}" y="${size/2+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="900" fill="white" font-family="-apple-system,system-ui,Arial" opacity="${isDone||isProb?0.9:1}">${label}</text>
       </svg>`;
       const marker = new window.google.maps.Marker({
         map: gMapRef.current,
         position: { lat: stop.lat, lng: stop.lng },
         title: `#${stop.stopNum} ${stop.client}`,
-        zIndex: isNow ? 999 : isDone ? 1 : 10,
+        zIndex: isNow ? 999 : isDone ? 1 : isProb ? 2 : 10,
         icon: {
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
           scaledSize: new window.google.maps.Size(size, size),
@@ -4851,23 +4857,45 @@ const geocodeWithGoogle = async (rawAddress) => {
   }
   // Fallback: Nominatim (OpenStreetMap) for addresses Google couldn't find
   try {
-    const encoded = encodeURIComponent(raw + ", República Dominicana");
-    const nm = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=3&countrycodes=do`, {
-      headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" }
-    });
-    if (nm.ok) {
+    // Try multiple Nominatim queries: enriched first, then raw, then simplified
+    const nominatimQueries = [
+      rawAddress + ", República Dominicana",
+      expandRDAddress(rawAddress) + ", República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
+    ];
+    for (const nmQuery of nominatimQueries) {
+      const encoded = encodeURIComponent(nmQuery);
+      const nm = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`, {
+        headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0 (delivery-routing)" }
+      });
+      if (!nm.ok) continue;
       const nmData = await nm.json();
       if (nmData && nmData.length > 0) {
-        const top = nmData[0];
-        const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-        if (lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3) {
+        // Filter to RD bounding box
+        const rdResults = nmData.filter(r => {
+          const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+          return lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
+        });
+        if (rdResults.length > 0) {
+          const top = rdResults[0];
+          const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+          // Score based on OSM type
+          let conf = 55;
+          if (top.type === "house")             conf = 88;
+          else if (top.type === "building")     conf = 82;
+          else if (top.class === "highway")     conf = 74;
+          else if (top.type === "residential")  conf = 70;
+          else if (top.class === "place")       conf = 62;
+          // Bonus if address includes a number from original
+          const nums = rawAddress.match(/\d{1,4}/g);
+          if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
           return {
             ok: true, lat, lng,
-            display: top.display_name,
-            confidence: top.type === "house" ? 85 : top.class === "highway" ? 72 : 60,
+            display: top.display_name.split(",").slice(0,3).join(",").trim(),
+            confidence: conf,
             types: [top.type || "nominatim"],
-            allResults: nmData.slice(0,3).map(r => ({
-              display: r.display_name,
+            allResults: rdResults.slice(0,3).map(r => ({
+              display: r.display_name.split(",").slice(0,3).join(",").trim(),
               lat: parseFloat(r.lat), lng: parseFloat(r.lon),
               confidence: 55,
             })),
@@ -4927,6 +4955,8 @@ const buildQueryVariants = (raw) => {
   if (secMatch) {
     const sec = secMatch[1].trim();
     variants.add(sec + SD);
+    variants.add(sec + ", Santo Domingo Este" + RD);
+    variants.add(sec + ", Santo Domingo Oeste" + RD);
     // Agregar calle + sector para mayor precisión
     const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
     if (calleMatch) {
@@ -4938,6 +4968,7 @@ const buildQueryVariants = (raw) => {
   const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
   if (calleNum && !hasCity) {
     variants.add(calleNum[0].trim() + SD);
+    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
   }
 
   // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
@@ -4949,8 +4980,20 @@ const buildQueryVariants = (raw) => {
     variants.add(parts[0] + SD);
   }
 
+  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
+  const numMatch = expanded.match(/(\d{1,4})/);
+  if (numMatch) {
+    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
+    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
+  }
+
+  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
+  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
+  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
+  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
+
   // Eliminar variantes vacías o muy cortas
-  return [...variants].filter(v => v && v.length > 5);
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
 };
 
 // RD-specific address normalizer - expanded for Dominican Republic
@@ -5011,9 +5054,20 @@ const expandRDAddress = (s) => {
     [/\bsdq\b/gi,              "Santo Domingo"],
     [/\bstgo\.?\b/gi,          "Santiago"],
     [/\bstgo\s+de\s+los\s+cab\b/gi, "Santiago de los Caballeros"],
-    [/\blp\b/gi,               "La Romana"],
+    [/\blr\b/gi,               "La Romana"],
     [/\bpup\b/gi,              "Punta Cana"],
     [/\bspm\b/gi,              "San Pedro de Macorís"],
+    [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
+    [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
+    [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
+    // Sectores comunes SD
+    [/\bnaco\b/gi,             "Naco, Santo Domingo"],
+    [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
+    [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
+    [/\bpolo\s*gov\b/gi,       "Polígono Central, Santo Domingo"],
+    [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
+    [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
+    [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
   ];
 
   for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
@@ -5752,8 +5806,8 @@ const CircuitEngine = () => {
       setGeoProgress(pct);
 
       // Yield al browser en CADA parada para que el progreso se vea siempre
-      // (con 40+ paradas el batch de 5 tardaba demasiado en el primer yield)
-      await new Promise(r => setTimeout(r, 0));
+      // Pequeño delay para no saturar la API de Google (rate limit)
+      await new Promise(r => setTimeout(r, stop.status === "error" ? 80 : 30));
     }
 
     geocodingRef.current = false;
@@ -6002,82 +6056,160 @@ const CircuitEngine = () => {
         {/* ════ MAPPING ════ */}
         {phase === "mapping" && (
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-            <div style={{ width: 300, borderRight: "1px solid #0d1420", padding: "16px 18px", overflow: "auto", flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ animation: "fadeUp .3s ease" }}>
-                <div style={{ fontSize: 13, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 2 }}>Configurar importación</div>
-                <div style={{ fontSize: 11, color: "#4b5563" }}>{rawRows.length} filas detectadas</div>
-              </div>
 
-              {/* -- GEOCODIFICAR - TOP CTA (moved up) -- */}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setPhase("upload")} className="gh" style={{ flex: 1, padding: "9px", borderRadius: 9, border: "1px solid #1e2d3d", background: "transparent", color: "#4b5563", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer" }}>← Atrás</button>
-                <button onClick={runGeocoding} disabled={!mapping.address} style={{ flex: 2, padding: "9px", borderRadius: 9, border: "none", background: mapping.address ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#131f30", color: mapping.address ? "white" : "#374151", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: mapping.address ? "pointer" : "not-allowed", boxShadow: mapping.address ? "0 4px 14px #3b82f630" : "none", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  {mapping.address ? "Geocodificar →" : "Selecciona dirección primero"}
-                </button>
-              </div>
+            {/* LEFT PANEL */}
+            <div style={{ width: 320, borderRight: "1px solid #0d1420", padding: "0", overflow: "auto", flexShrink: 0, display: "flex", flexDirection: "column", background:"#060b10" }}>
 
-              {/* -- MENSAJERO + RUTA -- */}
-              <div style={{ background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.18)", borderRadius:10, padding:"12px" }}>
-                <label style={{ fontSize: 10, color: "#60a5fa", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px", display: "block", marginBottom: 5 }}>MENSAJERO</label>
-                <select value={driverName} onChange={e => setDriverName(e.target.value)} style={{ ...sel, marginBottom: 8 }}>
-                  {(window.__rdMensajeros || DEFAULT_MENSAJEROS).filter(m => m.active).map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-                <label style={{ fontSize: 10, color: "#60a5fa", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px", display: "block", marginBottom: 5 }}>NOMBRE DE RUTA</label>
-                <input value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="Ej: ERICK ABRIL 14" style={{ ...inp }} />
-              </div>
-
-              {/* -- COLUMN MAPPING -- */}
-              <div style={{ fontSize: 10, color: "#2d4a60", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px", marginTop:2 }}>MAPEAR COLUMNAS</div>
-              {[
-                { f: "address", l: "Dirección *",    req: true },
-                { f: "client",  l: "Cliente / Nombre" },
-                { f: "phone",   l: "Teléfono" },
-                { f: "tracking",l: "Código / Tracking (SP0...)" },
-                { f: "sector",  l: "Sector / Barrio" },
-                { f: "ciudad",  l: "Ciudad" },
-                { f: "notes",   l: "Referencia / Notas" },
-              ].map(({ f, l, req }) => (
-                <div key={f}>
-                  <label style={{ fontSize: 10, color: req ? "#60a5fa" : "#2d4a60", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px", display: "block", marginBottom: 4 }}>{l.toUpperCase()}</label>
-                  <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))} style={sel}>
-                    <option value="">— Omitir —</option>
-                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                  {mapping[f] && <div style={{ fontSize: 10, color: "#10b981", marginTop: 2 }}>✓ {mapping[f]}</div>}
+              {/* Panel header */}
+              <div style={{ padding:"16px 18px 12px", borderBottom:"1px solid #0d1420", background:"linear-gradient(180deg,#0a1019,#060b10)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <div style={{ width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 16px rgba(59,130,246,0.4)",flexShrink:0 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9" }}>Configurar importación</div>
+                    <div style={{ fontSize:11,color:"#374151",marginTop:1 }}>
+                      <span style={{ color:"#3b82f6",fontWeight:700 }}>{rawRows.length}</span> filas detectadas · <span style={{ color:"#10b981",fontWeight:700 }}>{headers.length}</span> columnas
+                    </div>
+                  </div>
                 </div>
-              ))}
 
+                {/* CTA buttons */}
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => setPhase("upload")} className="gh"
+                    style={{ flex:1, padding:"8px", borderRadius:8, border:"1px solid #1e2d3d", background:"transparent", color:"#4b5563", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                    Atrás
+                  </button>
+                  <button onClick={runGeocoding} disabled={!mapping.address}
+                    style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background: mapping.address ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#131f30", color: mapping.address ? "white" : "#374151", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor: mapping.address ? "pointer" : "not-allowed", boxShadow: mapping.address ? "0 4px 16px #3b82f640" : "none", display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"all .15s" }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    {mapping.address ? "Geocodificar →" : "Asigna Dirección primero"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable content */}
+              <div style={{ flex:1, overflow:"auto", padding:"14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+
+                {/* MENSAJERO + RUTA */}
+                <div style={{ background:"rgba(59,130,246,0.05)", border:"1px solid rgba(59,130,246,0.15)", borderRadius:12, padding:"12px 14px" }}>
+                  <div style={{ fontSize:9.5,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:8 }}>📦 DESTINO DE LA RUTA</div>
+                  <label style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",display:"block",marginBottom:4 }}>MENSAJERO</label>
+                  <select value={driverName} onChange={e => setDriverName(e.target.value)} style={{ ...sel, marginBottom:10 }}>
+                    {(window.__rdMensajeros || DEFAULT_MENSAJEROS).filter(m => m.active).map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  <label style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",display:"block",marginBottom:4 }}>NOMBRE DE RUTA</label>
+                  <input value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="Ej: ADONIS ABRIL 20" style={{ ...inp }} />
+                </div>
+
+                {/* COLUMN MAPPING */}
+                <div>
+                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:10,display:"flex",alignItems:"center",gap:6 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+                    MAPEAR COLUMNAS
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {[
+                      { f:"address",  l:"Dirección",          req:true,  icon:"📍" },
+                      { f:"client",   l:"Cliente / Nombre",   req:false, icon:"👤" },
+                      { f:"phone",    l:"Teléfono",           req:false, icon:"📞" },
+                      { f:"tracking", l:"Código / Tracking",  req:false, icon:"🏷" },
+                      { f:"sector",   l:"Sector / Barrio",    req:false, icon:"🗺" },
+                      { f:"ciudad",   l:"Ciudad",             req:false, icon:"🏙" },
+                      { f:"notes",    l:"Referencia / Notas", req:false, icon:"📝" },
+                    ].map(({ f, l, req, icon }) => (
+                      <div key={f} style={{ background: mapping[f] ? "rgba(16,185,129,0.04)" : "rgba(255,255,255,0.02)", border:`1px solid ${mapping[f] ? "rgba(16,185,129,0.18)" : req ? "rgba(59,130,246,0.2)" : "#0d1420"}`, borderRadius:9, padding:"8px 10px", transition:"border .2s" }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+                          <label style={{ fontSize:10,color: req ? "#60a5fa" : "#4b5563",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px",display:"flex",alignItems:"center",gap:5 }}>
+                            <span>{icon}</span>{l.toUpperCase()}{req && <span style={{ color:"#ef4444",marginLeft:2 }}>*</span>}
+                          </label>
+                          {mapping[f] && <span style={{ fontSize:9,color:"#10b981",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>✓ OK</span>}
+                        </div>
+                        <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))}
+                          style={{ ...sel, padding:"6px 10px", fontSize:11, border:`1px solid ${mapping[f] ? "rgba(16,185,129,0.25)" : "#1e2d3d"}` }}>
+                          <option value="">— Sin asignar —</option>
+                          {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mapping status summary */}
+                <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid #0d1420", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>RESUMEN</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+                    {[
+                      ["Dirección",  mapping.address  ? "✓" : "—", mapping.address  ? "#10b981" : "#ef4444"],
+                      ["Cliente",    mapping.client   ? "✓" : "—", mapping.client   ? "#10b981" : "#374151"],
+                      ["Teléfono",   mapping.phone    ? "✓" : "—", mapping.phone    ? "#10b981" : "#374151"],
+                      ["Tracking",   mapping.tracking ? "✓" : "—", mapping.tracking ? "#10b981" : "#374151"],
+                      ["Sector",     mapping.sector   ? "✓" : "—", mapping.sector   ? "#10b981" : "#374151"],
+                      ["Ciudad",     mapping.ciudad   ? "✓" : "—", mapping.ciudad   ? "#10b981" : "#374151"],
+                    ].map(([l,v,c]) => (
+                      <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:10, padding:"2px 0" }}>
+                        <span style={{ color:"#374151",fontFamily:"'Inter',sans-serif" }}>{l}</span>
+                        <span style={{ color:c, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
             </div>
-            {/* Preview */}
-            <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
-              <div style={{ fontSize: 10, color: "#1e3550", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 12 }}>PREVISUALIZACIÓN - {Math.min(rawRows.length, 10)} FILAS</div>
-              <div style={{ borderRadius: 12, border: "1px solid #0d1420", overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+
+            {/* RIGHT: Preview table */}
+            <div style={{ flex:1, overflow:"auto", padding:"20px", background:"#060b10" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                <div style={{ fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px" }}>
+                  PREVISUALIZACIÓN · {Math.min(rawRows.length, 10)} DE {rawRows.length} FILAS
+                </div>
+                <div style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif" }}>
+                  Columnas mapeadas: <span style={{ color:"#10b981",fontWeight:700 }}>{Object.values(mapping).filter(Boolean).length}</span> / {headers.length}
+                </div>
+              </div>
+              <div style={{ borderRadius:14, border:"1px solid #0d1420", overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,0.4)" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #0d1420", background: "#060b10" }}>
-                      {headers.slice(0, 6).map(h => (
-                        <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontSize: 9.5, color: Object.values(mapping).includes(h) ? "#60a5fa" : "#1e3550", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px", whiteSpace: "nowrap" }}>
-                          {h}{Object.values(mapping).includes(h) && " ✓"}
-                        </th>
-                      ))}
+                    <tr style={{ background:"#080e16", borderBottom:"1px solid #131f30" }}>
+                      {headers.slice(0, 6).map(h => {
+                        const isMapped = Object.values(mapping).includes(h);
+                        const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
+                        const icons = { address:"📍", client:"👤", phone:"📞", tracking:"🏷", sector:"🗺", ciudad:"🏙", notes:"📝" };
+                        return (
+                          <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9.5, color: isMapped ? "#60a5fa" : "#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.8px", whiteSpace:"nowrap", borderRight:"1px solid #0d1420" }}>
+                            {isMapped && <span style={{ marginRight:4 }}>{icons[fieldKey]||""}</span>}
+                            {h}
+                            {isMapped && <span style={{ marginLeft:6, color:"#10b981", fontSize:9 }}>✓</span>}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
                     {rawRows.slice(0, 10).map((row, i) => (
-                      <tr key={i} className="rh" style={{ borderBottom: "1px solid #080e16", transition: "background .1s" }}>
-                        {headers.slice(0, 6).map(h => (
-                          <td key={h} style={{ padding: "8px 12px", fontSize: 11.5, color: Object.values(mapping).includes(h) ? "#e2e8f0" : "#374151", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {String(row[h] || "")}
-                          </td>
-                        ))}
+                      <tr key={i} className="rh" style={{ borderBottom:"1px solid #080e16", transition:"background .1s", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                        {headers.slice(0, 6).map(h => {
+                          const isMapped = Object.values(mapping).includes(h);
+                          return (
+                            <td key={h} style={{ padding:"9px 14px", fontSize:11.5, color: isMapped ? "#e2e8f0" : "#374151", maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderRight:"1px solid #0a0f18" }}>
+                              {String(row[h] || "")}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {rawRows.length > 10 && (
+                <div style={{ textAlign:"center", marginTop:10, fontSize:11, color:"#2d4a60", fontFamily:"'Inter',sans-serif" }}>
+                  + {rawRows.length - 10} filas más no mostradas
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -6831,8 +6963,8 @@ Click para cerrar sesión`}
       {feedOpen  && <ActivityFeed events={events} onClose={()=>setFeedOpen(false)}/>}
       {modalOpen && <ModalNewDelivery onClose={()=>setModalOpen(false)} onCreated={handleCreated}/>}
 
-      {/* FAB */}
-      {rc.canDeleteDeliveries && <button onClick={()=>{setModalOpen(true);setNotifOpen(false);setFeedOpen(false);}} style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",border:"none",borderRadius:28,padding:"11px 22px",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",letterSpacing:"1px",boxShadow:"0 8px 32px #3b82f650, 0 2px 8px rgba(0,0,0,0.4)",zIndex:800,transition:"all .2s"}}>
+      {/* FAB - oculto en import/circuit para no molestar */}
+      {rc.canDeleteDeliveries && nav !== "import" && <button onClick={()=>{setModalOpen(true);setNotifOpen(false);setFeedOpen(false);}} style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",border:"none",borderRadius:28,padding:"11px 22px",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",letterSpacing:"1px",boxShadow:"0 8px 32px #3b82f650, 0 2px 8px rgba(0,0,0,0.4)",zIndex:800,transition:"all .2s"}}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
         NUEVA ENTREGA
       </button>}
