@@ -2021,9 +2021,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [search,     setSearch]     = useState("");
   const [selStop,    setSelStop]    = useState(null);
   const [mapExpanded, setMapExpanded] = useState(false);
-  const [splitPct,    setSplitPct]    = useState(40);
-  const [splitDrag,   setSplitDrag]   = useState(false);
-  const splitRef = useRef({ startY:0, startPct:40 });
+  // Bottom sheet: "peek" | "half" | "full"
+  const [sheetSnap,   setSheetSnap]   = useState("half");
+  const [sheetDragY,  setSheetDragY]  = useState(null); // null = not dragging
+  const sheetDragRef  = useRef({ startY:0, startH:0 });
+  const sheetRef      = useRef(null);
+  const [sheetH,      setSheetH]      = useState(null); // null = use snap
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [filterMode, setFilterMode] = useState("all");
 
@@ -2186,27 +2189,80 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // -- Actualizar marcadores cuando cambian paradas ------------------------------
   useEffect(() => {
     if (!gMapRef.current) return;
-    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current.forEach(m => { try { m.setMap(null); } catch(e){} });
     markersRef.current = [];
     const validStops = stops.filter(s => s.lat && s.lng);
     if (!validStops.length) return;
     const bounds = new window.google.maps.LatLngBounds();
+    const currentStop = stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending");
+
+    // ── Draw glow polyline first (so markers render on top) ──
+    const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
+    if (ordered.length > 1) {
+      // Outer glow line (wide, low opacity)
+      const glowLine = new window.google.maps.Polyline({
+        map: gMapRef.current,
+        path: ordered.map(s=>({lat:s.lat,lng:s.lng})),
+        strokeColor: "#60a5fa",
+        strokeOpacity: 0.18,
+        strokeWeight: 14,
+        zIndex: 1,
+      });
+      // Core bright line
+      const coreLine = new window.google.maps.Polyline({
+        map: gMapRef.current,
+        path: ordered.map(s=>({lat:s.lat,lng:s.lng})),
+        strokeColor: "#93c5fd",
+        strokeOpacity: 0.9,
+        strokeWeight: 2.5,
+        zIndex: 2,
+        icons: [{
+          icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.2, strokeColor:"#bfdbfe", strokeWeight:1.5, fillColor:"#bfdbfe", fillOpacity:1 },
+          offset: "100%",
+          repeat: "120px"
+        }],
+      });
+      markersRef.current.push(glowLine, coreLine);
+    }
+
+    // ── Glass premium markers ──
     validStops.forEach(stop => {
       const isDone  = stop.driverStatus === "delivered";
       const isProb  = stop.driverStatus === "problema";
-      const isNow   = stop === (stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending"));
-      // Color: verde entregado, rojo fallido, azul activo, amarillo pendiente
-      const color   = isDone ? "#10b981" : isProb ? "#ef4444" : isNow ? "#3b82f6" : "#f59e0b";
-      const size    = isNow ? 44 : 36;
+      const isNow   = stop === currentStop;
       const label   = String(stop.stopNum || "?");
       const fs      = label.length > 2 ? 9 : label.length > 1 ? 11 : 13;
-      // Siempre muestra el número, solo cambia color y opacidad
+
+      // Color palette
+      const mainColor  = isDone ? "#10b981" : isProb ? "#ef4444" : isNow ? "#3b82f6" : "#f59e0b";
+      const glowColor  = isDone ? "rgba(16,185,129,0.55)" : isProb ? "rgba(239,68,68,0.55)" : isNow ? "rgba(59,130,246,0.65)" : "rgba(245,158,11,0.5)";
+      const innerLight = isDone ? "rgba(52,211,153,0.7)" : isProb ? "rgba(252,165,165,0.7)" : isNow ? "rgba(147,197,253,0.8)" : "rgba(252,211,77,0.7)";
+      const size = isNow ? 48 : 38;
+      const r    = size / 2;
+      const ri   = r - 3; // inner radius for glass effect
+
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-        <circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${color}" opacity="${isDone||isProb?0.85:1}" stroke="white" stroke-width="${isNow?2.5:1.8}"/>
-        ${isDone ? `<circle cx="${size/2}" cy="${size/2}" r="${size/2-6}" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>` : ""}
-        ${isProb ? `<line x1="${size/2-5}" y1="${size/2-5}" x2="${size/2+5}" y2="${size/2+5}" stroke="white" stroke-width="1.5" opacity="0.5"/><line x1="${size/2+5}" y1="${size/2-5}" x2="${size/2-5}" y2="${size/2+5}" stroke="white" stroke-width="1.5" opacity="0.5"/>` : ""}
-        <text x="${size/2}" y="${size/2+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="900" fill="white" font-family="-apple-system,system-ui,Arial" opacity="${isDone||isProb?0.9:1}">${label}</text>
+        <defs>
+          <radialGradient id="g${stop.stopNum||'x'}" cx="38%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="${innerLight}" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="${mainColor}" stop-opacity="0.95"/>
+          </radialGradient>
+          <filter id="f${stop.stopNum||'x'}" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="${isNow?3:2}" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        ${isNow ? `<circle cx="${r}" cy="${r}" r="${r-0.5}" fill="${glowColor}" opacity="0.35" filter="url(#f${stop.stopNum||'x'})"/>` : ''}
+        <circle cx="${r}" cy="${r}" r="${ri}" fill="url(#g${stop.stopNum||'x'})" stroke="rgba(255,255,255,${isNow?'0.55':'0.35'})" stroke-width="${isNow?2:1.5}"/>
+        <ellipse cx="${r*0.7}" cy="${r*0.55}" rx="${ri*0.38}" ry="${ri*0.2}" fill="rgba(255,255,255,0.28)" transform="rotate(-20,${r*0.7},${r*0.55})"/>
+        ${isDone
+          ? `<path d="M${r-5} ${r+1}l3.5 3.5 6.5-6.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>`
+          : isProb
+            ? `<text x="${r}" y="${r+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs+2}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">!</text>`
+            : `<text x="${r}" y="${r+1}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="900" fill="white" font-family="-apple-system,sans-serif" opacity="0.95">${label}</text>`
+        }
       </svg>`;
+
       const marker = new window.google.maps.Marker({
         map: gMapRef.current,
         position: { lat: stop.lat, lng: stop.lng },
@@ -2215,27 +2271,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         icon: {
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
           scaledSize: new window.google.maps.Size(size, size),
-          anchor: new window.google.maps.Point(size/2, size/2),
+          anchor: new window.google.maps.Point(r, r),
         },
       });
       marker.addListener("click", () => setSelStop(stop));
       markersRef.current.push(marker);
       bounds.extend({ lat: stop.lat, lng: stop.lng });
     });
-    // Draw route polyline
-    const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
-    if (ordered.length > 1) {
-      const line = new window.google.maps.Polyline({
-        map: gMapRef.current,
-        path: [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...ordered.map(s=>({lat:s.lat,lng:s.lng})), { lat: DEPOT.lat, lng: DEPOT.lng }],
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.5,
-        strokeWeight: 2,
-        icons: [{ icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.5, strokeColor:"#3b82f6" }, offset: "50%" }],
-      });
-      markersRef.current.push(line);
-    }
-    gMapRef.current.fitBounds(bounds, { top:20, right:20, bottom:20, left:20 });
+
+    gMapRef.current.fitBounds(bounds, { top:24, right:24, bottom:24, left:24 });
   }, [stops, mapReady]);
 
   // -- Centrar en parada seleccionada --------------------------------------------
@@ -2374,16 +2418,48 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   };
   const routeKm = myRoute?.km || 0;
 
+  // Sheet height calculation
+  const HEADER_H = 64;
+  const NAV_H    = 68;
+  const SNAP = {
+    peek: 220,   // just stats + search handle visible
+    half: Math.round(window.innerHeight * 0.52),
+    full: window.innerHeight - HEADER_H,
+  };
+  const resolvedSheetH = sheetH !== null ? sheetH : SNAP[sheetSnap] || SNAP.half;
+
+  const handleSheetDragStart = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    sheetDragRef.current = { startY: touch.clientY, startH: resolvedSheetH };
+    setSheetDragY(touch.clientY);
+  };
+  const handleSheetDragMove = (e) => {
+    if (sheetDragY === null) return;
+    const touch = e.touches ? e.touches[0] : e;
+    const dy = sheetDragRef.current.startY - touch.clientY;
+    const next = Math.min(SNAP.full, Math.max(SNAP.peek, sheetDragRef.current.startH + dy));
+    setSheetH(next);
+  };
+  const handleSheetDragEnd = () => {
+    if (sheetDragY === null) return;
+    setSheetDragY(null);
+    // Snap to nearest
+    if (sheetH !== null) {
+      const closest = Object.entries(SNAP).reduce((a,[k,v]) =>
+        Math.abs(v - sheetH) < Math.abs(SNAP[a] - sheetH) ? k : a, "half");
+      setSheetSnap(closest);
+      setSheetH(null);
+    }
+  };
+
   return (
     <div
       style={{ position:"fixed",inset:0,background:"#060c14",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",color:"#f1f5f9",overflow:"hidden" }}
-      onPointerMove={e => {
-        if (!splitDrag) return;
-        const pct = Math.min(80, Math.max(10, splitRef.current.startPct + ((e.clientY - splitRef.current.startY) / window.innerHeight) * 100));
-        setSplitPct(Math.round(pct));
-      }}
-      onPointerUp={() => setSplitDrag(false)}
-      onPointerLeave={() => setSplitDrag(false)}
+      onPointerMove={handleSheetDragMove}
+      onPointerUp={handleSheetDragEnd}
+      onPointerLeave={handleSheetDragEnd}
+      onTouchMove={handleSheetDragMove}
+      onTouchEnd={handleSheetDragEnd}
     >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&family=DM+Mono:wght@500&display=swap');
@@ -2449,25 +2525,19 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         </div>
 
         {/* Expandir mapa */}
-        <button onClick={()=>setMapExpanded(o=>!o)} className="rd-btn"
+        <button onClick={()=>{ setSheetSnap(s=>s==="peek"?"half":s==="half"?"full":"peek"); setSheetH(null); }} className="rd-btn"
           style={{ width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2">
-            {mapExpanded
+            {sheetSnap==="full"
               ? <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/></>
               : <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>}
           </svg>
         </button>
       </div>
 
-      {/* ══ MAP SECTION ══ */}
-      <div style={{ position:"relative", height: (tab==="chat"||tab==="pending"||tab==="history")||(mapExpanded?"0px":false)?"0px":(splitPct+"%"), flexShrink:0, transition:splitDrag?"none":"height .22s ease", overflow:"hidden", background:"#060c14" }}>
-        <div ref={mapRef} style={{ width:"100%", height:"100%" }}/>
-
-        {/* drag handle at bottom */}
-        <div style={{ position:"absolute",bottom:0,left:0,right:0,height:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"ns-resize",zIndex:10 }}
-          onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);splitRef.current={startY:e.clientY,startPct:splitPct};setSplitDrag(true);}}>
-          <div style={{ width:36,height:4,borderRadius:4,background:"rgba(255,255,255,0.15)" }}/>
-        </div>
+      {/* ══ MAP SECTION — takes remaining space, always visible ══ */}
+      <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14" }}>
+        <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
 
         {/* map controls bottom-right */}
         <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
@@ -2598,108 +2668,60 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         )}
       </div>
 
-      {/* ══ ROUTE PANEL ══ */}
+      {/* ══ BOTTOM SHEET — route panel floats over the map ══ */}
       {tab === "route" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#07101c" }}>
+        <div
+          ref={sheetRef}
+          style={{
+            position:"absolute",
+            bottom:NAV_H,
+            left:0, right:0,
+            height: resolvedSheetH,
+            background:"rgba(7,16,28,0.97)",
+            backdropFilter:"blur(20px)",
+            WebkitBackdropFilter:"blur(20px)",
+            borderRadius:"20px 20px 0 0",
+            boxShadow:"0 -6px 40px rgba(0,0,0,0.55), 0 -1px 0 rgba(255,255,255,0.06)",
+            display:"flex", flexDirection:"column",
+            overflow:"hidden",
+            transition: sheetDragY !== null ? "none" : "height .28s cubic-bezier(.4,0,.2,1)",
+            zIndex:50,
+            touchAction:"none",
+          }}>
 
-          {/* ── Stats: 4 tarjetas premium edge-to-edge ── */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:0,flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+          {/* ── Drag handle — tap/drag from anywhere on this bar to resize ── */}
+          <div
+            style={{ flexShrink:0, paddingTop:10, paddingBottom:6, display:"flex", flexDirection:"column", alignItems:"center", gap:8, cursor:"ns-resize", touchAction:"none", userSelect:"none" }}
+            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); handleSheetDragStart(e); }}
+            onTouchStart={handleSheetDragStart}
+          >
+            <div style={{ width:36, height:4, borderRadius:4, background:"rgba(255,255,255,0.15)" }}/>
+          </div>
+
+          {/* ── Stats: 4 pills compactos ── */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, padding:"0 14px 0", flexShrink:0 }}>
             {[
-              {
-                icon:(
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                    <rect x="2" y="3" width="20" height="18" rx="3" stroke="#60a5fa" strokeWidth="1.6"/>
-                    <path d="M8 3v4M16 3v4M2 10h20" stroke="#60a5fa" strokeWidth="1.6" strokeLinecap="round"/>
-                    <rect x="6" y="14" width="3" height="3" rx="0.5" fill="#60a5fa" opacity="0.7"/>
-                    <rect x="10.5" y="14" width="3" height="3" rx="0.5" fill="#60a5fa" opacity="0.4"/>
-                    <rect x="15" y="14" width="3" height="3" rx="0.5" fill="#60a5fa" opacity="0.2"/>
-                  </svg>
-                ),
-                value: stops.filter(s=>s.stopNum).length,
-                label:"Paradas hoy",
-                color:"#3b82f6",
-                glow:"rgba(59,130,246,0.18)",
-                bg:"linear-gradient(145deg,rgba(14,30,55,0.95),rgba(10,20,40,0.8))",
-                border:"rgba(59,130,246,0.2)"
-              },
-              {
-                icon:(
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="9" stroke="#10b981" strokeWidth="1.6"/>
-                    <path d="M7.5 12.5l3 3 6-6" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                ),
-                value: delivered.length,
-                label:"Entregadas",
-                color:"#10b981",
-                glow:"rgba(16,185,129,0.18)",
-                bg:"linear-gradient(145deg,rgba(5,46,22,0.95),rgba(5,30,18,0.8))",
-                border:"rgba(16,185,129,0.2)"
-              },
-              {
-                icon:(
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="9" stroke="#f59e0b" strokeWidth="1.6"/>
-                    <path d="M12 7v5.5l3.5 2" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                ),
-                value: pending.length,
-                label:"Pendientes",
-                color:"#f59e0b",
-                glow:"rgba(245,158,11,0.18)",
-                bg:"linear-gradient(145deg,rgba(55,30,5,0.95),rgba(40,20,5,0.8))",
-                border:"rgba(245,158,11,0.2)"
-              },
-              {
-                icon:(
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                    <path d="M10.29 4.86L2.2 18a2 2 0 0 0 1.71 3h16.18a2 2 0 0 0 1.71-3L13.71 4.86a2 2 0 0 0-3.42 0z" stroke="#a78bfa" strokeWidth="1.6" strokeLinejoin="round"/>
-                    <line x1="12" y1="10" x2="12" y2="14" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round"/>
-                    <circle cx="12" cy="17" r="0.8" fill="#a78bfa"/>
-                  </svg>
-                ),
-                value: problems.length,
-                label:"Problemas",
-                color:"#a78bfa",
-                glow:"rgba(167,139,250,0.18)",
-                bg:"linear-gradient(145deg,rgba(30,15,60,0.95),rgba(20,10,45,0.8))",
-                border:"rgba(167,139,250,0.2)"
-              },
-            ].map((s,i)=>(
-              <div key={i} style={{
-                background: s.bg,
-                borderRight: i<3 ? `1px solid rgba(255,255,255,0.05)` : "none",
-                padding:"14px 10px 12px",
-                display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                position:"relative", overflow:"hidden",
-              }}>
-                {/* glow blob */}
-                <div style={{ position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",width:60,height:60,borderRadius:"50%",background:s.glow,filter:"blur(18px)",pointerEvents:"none" }}/>
-                {/* icon container */}
-                <div style={{
-                  width:44, height:44, borderRadius:14,
-                  background:`rgba(${i===0?"59,130,246":i===1?"16,185,129":i===2?"245,158,11":"167,139,250"},0.1)`,
-                  border:`1px solid ${s.border}`,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  boxShadow:`0 4px 16px ${s.glow}`,
-                  position:"relative", zIndex:1
-                }}>
-                  {s.icon}
-                </div>
-                {/* value */}
-                <div style={{ fontSize:26, fontWeight:800, color:"#f8fafc", lineHeight:1, letterSpacing:"-1px", position:"relative", zIndex:1 }}>
-                  {s.value}
-                </div>
-                {/* label */}
-                <div style={{ fontSize:9, fontWeight:700, color:s.color, letterSpacing:"0.8px", textTransform:"uppercase", position:"relative", zIndex:1, opacity:0.85 }}>
-                  {s.label}
+              { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="3" stroke="#60a5fa" strokeWidth="1.8"/><path d="M8 3v4M16 3v4M2 10h20" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round"/></svg>, value:stops.filter(s=>s.stopNum).length, label:"Paradas hoy", color:"#60a5fa", bg:"rgba(59,130,246,0.08)", border:"rgba(59,130,246,0.18)" },
+              { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#10b981" strokeWidth="1.8"/><path d="M7.5 12.5l3 3 6-6" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>, value:delivered.length, label:"Entregadas", color:"#10b981", bg:"rgba(16,185,129,0.08)", border:"rgba(16,185,129,0.18)" },
+              { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#f59e0b" strokeWidth="1.8"/><path d="M12 7v5.5l3.5 2" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/></svg>, value:pending.length, label:"Pendientes", color:"#f59e0b", bg:"rgba(245,158,11,0.08)", border:"rgba(245,158,11,0.18)" },
+              { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10.29 4.86L2.2 18a2 2 0 0 0 1.71 3h16.18a2 2 0 0 0 1.71-3L13.71 4.86a2 2 0 0 0-3.42 0z" stroke="#a78bfa" strokeWidth="1.8" strokeLinejoin="round"/><line x1="12" y1="10" x2="12" y2="14" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="17" r="0.8" fill="#a78bfa"/></svg>, value:problems.length, label:"Problemas", color:"#a78bfa", bg:"rgba(167,139,250,0.08)", border:"rgba(167,139,250,0.18)" },
+            ].map((s,i) => (
+              <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:12, padding:"8px 10px", display:"flex", alignItems:"center", gap:8, overflow:"hidden", minWidth:0 }}>
+                <div style={{ width:30,height:30,borderRadius:9,background:`rgba(${i===0?"59,130,246":i===1?"16,185,129":i===2?"245,158,11":"167,139,250"},0.12)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{s.icon}</div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:19, fontWeight:800, color:"#f8fafc", lineHeight:1, letterSpacing:"-0.5px" }}>{s.value}</div>
+                  <div style={{ fontSize:9, fontWeight:700, color:s.color, letterSpacing:"0.5px", textTransform:"uppercase", marginTop:2, opacity:0.8, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.label}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* ── Search bar ── */}
-          <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
+          {/* ── Search bar — also draggable ── */}
+          <div
+            style={{ padding:"10px 14px 0",flexShrink:0, touchAction:"none", userSelect:"none" }}
+            onPointerDown={e=>{ e.currentTarget.setPointerCapture(e.pointerId); handleSheetDragStart(e); }}
+            onTouchStart={handleSheetDragStart}
+          >
             <div style={{ display:"flex",gap:8 }}>
               <div style={{ flex:1,position:"relative" }}>
                 <svg style={{ position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -2772,7 +2794,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           )}
 
           {/* ── Stops list — edge-to-edge, scrollable ── */}
-          <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:76,marginTop:8 }}>
+          <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:16,marginTop:8,WebkitOverflowScrolling:"touch" }}>
 
             {/* Empty state - no route */}
             {!myRoute && (
