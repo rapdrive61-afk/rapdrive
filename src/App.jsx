@@ -141,6 +141,19 @@ if (typeof window !== "undefined") {
   FB.get("mens").then(data => {
     if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
   });
+  // Cargar nodo alternativo mensajeros/ (copia individual por id)
+  FB.get("mensajeros").then(data => {
+    if (data && typeof data === "object") {
+      const fromFB = Object.values(data).filter(Boolean);
+      if (fromFB.length > 0) {
+        const current = _memStore.mens || DEFAULT_MENSAJEROS;
+        const merged = [...current];
+        fromFB.forEach(m => { if (m.id && !merged.find(x => x.id === m.id)) merged.push(m); });
+        _memStore.mens = merged;
+        window.__rdMensajeros = merged;
+      }
+    }
+  });
   FB.get("users").then(data => {
     if (data && typeof data === "object") {
       Object.values(data).forEach(u => {
@@ -2192,7 +2205,20 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
 
 // -- Panel principal del mensajero - CIRCUIT DESIGN ---------------------------
 const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute }) => {
-  const myKey = driver.driverId || driver.id;
+  // myKey DEBE coincidir con el driverId que el admin usa al enviar rutas.
+  // El admin usa mensajero.id (de window.__rdMensajeros).
+  // Si el driver logueado tiene driverId, lo usamos. Si no, buscamos su mensajero
+  // en la lista por nombre para obtener el id correcto.
+  const myKey = (() => {
+    if (driver.driverId) return driver.driverId;
+    // Buscar en mensajeros por nombre (normalizado)
+    const norm = (s) => (s||"").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const allMens = window.__rdMensajeros || DEFAULT_MENSAJEROS;
+    const found = allMens.find(m => norm(m.name) === norm(driver.name));
+    if (found) return found.id;
+    // Último fallback
+    return driver.id;
+  })();
 
   // Buscar ruta en todos los canales disponibles al montar
   const _initRoute = () => {
@@ -3977,7 +4003,7 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
     fontFamily: "'Inter',sans-serif", outline: "none", width: "100%",
   };
 
-  const add = () => {
+  const add = async () => {
     const name = newName.trim().toUpperCase();
     if (!name) return;
     const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2);
@@ -3992,6 +4018,7 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
     });
 
     // Crear usuario de login para el mensajero
+    // CRÍTICO: driverId DEBE ser igual a newId (el id del mensajero en la lista)
     const newUser = {
       id: "U-" + Date.now(), name,
       email,
@@ -4000,15 +4027,18 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
       avatar: initials,
       zone: "DN",
       color: "#10b981",
-      driverId: newId,
+      driverId: newId,  // mismo que mensajero.id — el admin usará este para enviar rutas
     };
     USERS.push(newUser);
-    // Persistir en Firebase
-    FB.set(`users/${newUser.id}`, newUser);
-    FB.set(`mens_users/${newId}`, newUser);
+    // Persistir en Firebase — esperar escritura antes de mostrar éxito
+    await Promise.all([
+      FB.set(`users/${newUser.id}`, newUser),
+      FB.set(`mens_users/${newId}`, newUser),
+      FB.set(`mensajeros/${newId}`, newMens),
+    ]);
 
     setSaveMsg(`✓ ${name} agregado · Login: ${email} / driver123`);
-    setTimeout(() => setSaveMsg(""), 5000);
+    setTimeout(() => setSaveMsg(""), 6000);
     setNewName(""); setNewPhone(""); setNewEmail(""); setAdding(false);
   };
 
