@@ -1739,7 +1739,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
           {creating && (
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:16,animation:"fadeUp .3s ease"}}>
               <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 30px #3b82f640",animation:"pulse 1s infinite"}}>
-                <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><line x1="2" y1="10" x2="10" y2="10" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"/><line x1="3" y1="14" x2="9" y2="14" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" opacity="0.7"/><path d="M11 7h7.5a3.5 3.5 0 0 1 0 7H11V7z" fill="white"/><path d="M11 14h5l5 11" stroke="white" strokeWidth="2.5" strokeLinecap="round" fill="none"/><circle cx="21" cy="8" r="3.5" fill="#2563eb"/><circle cx="21" cy="7.5" r="1.2" fill="white"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
               </div>
               <div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9"}}>Creando entrega...</div>
               <div style={{fontSize:11,color:"#2d4a60"}}>Asignando conductor óptimo</div>
@@ -2170,33 +2170,11 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
       `}</style>
       <div style={{ width:360,animation:"dlFU .5s ease",padding:"0 16px" }}>
         <div style={{ textAlign:"center",marginBottom:32 }}>
-          <div style={{ width:72,height:72,borderRadius:20,background:"linear-gradient(155deg,#0d1e3d,#0a1628)",border:"1px solid rgba(59,130,246,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 32px rgba(59,130,246,0.3)",position:"relative",overflow:"hidden" }}>
-            {/* Speed lines */}
-            <svg style={{position:"absolute",left:3,top:"50%",transform:"translateY(-50%)"}} width="14" height="28" viewBox="0 0 14 28" fill="none">
-              <line x1="0" y1="6" x2="11" y2="6" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" opacity="0.9"/>
-              <line x1="0" y1="11" x2="9" y2="11" stroke="#3b82f6" strokeWidth="1.4" strokeLinecap="round" opacity="0.65"/>
-              <line x1="0" y1="16" x2="6" y2="16" stroke="#3b82f6" strokeWidth="1.1" strokeLinecap="round" opacity="0.4"/>
-            </svg>
-            {/* R con pin */}
-            <svg width="36" height="40" viewBox="0 0 44 50" fill="none" style={{marginLeft:5}}>
-              <path d="M8 6 L8 44" stroke="white" strokeWidth="7" strokeLinecap="round"/>
-              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="6.5" strokeLinecap="round" fill="none" opacity="0.9"/>
-              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" fill="none"/>
-              <circle cx="12" cy="34" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="2"/>
-              <circle cx="26" cy="37" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="2"/>
-              <ellipse cx="31" cy="10" rx="7" ry="9" fill="url(#dlPinG)"/>
-              <ellipse cx="31" cy="8.5" rx="3.5" ry="4" fill="white" opacity="0.9"/>
-              <circle cx="31" cy="8" r="2" fill="url(#dlPinG)"/>
-              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="url(#dlPinG)"/>
-              <defs><linearGradient id="dlPinG" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#1d4ed8"/></linearGradient></defs>
-            </svg>
+          <div style={{ width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="black"/><path d="M2 17l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round" opacity="0.4"/></svg>
           </div>
-          <div style={{ display:"flex",alignItems:"baseline",justifyContent:"center",gap:1,marginBottom:3 }}>
-            <span style={{ fontSize:22,fontWeight:900,color:"#3b82f6",letterSpacing:"-0.8px",fontFamily:"'DM Sans',sans-serif" }}>RAP</span>
-            <span style={{ fontSize:22,fontWeight:900,color:"white",letterSpacing:"-0.8px",fontFamily:"'DM Sans',sans-serif" }}>DRIVE</span>
-          </div>
-          <div style={{ fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"3px",fontWeight:700,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase" }}>PANEL MENSAJERO</div>
+          <div style={{ fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",letterSpacing:"-0.5px" }}>Rap Drive</div>
+          <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3,fontWeight:500,fontFamily:"'DM Sans',sans-serif",letterSpacing:"1.5px" }}>PANEL MENSAJERO</div>
         </div>
         <div style={{ background:"#111",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"24px",boxShadow:"0 24px 60px rgba(0,0,0,0.5)" }}>
           <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:16 }}>¿Quién eres?</div>
@@ -2912,6 +2890,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#1e2d3d transparent}
         *::-webkit-scrollbar{width:2px}*::-webkit-scrollbar-thumb{background:#1e2d3d;border-radius:2px}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes segActive{0%,100%{opacity:1;box-shadow:0 0 8px rgba(59,130,246,0.7)}50%{opacity:0.5;box-shadow:0 0 3px rgba(59,130,246,0.3)}}
+        @keyframes scannerLine{0%{background-position:-40% 0}100%{background-position:140% 0}}
         @keyframes slideInRow{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -2926,72 +2906,180 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         .rd-chip:hover{border-color:#1e3550!important}
       `}</style>
 
-      {/* ══ HEADER FIJO DEL MENSAJERO ══ */}
-      <div style={{ flexShrink:0, background:"#080f18", borderBottom:"1px solid #0d1a26", padding:"0 14px", height:64, display:"flex", alignItems:"center", gap:10, zIndex:100 }}>
-        {/* Hamburger */}
-        <button onClick={()=>setMenuOpen(o=>!o)} className="rd-btn"
-          style={{ width:38,height:38,borderRadius:10,background:menuOpen?"#0f1f30":"rgba(255,255,255,0.04)",border:`1px solid ${menuOpen?"#1e3550":"rgba(255,255,255,0.07)"}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .15s" }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={menuOpen?"#60a5fa":"rgba(255,255,255,0.55)"} strokeWidth="2.2">
-            {menuOpen
-              ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
-              : <><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></>}
-          </svg>
-        </button>
+      {/* ══ HEADER NUEVO - ESTILO MOCKUP ══ */}
+      <div style={{ flexShrink:0, background:"#07101c", borderBottom:"1px solid rgba(255,255,255,0.06)", padding:"0 16px", height:64, display:"flex", alignItems:"center", gap:12, zIndex:100 }}>
 
-        {/* Avatar foto circular */}
-        <div style={{ width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#1e3550,#0f2038)",border:"2px solid #1e3550",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#60a5fa",flexShrink:0 }}>
-          {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+        {/* Avatar con glow */}
+        <div style={{ position:"relative", flexShrink:0 }}>
+          <div style={{ width:42,height:42,borderRadius:14,background:"linear-gradient(135deg,#2563eb,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"white",boxShadow:"0 0 18px rgba(37,99,235,0.55)",letterSpacing:"-0.3px" }}>
+            {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+          </div>
+          {/* Dot de estado GPS */}
+          <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:locationStatus==="active"?"#22c55e":"#374151",border:"2px solid #07101c",boxShadow:locationStatus==="active"?"0 0 6px #22c55e":"none" }}/>
         </div>
 
-        {/* Nombre + zona */}
-        <div style={{ flex:1,minWidth:0 }}>
-          <div style={{ fontSize:14,fontWeight:700,color:"#f1f5f9",letterSpacing:"-0.2px",lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+        {/* Nombre + subtítulo GPS + ruta */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:15,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.3px",lineHeight:1.15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {driver.name||"Mensajero"}
           </div>
-          <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:1 }}>
-            <div style={{ width:6,height:6,borderRadius:"50%",
-              background: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151",
-              boxShadow: locationStatus==="active"?"0 0 6px #22c55e":locationStatus==="requesting"?"0 0 6px #f59e0b":"none",
-              animation: locationStatus==="requesting"?"pulse 1s infinite":"none",
-            }}/>
-            <span style={{ fontSize:10,fontWeight:600,letterSpacing:"0.2px",
-              color: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"rgba(255,255,255,0.3)"
-            }}>
-              {locationStatus==="active"?"GPS activo":locationStatus==="requesting"?"Obteniendo GPS...":locationStatus==="denied"?"GPS denegado":"En línea"}
+          <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:2 }}>
+            <div style={{ width:5,height:5,borderRadius:"50%",background:locationStatus==="active"?"#22c55e":"#374151",boxShadow:locationStatus==="active"?"0 0 5px #22c55e":"none",animation:locationStatus==="requesting"?"pulse 1s infinite":"none",flexShrink:0 }}/>
+            <span style={{ fontSize:10,fontWeight:600,color:locationStatus==="active"?"#22c55e":"rgba(255,255,255,0.3)",letterSpacing:"0.3px" }}>
+              {locationStatus==="active"?"GPS ACTIVO":locationStatus==="requesting"?"OBTENIENDO GPS...":locationStatus==="denied"?"GPS DENEGADO":"EN LÍNEA"}
             </span>
-            {/* Botón tap para activar GPS si fue denegado */}
+            {stops.length > 0 && <>
+              <span style={{ color:"rgba(255,255,255,0.15)",fontSize:10 }}>·</span>
+              <span style={{ fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.35)",letterSpacing:"0.3px" }}>
+                RUTA #{stops.filter(s=>s.stopNum).length > 0 ? stops.filter(s=>s.stopNum).length : "—"}
+              </span>
+            </>}
             {(locationStatus==="denied"||locationStatus==="idle") && (
-              <button onClick={startLocationTracking}
-                style={{ background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:5,padding:"1px 6px",fontSize:9,color:"#60a5fa",cursor:"pointer",fontWeight:700 }}>
+              <button onClick={startLocationTracking} style={{ background:"rgba(37,99,235,0.2)",border:"1px solid rgba(37,99,235,0.4)",borderRadius:5,padding:"1px 7px",fontSize:9,color:"#60a5fa",cursor:"pointer",fontWeight:700,marginLeft:2 }}>
                 Activar
               </button>
             )}
           </div>
         </div>
 
-        {/* Notificaciones */}
-        <button className="rd-btn" style={{ position:"relative",width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        {/* Botón notificaciones */}
+        <button onClick={()=>setMenuOpen(o=>!o)} className="rd-btn" style={{ position:"relative",width:38,height:38,borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           {(chatLog.filter(m=>m.from==="admin").length+pendingRoutes.length) > 0 && (
-            <div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#3b82f6",border:"1.5px solid #080f18" }}/>
+            <div style={{ position:"absolute",top:7,right:7,width:7,height:7,borderRadius:"50%",background:"#ef4444",border:"1.5px solid #07101c" }}/>
           )}
         </button>
 
-        {/* Reloj */}
-        <div style={{ padding:"6px 10px",borderRadius:9,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,letterSpacing:"0.5px",flexShrink:0 }}>
-          {time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}
-        </div>
-
-        {/* Expandir mapa */}
-        <button onClick={()=>{ setSheetSnap(s=>s==="peek"?"half":s==="half"?"full":"peek"); setSheetH(null); }} className="rd-btn"
-          style={{ width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2">
-            {sheetSnap==="full"
-              ? <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/></>
-              : <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>}
+        {/* Menú 3 puntos */}
+        <button className="rd-btn" style={{ width:38,height:38,borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}
+          onClick={()=>setLogoutConf(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="rgba(255,255,255,0.6)">
+            <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
           </svg>
         </button>
       </div>
+
+      {/* ══ TARJETAS SUPERIORES — solo en tab ruta y cuando hay ruta activa ══ */}
+      {tab === "route" && stops.length > 0 && (() => {
+        const cs = stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending");
+        const deliveredStops = stops.filter(s=>s.driverStatus==="delivered");
+        const pendingStops   = stops.filter(s=>s.driverStatus==="pending"||s.driverStatus==="en_ruta");
+        const problemStops   = stops.filter(s=>s.driverStatus==="problema");
+        const eta = estFinish();
+        // Progress bar segments
+        return (
+          <div style={{ flexShrink:0, background:"#07101c", padding:"0 14px 14px", zIndex:90 }}>
+
+            {/* ── TARJETA RUTA ACTIVA ── */}
+            <div style={{ background:"linear-gradient(145deg,#0c1b2e,#0a1628)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:18,padding:"14px 16px",marginBottom:10,position:"relative",overflow:"hidden" }}>
+              {/* Glow accent top-left */}
+              <div style={{ position:"absolute",top:-20,left:-20,width:120,height:120,background:"rgba(37,99,235,0.12)",borderRadius:"50%",pointerEvents:"none",filter:"blur(30px)" }}/>
+
+              {/* Label + ETA */}
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
+                <span style={{ fontSize:9,fontWeight:700,letterSpacing:"1.8px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase" }}>Ruta activa</span>
+                {eta && (
+                  <div style={{ background:"rgba(37,99,235,0.18)",border:"1px solid rgba(37,99,235,0.3)",borderRadius:9,padding:"4px 10px",textAlign:"center" }}>
+                    <div style={{ fontSize:8,color:"rgba(96,165,250,0.7)",letterSpacing:"0.8px",fontWeight:700 }}>ETA</div>
+                    <div style={{ fontSize:13,color:"#60a5fa",fontWeight:800,fontFamily:"'DM Mono',monospace",lineHeight:1.1 }}>{eta}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Nombre ruta */}
+              <div style={{ fontSize:20,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.5px",lineHeight:1.2,marginBottom:10 }}>
+                {myRoute?.routeName || stops.find(s=>s.routeName)?.routeName || "Ruta del día"}
+              </div>
+
+              {/* Progress bar segmentada */}
+              <div style={{ display:"flex",gap:2,marginBottom:12,height:4 }}>
+                {stops.filter(s=>s.stopNum).map((s,i) => {
+                  const isDone = s.driverStatus==="delivered";
+                  const isNow  = s.driverStatus==="en_ruta";
+                  const isProb = s.driverStatus==="problema";
+                  return (
+                    <div key={i} style={{ flex:1,height:4,borderRadius:2,
+                      background: isDone?"#22c55e":isProb?"#ef4444":isNow?"#3b82f6":"rgba(255,255,255,0.12)",
+                      boxShadow: isNow?"0 0 6px rgba(59,130,246,0.8)":isDone?"0 0 4px rgba(34,197,94,0.5)":"none",
+                      transition:"background .3s",
+                    }}/>
+                  );
+                })}
+              </div>
+
+              {/* Stats: entregados / pendientes / problemas / km */}
+              <div style={{ display:"flex",gap:0 }}>
+                {[
+                  [deliveredStops.length, "ENTREGADOS", "#22c55e"],
+                  [pendingStops.length, "PENDIENTES", "#3b82f6"],
+                  problemStops.length > 0 ? [problemStops.length, "PROBLEMAS", "#f59e0b"] : null,
+                  [routeKm > 0 ? routeKm : "—", "KM TOTALES", "#94a3b8"],
+                ].filter(Boolean).map(([val,label,color], i, arr) => (
+                  <div key={i} style={{ flex:1, textAlign:"center", borderRight: i<arr.length-1?"1px solid rgba(255,255,255,0.07)":"none", padding:"0 4px" }}>
+                    <div style={{ fontSize:22,fontWeight:800,color,fontFamily:"'DM Sans',sans-serif",lineHeight:1,letterSpacing:"-0.5px" }}>{val}</div>
+                    <div style={{ fontSize:8,color:"rgba(255,255,255,0.3)",marginTop:3,letterSpacing:"0.8px",fontWeight:600 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── TARJETA PARADA ACTUAL ── */}
+            {cs && (
+              <div style={{ background:"linear-gradient(145deg,#0c1b2e,#0a1628)",border:"1px solid rgba(37,99,235,0.25)",borderRadius:18,padding:"14px 16px",position:"relative",overflow:"hidden",boxShadow:"0 0 0 1px rgba(37,99,235,0.08),0 8px 32px rgba(0,0,0,0.4)" }}>
+                {/* Left blue accent bar */}
+                <div style={{ position:"absolute",left:0,top:16,bottom:16,width:3,background:"linear-gradient(180deg,#3b82f6,#1d4ed8)",borderRadius:"0 3px 3px 0" }}/>
+
+                {/* Header: número parada + badge estado */}
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8,paddingLeft:8 }}>
+                  <div style={{ width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#2563eb,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"white",flexShrink:0,boxShadow:"0 0 12px rgba(37,99,235,0.5)" }}>
+                    {cs.stopNum||"?"}
+                  </div>
+                  <span style={{ fontSize:9,fontWeight:700,letterSpacing:"1.5px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",flex:1 }}>Parada actual</span>
+                  <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(37,99,235,0.15)",border:"1px solid rgba(37,99,235,0.3)",borderRadius:20,padding:"3px 10px" }}>
+                    <div style={{ width:5,height:5,borderRadius:"50%",background:"#3b82f6",animation:"pulse 2s infinite",boxShadow:"0 0 5px #3b82f6" }}/>
+                    <span style={{ fontSize:10,color:"#60a5fa",fontWeight:700 }}>En camino</span>
+                  </div>
+                </div>
+
+                {/* Nombre cliente */}
+                <div style={{ fontSize:18,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.2,marginBottom:4,paddingLeft:8 }}>
+                  {cs.client||"Cliente"}
+                </div>
+
+                {/* Dirección */}
+                <div style={{ fontSize:12,color:"rgba(255,255,255,0.45)",lineHeight:1.5,marginBottom:14,paddingLeft:8 }}>
+                  <span style={{ color:"rgba(255,255,255,0.65)",fontWeight:500 }}>{(cs.displayAddr||cs.rawAddr||"").split(",")[0]}</span>
+                  {(cs.displayAddr||cs.rawAddr||"").includes(",") && (
+                    <span>{", "}{(cs.displayAddr||cs.rawAddr||"").split(",").slice(1).join(",")}</span>
+                  )}
+                  {cs.notes && <span style={{ color:"rgba(255,255,255,0.3)" }}>{", "}{cs.notes}</span>}
+                </div>
+
+                {/* Botones de acción */}
+                <div style={{ display:"flex",gap:8 }}>
+                  {/* Waze */}
+                  <a href={`https://waze.com/ul?ll=${cs.lat||18.4861},${cs.lng||-69.9312}&navigate=yes`} target="_blank" rel="noreferrer"
+                    style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"12px",borderRadius:13,background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"white",fontSize:13,fontWeight:700,textDecoration:"none",boxShadow:"0 4px 18px rgba(37,99,235,0.4)",transition:"all .15s" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Waze
+                  </a>
+                  {/* Entregado */}
+                  <button onClick={()=>markDelivered(cs.id)} className="rd-btn"
+                    style={{ flex:1.6,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"12px",borderRadius:13,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 18px rgba(16,185,129,0.4)" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                    Entregado
+                  </button>
+                  {/* Problema */}
+                  <button onClick={()=>setShowProb(cs.id)} className="rd-btn"
+                    style={{ width:44,display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",borderRadius:13,border:"1px solid rgba(245,158,11,0.3)",background:"rgba(245,158,11,0.1)",color:"#f59e0b",cursor:"pointer" }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ══ MAP SECTION — solo visible en tab ruta ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "route" ? "block" : "none" }}>
@@ -3319,43 +3407,232 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             </div>
           </div>
 
-          {/* ── Route name block ── */}
-          {myRoute && (
-            <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
-              <div style={{ background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"13px 15px",backdropFilter:"blur(10px)" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:11,marginBottom:9 }}>
-                  <div style={{ width:42,height:42,borderRadius:13,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 20px rgba(59,130,246,0.15)" }}>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-                      <circle cx="5" cy="18" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
-                      <circle cx="19" cy="6" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
-                      <path d="M7.5 18h6a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h4.5" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15 }}>{myRoute.routeName||"Ruta del día"}</div>
-                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:3,flexWrap:"wrap" }}>
-                      {estFinish()&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Finaliza {estFinish()}
-                      </span>}
-                      {routeKm>0&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                        {routeKm} km
-                      </span>}
-                      <span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
-                        {stops.filter(s=>s.stopNum).length} paradas
+          {/* ── ROUTE HERO — barra segmentada + stats ── */}
+          {myRoute && (() => {
+            const total     = stops.length;
+            const doneCnt   = delivered.length;
+            const probCnt   = problems.length;
+            const pendCnt   = pending.length;
+            // Parada actual = primer stop que no está done ni problema
+            const curStop   = stops.find(s => s.driverStatus !== "delivered" && s.driverStatus !== "problema");
+            const curIdx    = curStop ? stops.indexOf(curStop) : -1;
+
+            return (
+              <div style={{ padding:"10px 14px 0", flexShrink:0 }}>
+
+                {/* ── Card hero ── */}
+                <div style={{
+                  background:"linear-gradient(135deg,rgba(12,28,56,0.95),rgba(8,18,36,0.98))",
+                  border:"1px solid rgba(59,130,246,0.18)",
+                  borderRadius:18,
+                  padding:"14px 15px 13px",
+                  backdropFilter:"blur(14px)",
+                  WebkitBackdropFilter:"blur(14px)",
+                  boxShadow:"0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
+                  position:"relative",
+                  overflow:"hidden",
+                }}>
+
+                  {/* Glow top-right decorativo */}
+                  <div style={{ position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.1) 0%,transparent 70%)",pointerEvents:"none" }}/>
+
+                  {/* ── Fila superior: nombre ruta + ETA ── */}
+                  <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:11 }}>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      {/* Label */}
+                      <div style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.55)",letterSpacing:"2px",textTransform:"uppercase",marginBottom:4 }}>
+                        RUTA ACTIVA
+                      </div>
+                      {/* Nombre */}
+                      <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5 }}>
+                        {myRoute.routeName || "Ruta del día"}
+                      </div>
+                      {/* Meta chips */}
+                      <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
+                        {estFinish() && (
+                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            {estFinish()}
+                          </span>
+                        )}
+                        {routeKm > 0 && (
+                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {routeKm} km
+                          </span>
+                        )}
+                        <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                          {total} paradas
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Porcentaje estilo HUD */}
+                    <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",flexShrink:0,marginLeft:12 }}>
+                      <div style={{ display:"flex",alignItems:"baseline",gap:1 }}>
+                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:28,fontWeight:600,color:"#60a5fa",lineHeight:1,letterSpacing:"-2px" }}>
+                          {pct}
+                        </span>
+                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:12,color:"rgba(59,130,246,0.45)" }}>%</span>
+                      </div>
+                      <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(255,255,255,0.2)",letterSpacing:"1px",textTransform:"uppercase",marginTop:1 }}>
+                        completado
                       </span>
                     </div>
                   </div>
-                  <span style={{ fontSize:14,fontWeight:800,color:"#3b82f6",flexShrink:0,letterSpacing:"-0.5px" }}>{pct}%</span>
-                </div>
-                <div style={{ height:3,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden" }}>
-                  <div style={{ height:"100%",background:"linear-gradient(90deg,#1d4ed8,#60a5fa)",borderRadius:3,width:`${pct}%`,transition:"width .7s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(96,165,250,0.6)" }}/>
+
+                  {/* ── BARRA SEGMENTADA ── */}
+                  <div style={{ marginBottom:11 }}>
+                    {/* Segmentos — uno por parada */}
+                    <div style={{ display:"flex",gap:2,marginBottom:4,height:5 }}>
+                      {stops.map((s, idx) => {
+                        const isDone = s.driverStatus === "delivered";
+                        const isProb = s.driverStatus === "problema";
+                        const isAct  = idx === curIdx;
+                        return (
+                          <div key={s.id || idx} style={{
+                            flex:1,
+                            borderRadius:2,
+                            background: isDone ? "#10b981"
+                                      : isProb ? "#ef4444"
+                                      : isAct  ? "#3b82f6"
+                                      : "rgba(255,255,255,0.07)",
+                            boxShadow: isDone ? "0 0 5px rgba(16,185,129,0.35)"
+                                     : isProb ? "0 0 5px rgba(239,68,68,0.35)"
+                                     : isAct  ? "0 0 8px rgba(59,130,246,0.7)"
+                                     : "none",
+                            transition:"background .4s, box-shadow .4s",
+                            animation: isAct ? "segActive 1.8s ease-in-out infinite" : "none",
+                          }}/>
+                        );
+                      })}
+                    </div>
+                    {/* Sub-línea scanner */}
+                    <div style={{ position:"relative",height:2,background:"rgba(255,255,255,0.03)",borderRadius:2,overflow:"hidden" }}>
+                      <div style={{ position:"absolute",top:0,left:0,right:0,bottom:0,background:"linear-gradient(90deg,transparent 0%,rgba(59,130,246,0.5) 50%,transparent 100%)",backgroundSize:"40% 100%",animation:"scannerLine 2s linear infinite" }}/>
+                    </div>
+                  </div>
+
+                  {/* ── STATS ROW — 4 números en tiempo real ── */}
+                  <div style={{ display:"flex",gap:0 }}>
+                    {[
+                      { val:doneCnt,  label:"Entregados", color:"#10b981", dimColor:"rgba(16,185,129,0.12)",  borderColor:"rgba(16,185,129,0.2)"  },
+                      { val:pendCnt,  label:"Pendientes", color:"#3b82f6", dimColor:"rgba(59,130,246,0.12)",  borderColor:"rgba(59,130,246,0.2)"  },
+                      { val:probCnt,  label:"Problemas",  color:"#ef4444", dimColor:"rgba(239,68,68,0.12)",   borderColor:"rgba(239,68,68,0.2)"   },
+                      { val:routeKm,  label:"KM Total",   color:"#94a3b8", dimColor:"rgba(148,163,184,0.08)", borderColor:"rgba(148,163,184,0.12)" },
+                    ].map((st, i, arr) => (
+                      <div key={st.label} style={{
+                        flex:1,
+                        textAlign:"center",
+                        padding:"8px 4px",
+                        borderRadius:10,
+                        background: st.val > 0 ? st.dimColor : "transparent",
+                        border:`1px solid ${st.val > 0 ? st.borderColor : "transparent"}`,
+                        marginRight: i < arr.length - 1 ? 6 : 0,
+                        transition:"all .3s",
+                      }}>
+                        <div style={{
+                          fontFamily:"'DM Mono',monospace",
+                          fontSize: st.val > 99 ? 18 : 22,
+                          fontWeight:600,
+                          color: st.val > 0 ? st.color : "rgba(255,255,255,0.15)",
+                          lineHeight:1,
+                          marginBottom:3,
+                          letterSpacing:"-1px",
+                          transition:"color .3s",
+                        }}>
+                          {st.val || 0}
+                        </div>
+                        <div style={{
+                          fontFamily:"'DM Mono',monospace",
+                          fontSize:7,
+                          fontWeight:600,
+                          color:"rgba(255,255,255,0.22)",
+                          letterSpacing:"0.8px",
+                          textTransform:"uppercase",
+                        }}>
+                          {st.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── PARADA ACTUAL — card dentro del hero ── */}
+                  {curStop && (
+                    <div style={{
+                      marginTop:11,
+                      padding:"11px 12px",
+                      borderRadius:12,
+                      background:"rgba(59,130,246,0.07)",
+                      border:"1px solid rgba(59,130,246,0.2)",
+                      borderLeft:"3px solid #3b82f6",
+                      position:"relative",
+                    }}>
+                      {/* Label */}
+                      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                          <div style={{ width:20,height:20,borderRadius:7,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(59,130,246,0.4)" }}>
+                            <span style={{ fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:800,color:"white",lineHeight:1 }}>{curStop.stopNum||"?"}</span>
+                          </div>
+                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.7)",letterSpacing:"1.5px",textTransform:"uppercase" }}>
+                            PARADA ACTUAL
+                          </span>
+                        </div>
+                        {/* Pulsito vivo */}
+                        <div style={{ display:"flex",alignItems:"center",gap:4 }}>
+                          <div style={{ width:5,height:5,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 6px rgba(59,130,246,0.8)",animation:"pulse 1.6s infinite" }}/>
+                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(59,130,246,0.6)",letterSpacing:"0.5px" }}>EN CAMINO</span>
+                        </div>
+                      </div>
+
+                      {/* Cliente + dirección */}
+                      <div style={{ fontSize:14,fontWeight:700,color:"#f8fafc",letterSpacing:"-0.2px",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                        {curStop.client || `Parada ${curStop.stopNum}`}
+                      </div>
+                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.32)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:11 }}>
+                        {curStop.displayAddr || curStop.rawAddr || "Sin dirección"}
+                      </div>
+
+                      {/* Botones de acción directa */}
+                      <div style={{ display:"flex",gap:7 }}>
+                        {/* Waze */}
+                        <a href={`https://waze.com/ul?ll=${curStop.lat},${curStop.lng}&navigate=yes`}
+                           target="_blank" rel="noreferrer"
+                           onClick={e=>e.stopPropagation()}
+                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"linear-gradient(135deg,#1a3360,#1d4ed8)",color:"white",fontSize:11,fontWeight:700,textDecoration:"none",boxShadow:"0 3px 12px rgba(29,78,216,0.35)" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+                          Waze
+                        </a>
+                        {/* Google Maps */}
+                        <a href={`https://maps.google.com/?q=${curStop.lat},${curStop.lng}`}
+                           target="_blank" rel="noreferrer"
+                           onClick={e=>e.stopPropagation()}
+                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",fontSize:11,fontWeight:700,textDecoration:"none" }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          Maps
+                        </a>
+                        {/* Entregado */}
+                        <button
+                          onClick={e=>{e.stopPropagation();markDelivered(curStop.id);}}
+                          style={{ flex:1.4,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px 4px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",boxShadow:"0 3px 14px rgba(16,185,129,0.38)" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                          Entregado
+                        </button>
+                        {/* Problema */}
+                        <button
+                          onClick={e=>{e.stopPropagation();setShowProb(curStop.id);}}
+                          style={{ width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,border:"1px solid rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.08)",color:"#f87171",cursor:"pointer",flexShrink:0 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Filter chips ── */}
           {myRoute && (
@@ -4302,51 +4579,20 @@ const LoginScreen = ({ onLogin }) => {
         width:380, position:"relative", zIndex:1,
         animation: success ? "lOut .5s ease forwards" : "lCard .6s cubic-bezier(.16,1,.3,1) both",
       }}>
-        {/* Logo oficial Rap Drive */}
+        {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:28, animation:"lLogo .6s .08s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
-          <div style={{ position:"relative",width:88,height:88,margin:"0 auto 16px" }}>
-            <div style={{ position:"absolute",inset:-6,borderRadius:28,background:"radial-gradient(circle,rgba(59,130,246,0.35) 0%,transparent 70%)",filter:"blur(12px)" }}/>
-            <div style={{ position:"relative",width:88,height:88,borderRadius:24,background:"linear-gradient(155deg,#0d1e3d 0%,#0a1628 50%,#0d2248 100%)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 12px 40px rgba(59,130,246,0.35),inset 0 1px 0 rgba(255,255,255,0.08)" }}>
-              {/* Líneas de velocidad */}
-              <svg style={{position:"absolute",left:6,top:"50%",transform:"translateY(-50%)"}} width="20" height="36" viewBox="0 0 20 36" fill="none">
-                <line x1="0" y1="8" x2="16" y2="8" stroke="url(#spd1)" strokeWidth="2.2" strokeLinecap="round"/>
-                <line x1="0" y1="14" x2="13" y2="14" stroke="url(#spd1)" strokeWidth="1.8" strokeLinecap="round" opacity="0.8"/>
-                <line x1="0" y1="20" x2="10" y2="20" stroke="url(#spd1)" strokeWidth="1.4" strokeLinecap="round" opacity="0.6"/>
-                <line x1="0" y1="26" x2="7" y2="26" stroke="url(#spd1)" strokeWidth="1.1" strokeLinecap="round" opacity="0.35"/>
-                <defs><linearGradient id="spd1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0.1"/><stop offset="100%" stopColor="#3b82f6"/></linearGradient></defs>
-              </svg>
-              {/* R con ruta y pin */}
-              <svg width="44" height="50" viewBox="0 0 44 50" fill="none" style={{marginLeft:6,zIndex:1}}>
-                {/* Cuerpo de la R */}
-                <path d="M8 6 L8 44" stroke="white" strokeWidth="7" strokeLinecap="round"/>
-                <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-                {/* Pata de la R (ruta curva) */}
-                <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="6.5" strokeLinecap="round" fill="none" opacity="0.9"/>
-                {/* Línea de ruta IA sobre la R */}
-                <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="url(#rtGrad)" strokeWidth="2" strokeLinecap="round" fill="none" strokeDasharray="none"/>
-                <circle cx="12" cy="34" r="2.5" fill="none" stroke="#2563eb" strokeWidth="2"/>
-                <circle cx="26" cy="37" r="2.5" fill="none" stroke="#2563eb" strokeWidth="2"/>
-                {/* Pin GPS en la punta superior */}
-                <ellipse cx="31" cy="10" rx="7" ry="9" fill="url(#pinGrad)"/>
-                <ellipse cx="31" cy="8.5" rx="3.5" ry="4" fill="white" opacity="0.9"/>
-                <circle cx="31" cy="8" r="2" fill="url(#pinGrad)"/>
-                <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="url(#pinGrad)"/>
-                <defs>
-                  <linearGradient id="rtGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#60a5fa"/>
-                  </linearGradient>
-                  <linearGradient id="pinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#1d4ed8"/>
-                  </linearGradient>
-                </defs>
+          <div style={{ position:"relative",width:60,height:60,margin:"0 auto 14px" }}>
+            <div style={{ position:"absolute",inset:-4,borderRadius:20,background:"linear-gradient(135deg,rgba(59,130,246,0.3),rgba(99,102,241,0.2))",filter:"blur(8px)" }}/>
+            <div style={{ position:"relative",width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(59,130,246,0.4)" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
+                <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
+                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.45"/>
               </svg>
             </div>
           </div>
-          <div style={{ display:"flex",alignItems:"baseline",justifyContent:"center",gap:1,marginBottom:4 }}>
-            <span style={{ fontSize:28,fontWeight:900,color:"#3b82f6",letterSpacing:"-1px",fontFamily:"'DM Sans',sans-serif" }}>RAP</span>
-            <span style={{ fontSize:28,fontWeight:900,color:"white",letterSpacing:"-1px",fontFamily:"'DM Sans',sans-serif" }}>DRIVE</span>
-          </div>
-          <div style={{ fontSize:9.5,color:"rgba(255,255,255,0.22)",letterSpacing:"3.5px",fontWeight:700,textTransform:"uppercase" }}>LOGÍSTICA INTELIGENTE</div>
+          <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Entregas</div>
         </div>
 
         {/* Card */}
@@ -5651,405 +5897,11 @@ const loadSheetJS = () => new Promise((res) => {
   document.head.appendChild(s);
 });
 
-// ── BASE DE LANDMARKS RD (285 puntos) ──────────────────────────────────────────────────
-// Búsqueda O(n) instantánea, 0ms, sin internet
-const RD_LANDMARKS = [
-  { k:"jumbo churchill", lat:18.4698, lng:-69.9337, d:"Jumbo La Churchill, Santo Domingo" },
-  { k:"jumbo independencia", lat:18.462, lng:-69.9451, d:"Jumbo Av. Independencia, Santo Domingo" },
-  { k:"jumbo kennedy", lat:18.4812, lng:-69.9565, d:"Jumbo Av. John F. Kennedy, Santo Domingo" },
-  { k:"jumbo miraflores", lat:18.4803, lng:-69.9421, d:"Jumbo Miraflores, Santo Domingo" },
-  { k:"jumbo duarte", lat:18.4859, lng:-70.0009, d:"Jumbo Av. Duarte, Santo Domingo" },
-  { k:"jumbo 27 de febrero", lat:18.4761, lng:-69.9251, d:"Jumbo Av. 27 de Febrero, Santo Domingo" },
-  { k:"jumbo lope de vega", lat:18.476, lng:-69.927, d:"Jumbo Lope de Vega, Santo Domingo" },
-  { k:"jumbo bávaro", lat:18.6831, lng:-68.4067, d:"Jumbo Bávaro, La Altagracia" },
-  { k:"jumbo santiago", lat:19.4517, lng:-70.697, d:"Jumbo Santiago, Santiago" },
-  { k:"nacional villa mella", lat:18.5612, lng:-69.9769, d:"Supermercado Nacional Villa Mella" },
-  { k:"nacional naco", lat:18.4771, lng:-69.922, d:"Supermercado Nacional Naco" },
-  { k:"nacional los cacaos", lat:18.54, lng:-69.912, d:"Supermercado Nacional Los Cacaos" },
-  { k:"nacional bella vista", lat:18.4571, lng:-69.9371, d:"Supermercado Nacional Bella Vista" },
-  { k:"nacional herrera", lat:18.4822, lng:-70.0412, d:"Supermercado Nacional Herrera" },
-  { k:"bravo piantini", lat:18.4742, lng:-69.9297, d:"Bravo Piantini, Santo Domingo" },
-  { k:"bravo anacaona", lat:18.4601, lng:-69.9552, d:"Bravo Anacaona, Santo Domingo" },
-  { k:"bravo megacentro", lat:18.4598, lng:-69.9032, d:"Bravo Megacentro, Santo Domingo" },
-  { k:"plazas tropicales", lat:18.4655, lng:-69.9289, d:"Plazas Tropicales, Santo Domingo" },
-  { k:"la sirena duarte", lat:18.4831, lng:-69.9946, d:"La Sirena Av. Duarte" },
-  { k:"la sirena 27 febrero", lat:18.474, lng:-69.9272, d:"La Sirena 27 de Febrero" },
-  { k:"la sirena km9", lat:18.5094, lng:-69.9863, d:"La Sirena Km 9" },
-  { k:"la sirena herrera", lat:18.481, lng:-70.038, d:"La Sirena Herrera" },
-  { k:"la sirena mella", lat:18.515, lng:-69.958, d:"La sirena Villa Mella" },
-  { k:"la sirena san isidro", lat:18.5032, lng:-69.8674, d:"La Sirena San Isidro" },
-  { k:"iberia superstore", lat:18.4838, lng:-69.9441, d:"Iberia Superstore, Bella Vista" },
-  { k:"pola bella vista", lat:18.4601, lng:-69.939, d:"Pola Bella Vista" },
-  { k:"pola piantini", lat:18.4742, lng:-69.93, d:"Pola Piantini" },
-  { k:"carol piantini", lat:18.474, lng:-69.9295, d:"Farmacia Carol Piantini" },
-  { k:"carol naco", lat:18.477, lng:-69.9212, d:"Farmacia Carol Naco" },
-  { k:"carol la esperilla", lat:18.4718, lng:-69.9235, d:"Farmacia Carol La Esperilla" },
-  { k:"carol bella vista", lat:18.4601, lng:-69.9371, d:"Farmacia Carol Bella Vista" },
-  { k:"carol lincoln", lat:18.4757, lng:-69.9267, d:"Farmacia Carol Av. Lincoln" },
-  { k:"carol kennedy", lat:18.481, lng:-69.956, d:"Farmacia Carol Kennedy" },
-  { k:"farmacia carol 27 febrero", lat:18.4761, lng:-69.9251, d:"Farmacia Carol 27 de Febrero" },
-  { k:"farmacosto kennedy", lat:18.4812, lng:-69.9561, d:"Farmacosto Kennedy" },
-  { k:"farmacosto herrera", lat:18.4822, lng:-70.0421, d:"Farmacosto Herrera" },
-  { k:"farmacosto villa mella", lat:18.561, lng:-69.9771, d:"Farmacosto Villa Mella" },
-  { k:"farmacosto san carlos", lat:18.476, lng:-69.906, d:"Farmacosto San Carlos" },
-  { k:"farmacosto duarte", lat:18.4862, lng:-70.0009, d:"Farmacosto Av. Duarte" },
-  { k:"farmacosto los mina", lat:18.4942, lng:-69.8632, d:"Farmacosto Los Mina" },
-  { k:"farmacosto gurabo", lat:18.5021, lng:-69.9041, d:"Farmacosto Gurabo" },
-  { k:"banco popular piantini", lat:18.4742, lng:-69.9298, d:"Banco Popular Piantini" },
-  { k:"banco popular kennedy", lat:18.4812, lng:-69.9565, d:"Banco Popular Kennedy" },
-  { k:"banco popular bella vista", lat:18.4601, lng:-69.9371, d:"Banco Popular Bella Vista" },
-  { k:"banco popular duarte", lat:18.4862, lng:-69.9999, d:"Banco Popular Av. Duarte" },
-  { k:"banco popular zona colonial", lat:18.4738, lng:-69.8878, d:"Banco Popular Zona Colonial" },
-  { k:"banco bhd piantini", lat:18.4741, lng:-69.93, d:"Banco BHD Piantini" },
-  { k:"banco bhd kennedy", lat:18.481, lng:-69.9561, d:"Banco BHD Kennedy" },
-  { k:"banco bhd 27 febrero", lat:18.476, lng:-69.9252, d:"Banco BHD 27 de Febrero" },
-  { k:"banreservas piantini", lat:18.4742, lng:-69.9295, d:"Banreservas Piantini" },
-  { k:"banreservas zona colonial", lat:18.474, lng:-69.8879, d:"Banreservas Zona Colonial" },
-  { k:"banreservas kennedy", lat:18.4812, lng:-69.956, d:"Banreservas Kennedy" },
-  { k:"scotiabank churchill", lat:18.4698, lng:-69.9336, d:"Scotiabank La Churchill" },
-  { k:"scotiabank naco", lat:18.4771, lng:-69.921, d:"Scotiabank Naco" },
-  { k:"citibank piantini", lat:18.4742, lng:-69.9298, d:"Citibank Piantini" },
-  { k:"asociacion cibao", lat:18.4762, lng:-69.926, d:"Asociación Cibao de Ahorros" },
-  { k:"acropolis", lat:18.4701, lng:-69.9362, d:"Acropolis Center, Churchill" },
-  { k:"ágora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
-  { k:"agora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
-  { k:"megacentro", lat:18.4591, lng:-69.9031, d:"Megacentro, Santo Domingo" },
-  { k:"blue mall", lat:18.47, lng:-69.9333, d:"Blue Mall, Churchill" },
-  { k:"sambil", lat:18.476, lng:-69.9223, d:"Sambil Santo Domingo, Av. Luperón" },
-  { k:"city center bella vista", lat:18.4605, lng:-69.938, d:"City Center Bella Vista" },
-  { k:"plaza central", lat:18.4741, lng:-69.927, d:"Plaza Central, Av. 27 de Febrero" },
-  { k:"galería 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
-  { k:"galerías 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
-  { k:"mall san ignacio", lat:18.482, lng:-69.9421, d:"Mall San Ignacio" },
-  { k:"plaza lama duarte", lat:18.4831, lng:-69.9946, d:"Plaza Lama Av. Duarte" },
-  { k:"plaza lama kennedy", lat:18.4812, lng:-69.956, d:"Plaza Lama Kennedy" },
-  { k:"multicentro la sirena", lat:18.4831, lng:-69.994, d:"Multicentro La Sirena" },
-  { k:"almacenes tropigas", lat:18.476, lng:-69.926, d:"Almacenes Tropigas" },
-  { k:"plaza la trinitaria", lat:18.5151, lng:-69.959, d:"Plaza La Trinitaria" },
-  { k:"centro olimpico", lat:18.4715, lng:-69.948, d:"Centro Olímpico Juan Pablo Duarte" },
-  { k:"malecón center", lat:18.4646, lng:-69.8982, d:"Malecón Center, Santo Domingo" },
-  { k:"renaissance mall", lat:18.4701, lng:-69.9361, d:"Renaissance Mall, Churchill" },
-  { k:"esso piantini", lat:18.4741, lng:-69.9298, d:"Estación Esso Piantini" },
-  { k:"shell kennedy", lat:18.481, lng:-69.956, d:"Shell Kennedy" },
-  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
-  { k:"hospital dr. darío contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
-  { k:"dario contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
-  { k:"plaza de la salud", lat:18.4611, lng:-69.943, d:"Plaza de la Salud" },
-  { k:"clínica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
-  { k:"clinica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
-  { k:"hospital universitario madre y maestra", lat:19.459, lng:-70.6878, d:"HUMM Santiago" },
-  { k:"humm", lat:19.459, lng:-70.6878, d:"Hospital Universitario Madre y Maestra" },
-  { k:"hospital general dr. vinicio calventi", lat:18.515, lng:-69.956, d:"Hospital General Calventi" },
-  { k:"hospital louis e. aybar", lat:18.476, lng:-69.899, d:"Hospital Louis E. Aybar" },
-  { k:"clínica corominas", lat:18.5151, lng:-69.958, d:"Clínica Corominas" },
-  { k:"clínica unión médica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
-  { k:"union medica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
-  { k:"hospital central de las fuerzas armadas", lat:18.464, lng:-69.915, d:"Hospital Central FFAA" },
-  { k:"homs", lat:18.464, lng:-69.915, d:"Hospital HOMS" },
-  { k:"hospital infantil robert reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
-  { k:"reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
-  { k:"hospital hugo mendez", lat:18.564, lng:-69.979, d:"Hospital Hugo Mendez Villa Mella" },
-  { k:"clínica colon", lat:18.4841, lng:-70.0012, d:"Clínica Colón" },
-  { k:"uasd", lat:18.468, lng:-69.903, d:"Universidad Autónoma de Santo Domingo" },
-  { k:"universidad autónoma", lat:18.468, lng:-69.903, d:"UASD, Ciudad Universitaria" },
-  { k:"pucmm santo domingo", lat:18.4741, lng:-69.9276, d:"PUCMM Santo Domingo" },
-  { k:"pucmm santiago", lat:19.4501, lng:-70.6921, d:"PUCMM Santiago" },
-  { k:"intec", lat:18.4722, lng:-69.904, d:"Instituto Tecnológico de Santo Domingo" },
-  { k:"unibe", lat:18.4762, lng:-69.9261, d:"UNIBE, Santo Domingo" },
-  { k:"unapec", lat:18.4762, lng:-69.9261, d:"UNAPEC, Av. Máximo Gómez" },
-  { k:"o&m", lat:18.4811, lng:-69.9562, d:"Universidad O&M" },
-  { k:"utesa", lat:19.4562, lng:-70.6891, d:"UTESA Santiago" },
-  { k:"ufhec", lat:18.4772, lng:-69.9271, d:"UFHEC, Santo Domingo" },
-  { k:"unicaribe", lat:18.481, lng:-69.955, d:"UNICARIBE" },
-  { k:"uord", lat:18.5155, lng:-69.9551, d:"UORD, Villa Mella" },
-  { k:"catedral primada", lat:18.474, lng:-69.8878, d:"Catedral Primada de América, Zona Colonial" },
-  { k:"catedral de santiago", lat:19.4512, lng:-70.6971, d:"Catedral Santiago de los Caballeros" },
-  { k:"iglesia san carlos", lat:18.476, lng:-69.906, d:"Iglesia San Carlos" },
-  { k:"iglesia la altagracia naco", lat:18.4771, lng:-69.921, d:"Iglesia La Altagracia Naco" },
-  { k:"templo adventista herrera", lat:18.482, lng:-70.041, d:"Templo Adventista Herrera" },
-  { k:"iglesia los girasoles", lat:18.562, lng:-70.004, d:"Iglesia Los Girasoles" },
-  { k:"santo cristo de los milagros", lat:18.538, lng:-69.897, d:"Santo Cristo de los Milagros, Los Mameyes" },
-  { k:"texaco kennedy", lat:18.4812, lng:-69.9562, d:"Texaco Kennedy" },
-  { k:"esso kennedy", lat:18.4812, lng:-69.9563, d:"Esso Kennedy" },
-  { k:"shell 27 febrero", lat:18.4761, lng:-69.9253, d:"Shell 27 de Febrero" },
-  { k:"texaco 27 febrero", lat:18.4762, lng:-69.9252, d:"Texaco 27 de Febrero" },
-  { k:"esso independencia", lat:18.462, lng:-69.945, d:"Esso Av. Independencia" },
-  { k:"texaco independencia", lat:18.4619, lng:-69.9451, d:"Texaco Av. Independencia" },
-  { k:"shell luperon", lat:18.476, lng:-69.9221, d:"Shell Av. Luperón" },
-  { k:"esso duarte", lat:18.4862, lng:-70.0005, d:"Esso Av. Duarte" },
-  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
-  { k:"shell villa mella", lat:18.5611, lng:-69.9772, d:"Shell Villa Mella" },
-  { k:"texaco san isidro", lat:18.503, lng:-69.8672, d:"Texaco San Isidro" },
-  { k:"renaissance jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
-  { k:"jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
-  { k:"intercontinental", lat:18.4748, lng:-69.9287, d:"Hotel Intercontinental V Centenario" },
-  { k:"v centenario", lat:18.4748, lng:-69.9287, d:"Hotel V Centenario" },
-  { k:"hilton santo domingo", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
-  { k:"hotel hilton", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
-  { k:"iberostar colonial", lat:18.474, lng:-69.8878, d:"Iberostar Colonial" },
-  { k:"hotel europa", lat:18.4742, lng:-69.8879, d:"Hotel Europa, Zona Colonial" },
-  { k:"hotel nicolás de ovando", lat:18.4741, lng:-69.888, d:"Hotel Nicolás de Ovando, Zona Colonial" },
-  { k:"holiday inn", lat:18.4762, lng:-69.9261, d:"Holiday Inn Express Santo Domingo" },
-  { k:"parque colon", lat:18.4741, lng:-69.8879, d:"Parque Colón, Zona Colonial" },
-  { k:"parque independencia", lat:18.472, lng:-69.8999, d:"Parque de la Independencia" },
-  { k:"el conde", lat:18.474, lng:-69.8879, d:"El Conde, Zona Colonial" },
-  { k:"zona colonial", lat:18.4741, lng:-69.8879, d:"Zona Colonial, Santo Domingo" },
-  { k:"malecon", lat:18.464, lng:-69.9001, d:"Malecón, Av. George Washington" },
-  { k:"george washington", lat:18.464, lng:-69.9, d:"Av. George Washington, Malecón" },
-  { k:"parque mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
-  { k:"mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
-  { k:"parque mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
-  { k:"mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
-  { k:"parque independencia", lat:18.472, lng:-69.9001, d:"Parque de la Independencia" },
-  { k:"plaza de la cultura", lat:18.4722, lng:-69.9068, d:"Plaza de la Cultura" },
-  { k:"faro a colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
-  { k:"faro colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
-  { k:"av winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
-  { k:"av. winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
-  { k:"avenida winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
-  { k:"av 27 febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
-  { k:"av. 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
-  { k:"avenida 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
-  { k:"av kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
-  { k:"av. john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
-  { k:"avenida john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
-  { k:"av independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
-  { k:"av. independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
-  { k:"av duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
-  { k:"av. duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
-  { k:"av luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
-  { k:"av. luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
-  { k:"av máximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
-  { k:"av. maximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
-  { k:"av bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
-  { k:"av. bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
-  { k:"av tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
-  { k:"av. tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
-  { k:"av ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
-  { k:"av. ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
-  { k:"av republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
-  { k:"av. republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
-  { k:"av gregorio luperon", lat:18.4762, lng:-69.9221, d:"Av. Gregorio Luperón" },
-  { k:"autopista duarte", lat:19.1521, lng:-70.3421, d:"Autopista Duarte (punto medio)" },
-  { k:"autopista 30 de mayo", lat:18.5101, lng:-69.9401, d:"Autopista 30 de Mayo" },
-  { k:"autopista las americas", lat:18.496, lng:-69.85, d:"Autopista Las Américas" },
-  { k:"piantini", lat:18.4741, lng:-69.9298, d:"Piantini, Santo Domingo" },
-  { k:"naco", lat:18.4771, lng:-69.921, d:"Naco, Santo Domingo" },
-  { k:"evaristo morales", lat:18.478, lng:-69.9192, d:"Evaristo Morales, Santo Domingo" },
-  { k:"bella vista", lat:18.4601, lng:-69.9371, d:"Bella Vista, Santo Domingo" },
-  { k:"serralles", lat:18.465, lng:-69.9351, d:"Serrallés, Santo Domingo" },
-  { k:"gazcue", lat:18.47, lng:-69.91, d:"Gazcue, Santo Domingo" },
-  { k:"los prados", lat:18.501, lng:-69.9751, d:"Los Prados, Santo Domingo Norte" },
-  { k:"los girasoles", lat:18.562, lng:-70.0041, d:"Los Girasoles, Santo Domingo Norte" },
-  { k:"la zurza", lat:18.4911, lng:-69.9312, d:"La Zurza, Santo Domingo" },
-  { k:"villa consuelo", lat:18.4901, lng:-69.912, d:"Villa Consuelo, Santo Domingo" },
-  { k:"ciudad nueva", lat:18.475, lng:-69.8991, d:"Ciudad Nueva, Santo Domingo" },
-  { k:"san carlos", lat:18.4761, lng:-69.906, d:"San Carlos, Santo Domingo" },
-  { k:"la fe", lat:18.501, lng:-69.9481, d:"La Fe, Santo Domingo Norte" },
-  { k:"la victoria", lat:18.525, lng:-69.949, d:"La Victoria, Santo Domingo Norte" },
-  { k:"villa mella", lat:18.5611, lng:-69.9771, d:"Villa Mella, Santo Domingo Norte" },
-  { k:"sabana perdida", lat:18.578, lng:-69.9421, d:"Sabana Perdida, Santo Domingo Norte" },
-  { k:"guaricanos", lat:18.59, lng:-70.004, d:"Guaricanos, Santo Domingo Norte" },
-  { k:"los alcarrizos", lat:18.52, lng:-70.056, d:"Los Alcarrizos" },
-  { k:"herrera", lat:18.4822, lng:-70.0412, d:"Herrera, Santo Domingo Oeste" },
-  { k:"manoguayabo", lat:18.5101, lng:-70.0821, d:"Manoguayabo" },
-  { k:"cipae", lat:18.53, lng:-70.021, d:"CIPAE, Santo Domingo Oeste" },
-  { k:"los mina", lat:18.4941, lng:-69.8632, d:"Los Mina, Santo Domingo Este" },
-  { k:"san isidro", lat:18.503, lng:-69.8672, d:"San Isidro, Santo Domingo Este" },
-  { k:"sabana larga", lat:18.518, lng:-69.8311, d:"Sabana Larga" },
-  { k:"boca chica", lat:18.4571, lng:-69.6012, d:"Boca Chica" },
-  { k:"cacicazgos", lat:18.4601, lng:-69.9021, d:"Los Cacicazgos, Santo Domingo" },
-  { k:"la esperilla", lat:18.4718, lng:-69.9235, d:"La Esperilla, Piantini" },
-  { k:"los rios", lat:18.5012, lng:-69.9251, d:"Los Ríos, Santo Domingo" },
-  { k:"brisas del este", lat:18.504, lng:-69.8421, d:"Brisas del Este" },
-  { k:"alma rosa", lat:18.5122, lng:-69.851, d:"Alma Rosa" },
-  { k:"cancino", lat:18.529, lng:-69.872, d:"Cancino, Santo Domingo Este" },
-  { k:"sabana abajo", lat:19.3921, lng:-70.7281, d:"Sabana Abajo, Santiago" },
-  { k:"ensanche isabelita", lat:18.484, lng:-69.957, d:"Ensanche Isabelita" },
-  { k:"ensanche naco", lat:18.4771, lng:-69.921, d:"Ensanche Naco" },
-  { k:"ensanche luperon", lat:18.4762, lng:-69.9221, d:"Ensanche Luperón" },
-  { k:"ensanche paraiso", lat:18.464, lng:-69.927, d:"Ensanche Paraíso" },
-  { k:"ensanche la fe", lat:18.501, lng:-69.9481, d:"Ensanche La Fe" },
-  { k:"arroyo hondo", lat:18.52, lng:-70.01, d:"Arroyo Hondo, Santo Domingo" },
-  { k:"los jardines", lat:18.5141, lng:-70.0012, d:"Los Jardines, Santo Domingo Norte" },
-  { k:"colinas del norte", lat:18.5851, lng:-70.0121, d:"Colinas del Norte" },
-  { k:"palma real", lat:18.5551, lng:-69.9781, d:"Palma Real, Santo Domingo Norte" },
-  { k:"los frailes", lat:18.5701, lng:-69.9801, d:"Los Frailes" },
-  { k:"las américas", lat:18.496, lng:-69.85, d:"Las Américas" },
-  { k:"simon bolivar", lat:18.47, lng:-69.9182, d:"Sector Simón Bolívar" },
-  { k:"urbanizacion fernandez", lat:18.4771, lng:-69.9253, d:"Urbanización Fernández" },
-  { k:"residencial loma linda", lat:18.478, lng:-69.932, d:"Residencial Loma Linda" },
-  { k:"residencial tropical", lat:18.51, lng:-70.002, d:"Residencial Tropical" },
-  { k:"residencial los robles", lat:18.476, lng:-70.004, d:"Residencial Los Robles" },
-  { k:"monumento santiago", lat:19.4512, lng:-70.6971, d:"Monumento a los Héroes, Santiago" },
-  { k:"liceo secundario", lat:19.451, lng:-70.697, d:"Liceo Secundario, Santiago" },
-  { k:"av. 27 de febrero santiago", lat:19.4521, lng:-70.69, d:"Av. 27 de Febrero, Santiago" },
-  { k:"estadio cibao", lat:19.4581, lng:-70.6921, d:"Estadio Cibao, Santiago" },
-  { k:"supermercado pola santiago", lat:19.451, lng:-70.6962, d:"Supermercado Pola Santiago" },
-  { k:"bravo santiago", lat:19.4501, lng:-70.6981, d:"Bravo Santiago" },
-  { k:"la vega", lat:19.221, lng:-70.529, d:"La Vega" },
-  { k:"moca", lat:19.391, lng:-70.521, d:"Moca" },
-  { k:"bonao", lat:18.9411, lng:-70.4071, d:"Bonao" },
-  { k:"san francisco de macoris", lat:19.3, lng:-70.251, d:"San Francisco de Macorís" },
-  { k:"la romana", lat:18.4271, lng:-68.972, d:"La Romana" },
-  { k:"san pedro de macoris", lat:18.454, lng:-69.302, d:"San Pedro de Macorís" },
-  { k:"higuey", lat:18.616, lng:-68.707, d:"Higüey" },
-  { k:"punta cana aeropuerto", lat:18.567, lng:-68.363, d:"Aeropuerto Internacional Punta Cana" },
-  { k:"aeropuerto las americas", lat:18.429, lng:-69.6681, d:"Aeropuerto Internacional Las Américas" },
-  { k:"aeropuerto cibao", lat:19.406, lng:-70.6047, d:"Aeropuerto Internacional Cibao" },
-  { k:"puerto sans souci", lat:18.4741, lng:-69.87, d:"Puerto Sans-Souci, Santo Domingo" },
-  { k:"puerto de haina", lat:18.422, lng:-70.0221, d:"Puerto de Haina" },
-  { k:"haina", lat:18.422, lng:-70.0221, d:"Haina" },
-  { k:"san cristobal", lat:18.4171, lng:-70.1071, d:"San Cristóbal" },
-  { k:"azua", lat:18.454, lng:-70.735, d:"Azua" },
-  { k:"barahona", lat:18.2071, lng:-71.1021, d:"Barahona" },
-  { k:"puerto plata", lat:19.794, lng:-70.688, d:"Puerto Plata" },
-  { k:"palacio nacional", lat:18.4741, lng:-69.9, d:"Palacio Nacional, Santo Domingo" },
-  { k:"palacio de justicia", lat:18.4702, lng:-69.9321, d:"Palacio de Justicia, Ciudad Nueva" },
-  { k:"junta central electoral", lat:18.4742, lng:-69.9271, d:"Junta Central Electoral" },
-  { k:"policia nacional", lat:18.4721, lng:-69.898, d:"Policía Nacional, Oz. de Santa Bárbara" },
-  { k:"dgii hq", lat:18.4762, lng:-69.921, d:"Dirección General de Impuestos Internos" },
-  { k:"dgii", lat:18.4762, lng:-69.921, d:"DGII, Santo Domingo" },
-  { k:"digesett", lat:18.476, lng:-69.9, d:"DIGESETT" },
-  { k:"casas reales", lat:18.4741, lng:-69.888, d:"Casas Reales, Zona Colonial" },
-  { k:"alcazar de colon", lat:18.4741, lng:-69.8881, d:"Alcázar de Colón" },
-  { k:"estadio olimpico felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
-  { k:"estadio felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
-  { k:"estadio quisqueya", lat:18.4812, lng:-69.9021, d:"Estadio Quisqueya" },
-  { k:"aeropuerto herrera", lat:18.492, lng:-70.004, d:"Aeropuerto Herrera" },
-  { k:"cementerio cristo redentor", lat:18.477, lng:-69.9001, d:"Cementerio Cristo Redentor" },
-  { k:"jardin botanico", lat:18.499, lng:-69.9881, d:"Jardín Botánico Nacional" },
-  { k:"zoo nacional", lat:18.4892, lng:-69.9721, d:"Zoo Nacional" },
-  { k:"colegio dominicano de robotica", lat:18.476, lng:-69.925, d:"Colegio Dominicano de Robótica" },
-  { k:"saint george school", lat:18.4751, lng:-69.9281, d:"Saint George School" },
-  { k:"carlos olivares", lat:18.477, lng:-69.921, d:"Colegio Carlos Olivares" },
-  { k:"loyola", lat:18.477, lng:-69.923, d:"Centro Loyola" },
-  { k:"mundo feliz", lat:18.4762, lng:-69.9261, d:"Colegio Mundo Feliz" },
-  { k:"colegio adventista", lat:18.481, lng:-69.9561, d:"Colegio Adventista" },
-  { k:"nueva senda", lat:18.515, lng:-70.0, d:"Colegio Nueva Senda" },
-  { k:"colegio peter pan", lat:18.476, lng:-69.927, d:"Colegio Peter Pan" },
-  { k:"la salle", lat:18.477, lng:-69.9225, d:"Colegio La Salle" },
-  { k:"san judas tadeo", lat:18.48, lng:-69.958, d:"Colegio San Judas Tadeo" },
-  { k:"torre empresarial", lat:18.4762, lng:-69.9261, d:"Torre Empresarial, Av. Tiradentes" },
-  { k:"world trade center", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
-  { k:"wtc santo domingo", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
-  { k:"torre los prados", lat:18.501, lng:-69.9751, d:"Torre Los Prados" },
-  { k:"centro de los heroes", lat:18.4701, lng:-69.9361, d:"Centro de los Héroes" },
-  { k:"correos nacionales", lat:18.4741, lng:-69.888, d:"Correos Nacionales, Zona Colonial" },
-  { k:"palacio bellas artes", lat:18.4722, lng:-69.9068, d:"Palacio de Bellas Artes" },
-  { k:"teatro nacional", lat:18.4722, lng:-69.9068, d:"Teatro Nacional Eduardo Brito" },
-  { k:"palacio de los deportes", lat:18.4812, lng:-69.9021, d:"Palacio de los Deportes" },
-];
-
-// Normaliza texto para búsqueda fuzzy
-const normLandmark = (s) =>
-  (s || "")
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // quitar tildes
-    .replace(/[^a-z0-9\s]/g, " ")                        // solo alfanumerico
-    .replace(/\s+/g, " ").trim();
-
-// Lookup instantáneo en la base de landmarks
-// Retorna { ok, lat, lng, display, confidence } o null si no hay match
-const lookupLandmark = (raw) => {
-  const q = normLandmark(raw);
-  if (!q || q.length < 4) return null;
-
-  let best = null;
-  let bestScore = 0;
-
-  for (const lm of RD_LANDMARKS) {
-    const k = normLandmark(lm.k);
-    // Exact match
-    if (q === k || q.includes(k) || k.includes(q)) {
-      const score = k.length; // longer key = more specific = better
-      if (score > bestScore) { bestScore = score; best = lm; }
-      continue;
-    }
-    // Word overlap score
-    const qWords = q.split(" ");
-    const kWords = k.split(" ");
-    const common = qWords.filter(w => w.length > 2 && kWords.includes(w));
-    if (common.length >= 2 || (common.length === 1 && kWords.length <= 2)) {
-      const score = common.length * 10 + k.length;
-      if (score > bestScore) { bestScore = score; best = lm; }
-    }
-  }
-
-  if (!best) return null;
-  return {
-    ok: true, lat: best.lat, lng: best.lng,
-    display: best.d,
-    confidence: 97,
-    types: ["landmark"],
-    allResults: [],
-    source: "landmark_db",
-  };
-};
-
-
-// ── IA PARA NORMALIZACIÓN DE DIRECCIONES ─────────────────────────────────────
-// Usa Claude para convertir descripciones informales en direcciones geocodificables.
-// Solo se invoca cuando Google y los landmarks fallan (confidence < 55).
-// Ejemplos: "al lado del jumbo kennedy", "en la calle del tigre, detras del colmado"
-// ─────────────────────────────────────────────────────────────────────────────
-const aiEnrichAddress = async (rawAddress, context = {}) => {
-  try {
-    const systemPrompt = `Eres un experto en direcciones dominicanas. Tu única tarea es convertir una dirección informal o ambigua de República Dominicana en una dirección geocodificable por Google Maps.
-
-REGLAS:
-- Responde SOLO con un JSON: {"normalized": "...", "confidence": 0-100, "note": "..."}
-- "normalized": la dirección más específica y geocodificable que puedas inferir
-- "confidence": qué tan seguro estás (0=adivina, 100=certeza total)
-- "note": explicación muy breve (máx 60 chars)
-- Si mencionan referencia a negocios conocidos, incluye el nombre del negocio + ciudad
-- Siempre incluye ", Santo Domingo, República Dominicana" al final si no tiene ciudad
-- NO inventes números de casa si no están en el original
-- Si no puedes mejorarla, devuelve la original limpia con confidence bajo
-
-Contexto del área de entrega: Santo Domingo, República Dominicana. Base de operaciones: Palma Real, Los Girasoles, Santo Domingo Oeste.`;
-
-    const userMsg = `Dirección a normalizar: "${rawAddress}"${context.client ? `\nCliente: ${context.client}` : ""}${context.sector ? `\nSector mencionado: ${context.sector}` : ""}`;
-
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 200,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMsg }],
-      }),
-    });
-
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const text = data.content?.[0]?.text || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
-    if (parsed.normalized && typeof parsed.confidence === "number") {
-      return {
-        normalized: parsed.normalized,
-        confidence: parsed.confidence,
-        note: parsed.note || "",
-      };
-    }
-    return null;
-  } catch {
-    return null; // IA falló — seguir con geocoding normal
-  }
-};
-
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
 // --- GEOCODER (Google Maps Geocoding API) -------------------------------------
 const geocodeWithGoogle = async (rawAddress) => {
-  // ── FASE 1: Lookup instantáneo en base de landmarks RD ──────────────────
-  // 0ms, sin internet, sin cuota de Google. Confianza 97.
-  const lmHit = lookupLandmark(rawAddress);
-  if (lmHit) return lmHit;
-
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
   const queries = buildQueryVariants(rawAddress);
@@ -6130,48 +5982,6 @@ const geocodeWithGoogle = async (rawAddress) => {
       }
     }
   } catch { /* nominatim failed too */ }
-
-  // ── FASE FINAL: IA de normalización ─────────────────────────────────────
-  // Solo si todo falló — Claude normaliza la dirección y reintentamos con Google
-  try {
-    const aiResult = await aiEnrichAddress(rawAddress);
-    if (aiResult && aiResult.normalized && aiResult.normalized !== rawAddress && aiResult.confidence >= 40) {
-      // Reintentar geocoding con la dirección normalizada por IA
-      const aiVariants = buildQueryVariants(aiResult.normalized);
-      for (const q of aiVariants.slice(0, 3)) {
-        try {
-          await loadGoogleMaps();
-          const geocoder = new window.google.maps.Geocoder();
-          const result = await new Promise((res, rej) =>
-            geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
-              (results, status) => status === "OK" ? res(results) : rej(status))
-          );
-          if (result && result.length > 0) {
-            const top = result[0];
-            const loc = top.geometry.location;
-            const conf = Math.min(scoreGoogleResult(top, aiResult.normalized) * 0.9, 80); // slight penalty for AI-assisted
-            return {
-              ok: true,
-              lat: loc.lat(),
-              lng: loc.lng(),
-              display: top.formatted_address,
-              confidence: conf,
-              types: top.types || [],
-              aiAssisted: true,
-              aiNote: aiResult.note,
-              allResults: result.slice(0, 3).map(r => ({
-                display: r.formatted_address,
-                lat: r.geometry.location.lat(),
-                lng: r.geometry.location.lng(),
-                confidence: Math.min(scoreGoogleResult(r, aiResult.normalized) * 0.9, 80),
-              })),
-            };
-          }
-        } catch { /* continue */ }
-      }
-    }
-  } catch { /* IA failed too */ }
-
   return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
 };
 
@@ -6390,7 +6200,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  const numInOrig = (original || "").match(/\d{1,4}/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
@@ -6467,64 +6277,28 @@ const hav = (a, b) => {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ROUTE OPTIMIZER v4 — Proximity-First + Greedy Cluster + 3-opt + Or-opt
-//
-// MEJORAS v4:
-//   • "Cercano primero": los paquetes más cerca del PUNTO DE PARTIDA salen PRIMERO.
-//     Si hay ubicación GPS del mensajero, arranca desde ahí; sino, desde DEPOT.
-//   • Cluster dinámico con umbral adaptativo (15% del rango total, no fijo).
-//   • 2-opt mejorado con protección del arranque Y el cluster cercano completo.
-//   • Or-opt con reinserción de segmentos de 2 paradas (no solo individuales).
-//   • Función de costo incluye factor de regreso a base (no solo distancia punto→punto).
-//   • Máximo 120 iteraciones 2-opt para rutas grandes (>30 paradas).
-//
-// REGLA FUNDAMENTAL: Los paquetes más cercanos al mensajero siempre primero.
-// ─────────────────────────────────────────────────────────────────────────────
+// --- ROUTE OPTIMIZER - NEAREST NEIGHBOR FROM DEPOT ---------------------------
+// Regla de negocio:
+//   1. Parada más cercana al DEPOT → stopNum 1
+//   2. Parada más cercana a la #1 → stopNum 2
+//   3. Parada más cercana a la #2 → stopNum 3 … y así hasta agotar
+//   4. Paradas sin coordenadas → al final con stopNum null
+//   O(n²) – maneja 500+ paradas en milisegundos en el browser.
+//   NUNCA modifica paradas que ya están en ruta activa (driverStatus !== "pending").
 
-// Posición GPS del mensajero (actualizable en tiempo real)
-let _messengerPos = null; // { lat, lng } — null = usar DEPOT
-const setMessengerPosition = (pos) => { _messengerPos = pos; };
-
-const optimizeRoute = (stops, startPos) => {
+const optimizeRoute = (stops) => {
   if (!stops || stops.length === 0) return [];
 
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
   const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
 
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
-  if (valid.length === 1) return [{ ...valid[0], stopNum: 1, distKm: Math.round(hav(DEPOT, valid[0]) * 10) / 10 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
+  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
-  // ── Punto de arranque: GPS del mensajero > DEPOT ──────────────────────────
-  const origin = startPos || _messengerPos || DEPOT;
-
-  // ── Calcular distancias al ORIGEN ────────────────────────────────────────
-  const withDist = valid.map(s => ({ ...s, _originDist: hav(origin, s), _depotDist: hav(DEPOT, s) }));
-  withDist.sort((a, b) => a._originDist - b._originDist);
-
-  // ── Umbral adaptativo: distancia máxima del 25% más cercano ─────────────
-  // Si el más cercano está a 0.5km y el más lejano a 20km, el umbral es ~5km
-  const sorted = [...withDist].sort((a,b) => a._originDist - b._originDist);
-  const maxOriginDist = sorted[sorted.length - 1]._originDist;
-  const clusterCutoff = Math.min(
-    maxOriginDist * 0.25,   // 25% del rango total desde el origen
-    5.0                      // nunca más de 5km (ajustable)
-  );
-
-  // Cluster cercano: paradas dentro del umbral, ordenadas por distancia al origen
-  const cluster = sorted.filter(s => s._originDist <= clusterCutoff);
-  const mainPool = sorted.filter(s => s._originDist > clusterCutoff);
-
-  // Garantizar al menos 1 parada en el tour (por si todas están lejos)
-  if (cluster.length === 0 && mainPool.length > 0) {
-    cluster.push(mainPool.shift());
-  }
-
-  // ── Nearest Neighbor para la ruta principal, desde el último del cluster ─
-  let cur = cluster.length > 0 ? cluster[cluster.length - 1] : origin;
-  const rem  = [...mainPool];
-  const main = [];
-
+  // ── Fase 1: Nearest Neighbor desde DEPOT ──────────────────
+  let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
+  const rem = [...valid];
+  const tour = [];
   while (rem.length > 0) {
     let bi = 0, bd = Infinity;
     for (let i = 0; i < rem.length; i++) {
@@ -6532,32 +6306,35 @@ const optimizeRoute = (stops, startPos) => {
       if (d < bd) { bd = d; bi = i; }
     }
     const [next] = rem.splice(bi, 1);
-    main.push(next);
+    tour.push(next);
     cur = next;
   }
 
-  // Tour inicial: cluster (cercano al mensajero) + ruta NN
-  const tour = [...cluster, ...main];
-
-  // ── 2-opt mejorado ───────────────────────────────────────────────────────
-  // Protege el cluster completo (los más cercanos siempre primero).
-  const PROTECT = Math.max(0, cluster.length);
+  // ── Fase 2: 2-opt para eliminar cruces ────────────────────
+  // Circuito: DEPOT → tour[0] → tour[1] → … → tour[n-1] → DEPOT
+  // El 2-opt clásico evalúa SOLO las 2 aristas que se eliminan y las 2 que se crean.
+  // Invertir el segmento [i+1..j] equivale a eliminar aristas (i→i+1) y (j→j+1)
+  // y crear (i→j) y (i+1→j+1).
   let improved = true;
-  let iters = 0;
-  const MAX_2OPT = tour.length > 30 ? 120 : 80;
-
-  while (improved && iters < MAX_2OPT) {
+  let iterations = 0;
+  while (improved && iterations < 100) {
     improved = false;
-    iters++;
-    for (let i = PROTECT; i < tour.length - 1; i++) {
+    iterations++;
+    for (let i = 0; i < tour.length - 1; i++) {
       for (let j = i + 1; j < tour.length; j++) {
-        const A = i === 0 ? origin : tour[i - 1];
+        // Aristas actuales que se eliminarán:
+        //   A→B = tour[i] → tour[i+1]  (o DEPOT→tour[0] si i===-1, pero i empieza en 0)
+        //   C→D = tour[j] → tour[j+1]  (o tour[j] → DEPOT si j === último)
+        const A = i === 0 ? DEPOT : tour[i - 1];
         const B = tour[i];
         const C = tour[j];
         const D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        const before = hav(A, B) + hav(C, D);
-        const after  = hav(A, C) + hav(B, D);
-        if (after < before - 0.0005) {
+        // Coste actual: A→B + C→D
+        const costBefore = hav(A, B) + hav(C, D);
+        // Coste nuevo si invertimos [i..j]: A→C + B→D
+        const costAfter  = hav(A, C) + hav(B, D);
+        if (costAfter < costBefore - 0.001) {
+          // Invertir segmento [i..j]
           let l = i, r = j;
           while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
           improved = true;
@@ -6566,56 +6343,42 @@ const optimizeRoute = (stops, startPos) => {
     }
   }
 
-  // ── Or-opt: reinsertar paradas individuales Y pares ──────────────────────
-  const tryOrOpt = (segLen) => {
-    let orOk = true, orIt = 0;
-    while (orOk && orIt < 20) {
-      orOk = false; orIt++;
-      for (let i = cluster.length; i <= tour.length - segLen; i++) {
-        const seg = tour.slice(i, i + segLen);
-        const prev = i === 0 ? origin : tour[i - 1];
-        const next = i + segLen < tour.length ? tour[i + segLen] : DEPOT;
-        // Costo de remover el segmento
-        const removeSave = hav(prev, seg[0]) + hav(seg[segLen-1], next) - hav(prev, next);
-        let bestGain = 0.001, bestJ = -1;
-        for (let j = cluster.length - 1; j < tour.length - segLen; j++) {
-          if (j >= i - 1 && j <= i + segLen) continue;
-          const a = tour[j];
-          const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-          const insertCost = hav(a, seg[0]) + hav(seg[segLen-1], b) - hav(a, b);
-          if (removeSave - insertCost > bestGain) {
-            bestGain = removeSave - insertCost;
-            bestJ = j;
-          }
-        }
-        if (bestJ >= 0) {
-          const moved = tour.splice(i, segLen);
-          const insertAt = bestJ > i ? bestJ - segLen + 1 : bestJ + 1;
-          tour.splice(insertAt, 0, ...moved);
-          orOk = true;
-          break;
-        }
+  // ── Fase 3: Or-opt — mover paradas individuales al mejor lugar ──
+  // Respeta la regla de circuito: DEPOT es siempre origen y destino.
+  // NO se permite mover una parada si su nueva posición aleja el tour[0]
+  // del DEPOT más de lo que estaba (para preservar el orden cercano-a-base primero).
+  let orImproved = true;
+  let orIter = 0;
+  while (orImproved && orIter < 20) {
+    orImproved = false;
+    orIter++;
+    for (let i = 0; i < tour.length; i++) {
+      const node = tour[i];
+      const prev = i === 0 ? DEPOT : tour[i - 1];
+      const next = i === tour.length - 1 ? DEPOT : tour[i + 1];
+      // Ganancia de sacar el nodo de su posición actual
+      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
+      let bestGain = 0.001, bestJ = -1;
+      for (let j = 0; j < tour.length; j++) {
+        if (j === i || j === i - 1) continue;
+        const a = tour[j];
+        const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
+        const insertCost = hav(a, node) + hav(node, b) - hav(a, b);
+        const gain = removeCost - insertCost;
+        if (gain > bestGain) { bestGain = gain; bestJ = j; }
+      }
+      if (bestJ >= 0) {
+        const removed = tour.splice(i, 1)[0];
+        const insertAt = bestJ > i ? bestJ : bestJ + 1;
+        tour.splice(insertAt, 0, removed);
+        orImproved = true;
+        break; // reiniciar desde el principio
       }
     }
-  };
+  }
 
-  tryOrOpt(1); // reinsertar paradas individuales
-  tryOrOpt(2); // reinsertar pares de paradas
-
-  // ── Calcular distancia acumulada por parada ──────────────────────────────
-  let cumDist = 0;
   return [
-    ...tour.map((s, i) => {
-      const from = i === 0 ? origin : tour[i - 1];
-      const d = hav(from, s);
-      cumDist += d;
-      return {
-        ...s,
-        stopNum: i + 1,
-        distKm: Math.round(d * 10) / 10,
-        cumKm:  Math.round(cumDist * 10) / 10,
-      };
-    }),
+    ...tour.map((s, i) => ({ ...s, stopNum: i + 1 })),
     ...invalid.map(s => ({ ...s, stopNum: null })),
   ];
 };
@@ -7124,8 +6887,6 @@ const CircuitEngine = () => {
               stop.confidence = r.confidence; stop.allResults = r.allResults;
               stop.status = r.confidence >= 70 ? "ok" : "warning";
               stop.issue  = r.confidence < 70 ? "Confianza baja - verifica" : null;
-              if (r.source === "landmark_db") stop.source = "landmark_db";
-              if (r.aiAssisted) { stop.aiAssisted = true; stop.aiNote = r.aiNote; }
             } else {
               stop.status = "error"; stop.issue = "No encontrada";
             }
@@ -7282,28 +7043,14 @@ const CircuitEngine = () => {
       {/* -- TOPBAR -- */}
       <div style={{ height: 50, borderBottom: "1px solid #0d1420", display: "flex", alignItems: "center", padding: "0 20px", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(155deg,#0d1e3d,#0a1628)", border:"1px solid rgba(59,130,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center", position:"relative", overflow:"hidden" }}>
-            <svg style={{position:"absolute",left:2,top:"50%",transform:"translateY(-50%)"}} width="6" height="14" viewBox="0 0 6 14" fill="none"><line x1="0" y1="3" x2="5" y2="3" stroke="#3b82f6" strokeWidth="1.1" strokeLinecap="round"/><line x1="0" y1="6" x2="4" y2="6" stroke="#3b82f6" strokeWidth="0.9" strokeLinecap="round" opacity="0.7"/><line x1="0" y1="9" x2="3" y2="9" stroke="#3b82f6" strokeWidth="0.7" strokeLinecap="round" opacity="0.4"/></svg>
-            <svg width="16" height="18" viewBox="0 0 44 50" fill="none" style={{marginLeft:2}}>
-              <path d="M8 6 L8 44" stroke="white" strokeWidth="8" strokeLinecap="round"/>
-              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.9"/>
-              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              <circle cx="12" cy="34" r="3" fill="none" stroke="#3b82f6" strokeWidth="2.5"/>
-              <ellipse cx="31" cy="10" rx="7" ry="9" fill="#2563eb"/>
-              <circle cx="31" cy="8" r="2.5" fill="white" opacity="0.9"/>
-              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="#1d4ed8"/>
-            </svg>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
           </div>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:5}}>
-              <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 13 }}><span style={{color:"#3b82f6"}}>RAP</span>DRIVE</span>
-              <span style={{ fontSize:9, color:"#8b5cf6", background:"rgba(139,92,246,0.12)", border:"1px solid rgba(139,92,246,0.25)", borderRadius:5, padding:"1px 6px", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>IA v4</span>
-            </div>
-            <span style={{ fontSize: 9.5, color: "#2d4a60" }}>Motor de Rutas · Proximidad Inteligente</span>
-          </div>
+          <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14 }}>Rap Drive</span>
+          <span style={{ color: "#131f30" }}>·</span>
+          <span style={{ fontSize: 11, color: "#2d4a60" }}>Motor de Rutas</span>
           {!mapsReady && <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 6, padding: "2px 8px" }}>Cargando Maps...</span>}
-          {mapsReady  && <span style={{ fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 6, padding: "2px 8px" }}>● Maps OK</span>}
+          {mapsReady  && <span style={{ fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 6, padding: "2px 8px" }}>● Google Maps OK</span>}
         </div>
         {/* Phase steps */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -7334,16 +7081,16 @@ const CircuitEngine = () => {
                 <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)" }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
-                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas v4 — IA + Proximidad</div>
-                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa Excel/CSV. El motor geocodifica con Google Maps + IA, y optimiza la ruta <br/>priorizando los paquetes más cercanos al mensajero primero.</div>
+                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas — Circuit Mode</div>
+                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa tu Excel o CSV. El motor geocodifica cada dirección con Google Maps<br/>y optimiza la ruta automáticamente con algoritmo Nearest-Neighbor + 2-opt.</div>
               </div>
 
               {/* Feature pills */}
               <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:22, flexWrap:"wrap" }}>
-                {[["📍","Geocodificación Google"],["✦ IA","Normalización inteligente"],["🎯","Cercano primero"],["📱","Push al mensajero"]].map(([ic,lb])=>(
-                  <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:ic.includes("IA")?"rgba(139,92,246,0.08)":"rgba(59,130,246,0.08)",border:`1px solid ${ic.includes("IA")?"rgba(139,92,246,0.2)":"rgba(59,130,246,0.15)"}`,borderRadius:20,padding:"4px 12px" }}>
+                {[["📍","Geocodificación real"],["🔢","Optimización 2-opt"],["📦","Cola de rutas"],["📱","Push al mensajero"]].map(([ic,lb])=>(
+                  <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:20,padding:"4px 12px" }}>
                     <span style={{ fontSize:11 }}>{ic}</span>
-                    <span style={{ fontSize:10,color:ic.includes("IA")?"#a78bfa":"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
+                    <span style={{ fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
                   </div>
                 ))}
               </div>
@@ -7845,13 +7592,6 @@ const CircuitEngine = () => {
                                 {stop.status==="error" && <span style={{ color:"#3b82f6", cursor:"pointer" }} onClick={e=>{e.stopPropagation();setAddrEditStop(stop);setSelectedId(stop.id);}}>— corregir</span>}
                               </div>
                             )}
-                            {/* IA assisted badge */}
-                            {stop.aiAssisted && (
-                              <div style={{ fontSize:9.5, color:"#a78bfa", marginTop:3, display:"flex", alignItems:"center", gap:4, background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:6, padding:"2px 7px", display:"inline-flex" }}>
-                                <span>✦</span>
-                                <span>IA{stop.aiNote ? ` · ${stop.aiNote}` : ""}</span>
-                              </div>
-                            )}
                             {/* Confidence warning */}
                             {stop.confidence > 0 && stop.confidence < 70 && (
                               <div style={{ fontSize:9, color:"#ef4444", marginTop:2 }}>{stop.confidence}% confianza</div>
@@ -8027,23 +7767,6 @@ export default function RapDrive() {
   const [time,setTime]=useState(new Date());
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return ()=>clearInterval(t);},[]);
   // Load SheetJS for Excel parsing
-  // ── Favicon & title ──────────────────────────────────────────────────────
-  useEffect(() => {
-    // Set favicon to Rap Drive logo
-    const existingFav = document.querySelector("link[rel~='icon']");
-    if (existingFav) existingFav.remove();
-    const fav = document.createElement("link");
-    fav.rel = "icon"; fav.type = "image/svg+xml";
-    fav.href = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23060d1a'/%3E%3Cline x1='2' y1='10' x2='10' y2='10' stroke='%233b82f6' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='3' y1='14' x2='9' y2='14' stroke='%233b82f6' stroke-width='1.3' stroke-linecap='round' opacity='0.7'/%3E%3Cpath d='M11 7h7.5a3.5 3.5 0 0 1 0 7H11V7z' fill='white'/%3E%3Cpath d='M11 14h5l5 11' stroke='white' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E%3Cpath d='M13.5 17 Q15 19 16.5 21' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='13.5' cy='17' r='1.2' fill='none' stroke='%233b82f6' stroke-width='1.2'/%3E%3Ccircle cx='21' cy='8' r='3.5' fill='%232563eb'/%3E%3Ccircle cx='21' cy='7.5' r='1.2' fill='white'/%3E%3C/svg%3E";
-    document.head.appendChild(fav);
-    // Also set apple-touch-icon
-    const apple = document.createElement("link");
-    apple.rel = "apple-touch-icon"; apple.href = fav.href;
-    document.head.appendChild(apple);
-    // Page title
-    document.title = "Rap Drive · Logística Inteligente";
-  }, []);
-
   useEffect(()=>{
     if(!window.XLSX){
       const s=document.createElement("script");
@@ -8283,18 +8006,8 @@ export default function RapDrive() {
       {/* SIDEBAR */}
       <aside style={{width:56,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 0",gap:3,flexShrink:0}}>
         <div style={{marginBottom:20}}>
-          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(155deg,#0d1e3d,#0a1628)",border:"1px solid rgba(59,130,246,0.3)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 16px rgba(59,130,246,0.2)",position:"relative",overflow:"hidden"}}>
-            <svg style={{position:"absolute",left:1,top:"50%",transform:"translateY(-50%)"}} width="5" height="12" viewBox="0 0 5 12" fill="none"><line x1="0" y1="2.5" x2="4.5" y2="2.5" stroke="#3b82f6" strokeWidth="1" strokeLinecap="round"/><line x1="0" y1="5.5" x2="3.5" y2="5.5" stroke="#3b82f6" strokeWidth="0.8" strokeLinecap="round" opacity="0.7"/><line x1="0" y1="8.5" x2="2.5" y2="8.5" stroke="#3b82f6" strokeWidth="0.6" strokeLinecap="round" opacity="0.4"/></svg>
-            <svg width="14" height="16" viewBox="0 0 44 50" fill="none" style={{marginLeft:2}}>
-              <path d="M8 6 L8 44" stroke="white" strokeWidth="8" strokeLinecap="round"/>
-              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.9"/>
-              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              <circle cx="12" cy="34" r="3" fill="none" stroke="#3b82f6" strokeWidth="2.5"/>
-              <ellipse cx="31" cy="10" rx="7" ry="9" fill="#2563eb"/>
-              <circle cx="31" cy="8" r="2.5" fill="white" opacity="0.9"/>
-              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="#1d4ed8"/>
-            </svg>
+          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 20px #3b82f625"}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
           </div>
         </div>
         {navItems.map(item=>(
