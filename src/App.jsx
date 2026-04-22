@@ -1739,7 +1739,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
           {creating && (
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:16,animation:"fadeUp .3s ease"}}>
               <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 30px #3b82f640",animation:"pulse 1s infinite"}}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
+                <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><line x1="2" y1="10" x2="10" y2="10" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"/><line x1="3" y1="14" x2="9" y2="14" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" opacity="0.7"/><path d="M11 7h7.5a3.5 3.5 0 0 1 0 7H11V7z" fill="white"/><path d="M11 14h5l5 11" stroke="white" strokeWidth="2.5" strokeLinecap="round" fill="none"/><circle cx="21" cy="8" r="3.5" fill="#2563eb"/><circle cx="21" cy="7.5" r="1.2" fill="white"/></svg>
               </div>
               <div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9"}}>Creando entrega...</div>
               <div style={{fontSize:11,color:"#2d4a60"}}>Asignando conductor óptimo</div>
@@ -2170,11 +2170,33 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
       `}</style>
       <div style={{ width:360,animation:"dlFU .5s ease",padding:"0 16px" }}>
         <div style={{ textAlign:"center",marginBottom:32 }}>
-          <div style={{ width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="black"/><path d="M2 17l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round" opacity="0.4"/></svg>
+          <div style={{ width:72,height:72,borderRadius:20,background:"linear-gradient(155deg,#0d1e3d,#0a1628)",border:"1px solid rgba(59,130,246,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 32px rgba(59,130,246,0.3)",position:"relative",overflow:"hidden" }}>
+            {/* Speed lines */}
+            <svg style={{position:"absolute",left:3,top:"50%",transform:"translateY(-50%)"}} width="14" height="28" viewBox="0 0 14 28" fill="none">
+              <line x1="0" y1="6" x2="11" y2="6" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" opacity="0.9"/>
+              <line x1="0" y1="11" x2="9" y2="11" stroke="#3b82f6" strokeWidth="1.4" strokeLinecap="round" opacity="0.65"/>
+              <line x1="0" y1="16" x2="6" y2="16" stroke="#3b82f6" strokeWidth="1.1" strokeLinecap="round" opacity="0.4"/>
+            </svg>
+            {/* R con pin */}
+            <svg width="36" height="40" viewBox="0 0 44 50" fill="none" style={{marginLeft:5}}>
+              <path d="M8 6 L8 44" stroke="white" strokeWidth="7" strokeLinecap="round"/>
+              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="6.5" strokeLinecap="round" fill="none" opacity="0.9"/>
+              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" fill="none"/>
+              <circle cx="12" cy="34" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="2"/>
+              <circle cx="26" cy="37" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="2"/>
+              <ellipse cx="31" cy="10" rx="7" ry="9" fill="url(#dlPinG)"/>
+              <ellipse cx="31" cy="8.5" rx="3.5" ry="4" fill="white" opacity="0.9"/>
+              <circle cx="31" cy="8" r="2" fill="url(#dlPinG)"/>
+              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="url(#dlPinG)"/>
+              <defs><linearGradient id="dlPinG" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#1d4ed8"/></linearGradient></defs>
+            </svg>
           </div>
-          <div style={{ fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",letterSpacing:"-0.5px" }}>Rap Drive</div>
-          <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3,fontWeight:500,fontFamily:"'DM Sans',sans-serif",letterSpacing:"1.5px" }}>PANEL MENSAJERO</div>
+          <div style={{ display:"flex",alignItems:"baseline",justifyContent:"center",gap:1,marginBottom:3 }}>
+            <span style={{ fontSize:22,fontWeight:900,color:"#3b82f6",letterSpacing:"-0.8px",fontFamily:"'DM Sans',sans-serif" }}>RAP</span>
+            <span style={{ fontSize:22,fontWeight:900,color:"white",letterSpacing:"-0.8px",fontFamily:"'DM Sans',sans-serif" }}>DRIVE</span>
+          </div>
+          <div style={{ fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"3px",fontWeight:700,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase" }}>PANEL MENSAJERO</div>
         </div>
         <div style={{ background:"#111",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"24px",boxShadow:"0 24px 60px rgba(0,0,0,0.5)" }}>
           <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:16 }}>¿Quién eres?</div>
@@ -2890,8 +2912,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#1e2d3d transparent}
         *::-webkit-scrollbar{width:2px}*::-webkit-scrollbar-thumb{background:#1e2d3d;border-radius:2px}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes segActive{0%,100%{opacity:1;box-shadow:0 0 8px rgba(59,130,246,0.7)}50%{opacity:0.5;box-shadow:0 0 3px rgba(59,130,246,0.3)}}
-        @keyframes scannerLine{0%{background-position:-40% 0}100%{background-position:140% 0}}
         @keyframes slideInRow{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -3299,232 +3319,43 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             </div>
           </div>
 
-          {/* ── ROUTE HERO — barra segmentada + stats ── */}
-          {myRoute && (() => {
-            const total     = stops.length;
-            const doneCnt   = delivered.length;
-            const probCnt   = problems.length;
-            const pendCnt   = pending.length;
-            // Parada actual = primer stop que no está done ni problema
-            const curStop   = stops.find(s => s.driverStatus !== "delivered" && s.driverStatus !== "problema");
-            const curIdx    = curStop ? stops.indexOf(curStop) : -1;
-
-            return (
-              <div style={{ padding:"10px 14px 0", flexShrink:0 }}>
-
-                {/* ── Card hero ── */}
-                <div style={{
-                  background:"linear-gradient(135deg,rgba(12,28,56,0.95),rgba(8,18,36,0.98))",
-                  border:"1px solid rgba(59,130,246,0.18)",
-                  borderRadius:18,
-                  padding:"14px 15px 13px",
-                  backdropFilter:"blur(14px)",
-                  WebkitBackdropFilter:"blur(14px)",
-                  boxShadow:"0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
-                  position:"relative",
-                  overflow:"hidden",
-                }}>
-
-                  {/* Glow top-right decorativo */}
-                  <div style={{ position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.1) 0%,transparent 70%)",pointerEvents:"none" }}/>
-
-                  {/* ── Fila superior: nombre ruta + ETA ── */}
-                  <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:11 }}>
-                    <div style={{ flex:1,minWidth:0 }}>
-                      {/* Label */}
-                      <div style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.55)",letterSpacing:"2px",textTransform:"uppercase",marginBottom:4 }}>
-                        RUTA ACTIVA
-                      </div>
-                      {/* Nombre */}
-                      <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5 }}>
-                        {myRoute.routeName || "Ruta del día"}
-                      </div>
-                      {/* Meta chips */}
-                      <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
-                        {estFinish() && (
-                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            {estFinish()}
-                          </span>
-                        )}
-                        {routeKm > 0 && (
-                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                            {routeKm} km
-                          </span>
-                        )}
-                        <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                          {total} paradas
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Porcentaje estilo HUD */}
-                    <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",flexShrink:0,marginLeft:12 }}>
-                      <div style={{ display:"flex",alignItems:"baseline",gap:1 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:28,fontWeight:600,color:"#60a5fa",lineHeight:1,letterSpacing:"-2px" }}>
-                          {pct}
-                        </span>
-                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:12,color:"rgba(59,130,246,0.45)" }}>%</span>
-                      </div>
-                      <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(255,255,255,0.2)",letterSpacing:"1px",textTransform:"uppercase",marginTop:1 }}>
-                        completado
+          {/* ── Route name block ── */}
+          {myRoute && (
+            <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
+              <div style={{ background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"13px 15px",backdropFilter:"blur(10px)" }}>
+                <div style={{ display:"flex",alignItems:"center",gap:11,marginBottom:9 }}>
+                  <div style={{ width:42,height:42,borderRadius:13,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 20px rgba(59,130,246,0.15)" }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                      <circle cx="5" cy="18" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
+                      <circle cx="19" cy="6" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
+                      <path d="M7.5 18h6a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h4.5" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15 }}>{myRoute.routeName||"Ruta del día"}</div>
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:3,flexWrap:"wrap" }}>
+                      {estFinish()&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Finaliza {estFinish()}
+                      </span>}
+                      {routeKm>0&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        {routeKm} km
+                      </span>}
+                      <span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
+                        {stops.filter(s=>s.stopNum).length} paradas
                       </span>
                     </div>
                   </div>
-
-                  {/* ── BARRA SEGMENTADA ── */}
-                  <div style={{ marginBottom:11 }}>
-                    {/* Segmentos — uno por parada */}
-                    <div style={{ display:"flex",gap:2,marginBottom:4,height:5 }}>
-                      {stops.map((s, idx) => {
-                        const isDone = s.driverStatus === "delivered";
-                        const isProb = s.driverStatus === "problema";
-                        const isAct  = idx === curIdx;
-                        return (
-                          <div key={s.id || idx} style={{
-                            flex:1,
-                            borderRadius:2,
-                            background: isDone ? "#10b981"
-                                      : isProb ? "#ef4444"
-                                      : isAct  ? "#3b82f6"
-                                      : "rgba(255,255,255,0.07)",
-                            boxShadow: isDone ? "0 0 5px rgba(16,185,129,0.35)"
-                                     : isProb ? "0 0 5px rgba(239,68,68,0.35)"
-                                     : isAct  ? "0 0 8px rgba(59,130,246,0.7)"
-                                     : "none",
-                            transition:"background .4s, box-shadow .4s",
-                            animation: isAct ? "segActive 1.8s ease-in-out infinite" : "none",
-                          }}/>
-                        );
-                      })}
-                    </div>
-                    {/* Sub-línea scanner */}
-                    <div style={{ position:"relative",height:2,background:"rgba(255,255,255,0.03)",borderRadius:2,overflow:"hidden" }}>
-                      <div style={{ position:"absolute",top:0,left:0,right:0,bottom:0,background:"linear-gradient(90deg,transparent 0%,rgba(59,130,246,0.5) 50%,transparent 100%)",backgroundSize:"40% 100%",animation:"scannerLine 2s linear infinite" }}/>
-                    </div>
-                  </div>
-
-                  {/* ── STATS ROW — 4 números en tiempo real ── */}
-                  <div style={{ display:"flex",gap:0 }}>
-                    {[
-                      { val:doneCnt,  label:"Entregados", color:"#10b981", dimColor:"rgba(16,185,129,0.12)",  borderColor:"rgba(16,185,129,0.2)"  },
-                      { val:pendCnt,  label:"Pendientes", color:"#3b82f6", dimColor:"rgba(59,130,246,0.12)",  borderColor:"rgba(59,130,246,0.2)"  },
-                      { val:probCnt,  label:"Problemas",  color:"#ef4444", dimColor:"rgba(239,68,68,0.12)",   borderColor:"rgba(239,68,68,0.2)"   },
-                      { val:routeKm,  label:"KM Total",   color:"#94a3b8", dimColor:"rgba(148,163,184,0.08)", borderColor:"rgba(148,163,184,0.12)" },
-                    ].map((st, i, arr) => (
-                      <div key={st.label} style={{
-                        flex:1,
-                        textAlign:"center",
-                        padding:"8px 4px",
-                        borderRadius:10,
-                        background: st.val > 0 ? st.dimColor : "transparent",
-                        border:`1px solid ${st.val > 0 ? st.borderColor : "transparent"}`,
-                        marginRight: i < arr.length - 1 ? 6 : 0,
-                        transition:"all .3s",
-                      }}>
-                        <div style={{
-                          fontFamily:"'DM Mono',monospace",
-                          fontSize: st.val > 99 ? 18 : 22,
-                          fontWeight:600,
-                          color: st.val > 0 ? st.color : "rgba(255,255,255,0.15)",
-                          lineHeight:1,
-                          marginBottom:3,
-                          letterSpacing:"-1px",
-                          transition:"color .3s",
-                        }}>
-                          {st.val || 0}
-                        </div>
-                        <div style={{
-                          fontFamily:"'DM Mono',monospace",
-                          fontSize:7,
-                          fontWeight:600,
-                          color:"rgba(255,255,255,0.22)",
-                          letterSpacing:"0.8px",
-                          textTransform:"uppercase",
-                        }}>
-                          {st.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ── PARADA ACTUAL — card dentro del hero ── */}
-                  {curStop && (
-                    <div style={{
-                      marginTop:11,
-                      padding:"11px 12px",
-                      borderRadius:12,
-                      background:"rgba(59,130,246,0.07)",
-                      border:"1px solid rgba(59,130,246,0.2)",
-                      borderLeft:"3px solid #3b82f6",
-                      position:"relative",
-                    }}>
-                      {/* Label */}
-                      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
-                        <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                          <div style={{ width:20,height:20,borderRadius:7,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(59,130,246,0.4)" }}>
-                            <span style={{ fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:800,color:"white",lineHeight:1 }}>{curStop.stopNum||"?"}</span>
-                          </div>
-                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.7)",letterSpacing:"1.5px",textTransform:"uppercase" }}>
-                            PARADA ACTUAL
-                          </span>
-                        </div>
-                        {/* Pulsito vivo */}
-                        <div style={{ display:"flex",alignItems:"center",gap:4 }}>
-                          <div style={{ width:5,height:5,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 6px rgba(59,130,246,0.8)",animation:"pulse 1.6s infinite" }}/>
-                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(59,130,246,0.6)",letterSpacing:"0.5px" }}>EN CAMINO</span>
-                        </div>
-                      </div>
-
-                      {/* Cliente + dirección */}
-                      <div style={{ fontSize:14,fontWeight:700,color:"#f8fafc",letterSpacing:"-0.2px",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                        {curStop.client || `Parada ${curStop.stopNum}`}
-                      </div>
-                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.32)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:11 }}>
-                        {curStop.displayAddr || curStop.rawAddr || "Sin dirección"}
-                      </div>
-
-                      {/* Botones de acción directa */}
-                      <div style={{ display:"flex",gap:7 }}>
-                        {/* Waze */}
-                        <a href={`https://waze.com/ul?ll=${curStop.lat},${curStop.lng}&navigate=yes`}
-                           target="_blank" rel="noreferrer"
-                           onClick={e=>e.stopPropagation()}
-                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"linear-gradient(135deg,#1a3360,#1d4ed8)",color:"white",fontSize:11,fontWeight:700,textDecoration:"none",boxShadow:"0 3px 12px rgba(29,78,216,0.35)" }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-                          Waze
-                        </a>
-                        {/* Google Maps */}
-                        <a href={`https://maps.google.com/?q=${curStop.lat},${curStop.lng}`}
-                           target="_blank" rel="noreferrer"
-                           onClick={e=>e.stopPropagation()}
-                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",fontSize:11,fontWeight:700,textDecoration:"none" }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          Maps
-                        </a>
-                        {/* Entregado */}
-                        <button
-                          onClick={e=>{e.stopPropagation();markDelivered(curStop.id);}}
-                          style={{ flex:1.4,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px 4px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",boxShadow:"0 3px 14px rgba(16,185,129,0.38)" }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
-                          Entregado
-                        </button>
-                        {/* Problema */}
-                        <button
-                          onClick={e=>{e.stopPropagation();setShowProb(curStop.id);}}
-                          style={{ width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,border:"1px solid rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.08)",color:"#f87171",cursor:"pointer",flexShrink:0 }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
+                  <span style={{ fontSize:14,fontWeight:800,color:"#3b82f6",flexShrink:0,letterSpacing:"-0.5px" }}>{pct}%</span>
+                </div>
+                <div style={{ height:3,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden" }}>
+                  <div style={{ height:"100%",background:"linear-gradient(90deg,#1d4ed8,#60a5fa)",borderRadius:3,width:`${pct}%`,transition:"width .7s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(96,165,250,0.6)" }}/>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           {/* ── Filter chips ── */}
           {myRoute && (
@@ -4471,20 +4302,51 @@ const LoginScreen = ({ onLogin }) => {
         width:380, position:"relative", zIndex:1,
         animation: success ? "lOut .5s ease forwards" : "lCard .6s cubic-bezier(.16,1,.3,1) both",
       }}>
-        {/* Logo */}
+        {/* Logo oficial Rap Drive */}
         <div style={{ textAlign:"center", marginBottom:28, animation:"lLogo .6s .08s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
-          <div style={{ position:"relative",width:60,height:60,margin:"0 auto 14px" }}>
-            <div style={{ position:"absolute",inset:-4,borderRadius:20,background:"linear-gradient(135deg,rgba(59,130,246,0.3),rgba(99,102,241,0.2))",filter:"blur(8px)" }}/>
-            <div style={{ position:"relative",width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(59,130,246,0.4)" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
-                <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.45"/>
+          <div style={{ position:"relative",width:88,height:88,margin:"0 auto 16px" }}>
+            <div style={{ position:"absolute",inset:-6,borderRadius:28,background:"radial-gradient(circle,rgba(59,130,246,0.35) 0%,transparent 70%)",filter:"blur(12px)" }}/>
+            <div style={{ position:"relative",width:88,height:88,borderRadius:24,background:"linear-gradient(155deg,#0d1e3d 0%,#0a1628 50%,#0d2248 100%)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 12px 40px rgba(59,130,246,0.35),inset 0 1px 0 rgba(255,255,255,0.08)" }}>
+              {/* Líneas de velocidad */}
+              <svg style={{position:"absolute",left:6,top:"50%",transform:"translateY(-50%)"}} width="20" height="36" viewBox="0 0 20 36" fill="none">
+                <line x1="0" y1="8" x2="16" y2="8" stroke="url(#spd1)" strokeWidth="2.2" strokeLinecap="round"/>
+                <line x1="0" y1="14" x2="13" y2="14" stroke="url(#spd1)" strokeWidth="1.8" strokeLinecap="round" opacity="0.8"/>
+                <line x1="0" y1="20" x2="10" y2="20" stroke="url(#spd1)" strokeWidth="1.4" strokeLinecap="round" opacity="0.6"/>
+                <line x1="0" y1="26" x2="7" y2="26" stroke="url(#spd1)" strokeWidth="1.1" strokeLinecap="round" opacity="0.35"/>
+                <defs><linearGradient id="spd1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0.1"/><stop offset="100%" stopColor="#3b82f6"/></linearGradient></defs>
+              </svg>
+              {/* R con ruta y pin */}
+              <svg width="44" height="50" viewBox="0 0 44 50" fill="none" style={{marginLeft:6,zIndex:1}}>
+                {/* Cuerpo de la R */}
+                <path d="M8 6 L8 44" stroke="white" strokeWidth="7" strokeLinecap="round"/>
+                <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+                {/* Pata de la R (ruta curva) */}
+                <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="6.5" strokeLinecap="round" fill="none" opacity="0.9"/>
+                {/* Línea de ruta IA sobre la R */}
+                <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="url(#rtGrad)" strokeWidth="2" strokeLinecap="round" fill="none" strokeDasharray="none"/>
+                <circle cx="12" cy="34" r="2.5" fill="none" stroke="#2563eb" strokeWidth="2"/>
+                <circle cx="26" cy="37" r="2.5" fill="none" stroke="#2563eb" strokeWidth="2"/>
+                {/* Pin GPS en la punta superior */}
+                <ellipse cx="31" cy="10" rx="7" ry="9" fill="url(#pinGrad)"/>
+                <ellipse cx="31" cy="8.5" rx="3.5" ry="4" fill="white" opacity="0.9"/>
+                <circle cx="31" cy="8" r="2" fill="url(#pinGrad)"/>
+                <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="url(#pinGrad)"/>
+                <defs>
+                  <linearGradient id="rtGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#60a5fa"/>
+                  </linearGradient>
+                  <linearGradient id="pinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#1d4ed8"/>
+                  </linearGradient>
+                </defs>
               </svg>
             </div>
           </div>
-          <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
-          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Entregas</div>
+          <div style={{ display:"flex",alignItems:"baseline",justifyContent:"center",gap:1,marginBottom:4 }}>
+            <span style={{ fontSize:28,fontWeight:900,color:"#3b82f6",letterSpacing:"-1px",fontFamily:"'DM Sans',sans-serif" }}>RAP</span>
+            <span style={{ fontSize:28,fontWeight:900,color:"white",letterSpacing:"-1px",fontFamily:"'DM Sans',sans-serif" }}>DRIVE</span>
+          </div>
+          <div style={{ fontSize:9.5,color:"rgba(255,255,255,0.22)",letterSpacing:"3.5px",fontWeight:700,textTransform:"uppercase" }}>LOGÍSTICA INTELIGENTE</div>
         </div>
 
         {/* Card */}
@@ -5789,247 +5651,533 @@ const loadSheetJS = () => new Promise((res) => {
   document.head.appendChild(s);
 });
 
+// ── BASE DE LANDMARKS RD (285 puntos) ──────────────────────────────────────────────────
+// Búsqueda O(n) instantánea, 0ms, sin internet
+const RD_LANDMARKS = [
+  { k:"jumbo churchill", lat:18.4698, lng:-69.9337, d:"Jumbo La Churchill, Santo Domingo" },
+  { k:"jumbo independencia", lat:18.462, lng:-69.9451, d:"Jumbo Av. Independencia, Santo Domingo" },
+  { k:"jumbo kennedy", lat:18.4812, lng:-69.9565, d:"Jumbo Av. John F. Kennedy, Santo Domingo" },
+  { k:"jumbo miraflores", lat:18.4803, lng:-69.9421, d:"Jumbo Miraflores, Santo Domingo" },
+  { k:"jumbo duarte", lat:18.4859, lng:-70.0009, d:"Jumbo Av. Duarte, Santo Domingo" },
+  { k:"jumbo 27 de febrero", lat:18.4761, lng:-69.9251, d:"Jumbo Av. 27 de Febrero, Santo Domingo" },
+  { k:"jumbo lope de vega", lat:18.476, lng:-69.927, d:"Jumbo Lope de Vega, Santo Domingo" },
+  { k:"jumbo bávaro", lat:18.6831, lng:-68.4067, d:"Jumbo Bávaro, La Altagracia" },
+  { k:"jumbo santiago", lat:19.4517, lng:-70.697, d:"Jumbo Santiago, Santiago" },
+  { k:"nacional villa mella", lat:18.5612, lng:-69.9769, d:"Supermercado Nacional Villa Mella" },
+  { k:"nacional naco", lat:18.4771, lng:-69.922, d:"Supermercado Nacional Naco" },
+  { k:"nacional los cacaos", lat:18.54, lng:-69.912, d:"Supermercado Nacional Los Cacaos" },
+  { k:"nacional bella vista", lat:18.4571, lng:-69.9371, d:"Supermercado Nacional Bella Vista" },
+  { k:"nacional herrera", lat:18.4822, lng:-70.0412, d:"Supermercado Nacional Herrera" },
+  { k:"bravo piantini", lat:18.4742, lng:-69.9297, d:"Bravo Piantini, Santo Domingo" },
+  { k:"bravo anacaona", lat:18.4601, lng:-69.9552, d:"Bravo Anacaona, Santo Domingo" },
+  { k:"bravo megacentro", lat:18.4598, lng:-69.9032, d:"Bravo Megacentro, Santo Domingo" },
+  { k:"plazas tropicales", lat:18.4655, lng:-69.9289, d:"Plazas Tropicales, Santo Domingo" },
+  { k:"la sirena duarte", lat:18.4831, lng:-69.9946, d:"La Sirena Av. Duarte" },
+  { k:"la sirena 27 febrero", lat:18.474, lng:-69.9272, d:"La Sirena 27 de Febrero" },
+  { k:"la sirena km9", lat:18.5094, lng:-69.9863, d:"La Sirena Km 9" },
+  { k:"la sirena herrera", lat:18.481, lng:-70.038, d:"La Sirena Herrera" },
+  { k:"la sirena mella", lat:18.515, lng:-69.958, d:"La sirena Villa Mella" },
+  { k:"la sirena san isidro", lat:18.5032, lng:-69.8674, d:"La Sirena San Isidro" },
+  { k:"iberia superstore", lat:18.4838, lng:-69.9441, d:"Iberia Superstore, Bella Vista" },
+  { k:"pola bella vista", lat:18.4601, lng:-69.939, d:"Pola Bella Vista" },
+  { k:"pola piantini", lat:18.4742, lng:-69.93, d:"Pola Piantini" },
+  { k:"carol piantini", lat:18.474, lng:-69.9295, d:"Farmacia Carol Piantini" },
+  { k:"carol naco", lat:18.477, lng:-69.9212, d:"Farmacia Carol Naco" },
+  { k:"carol la esperilla", lat:18.4718, lng:-69.9235, d:"Farmacia Carol La Esperilla" },
+  { k:"carol bella vista", lat:18.4601, lng:-69.9371, d:"Farmacia Carol Bella Vista" },
+  { k:"carol lincoln", lat:18.4757, lng:-69.9267, d:"Farmacia Carol Av. Lincoln" },
+  { k:"carol kennedy", lat:18.481, lng:-69.956, d:"Farmacia Carol Kennedy" },
+  { k:"farmacia carol 27 febrero", lat:18.4761, lng:-69.9251, d:"Farmacia Carol 27 de Febrero" },
+  { k:"farmacosto kennedy", lat:18.4812, lng:-69.9561, d:"Farmacosto Kennedy" },
+  { k:"farmacosto herrera", lat:18.4822, lng:-70.0421, d:"Farmacosto Herrera" },
+  { k:"farmacosto villa mella", lat:18.561, lng:-69.9771, d:"Farmacosto Villa Mella" },
+  { k:"farmacosto san carlos", lat:18.476, lng:-69.906, d:"Farmacosto San Carlos" },
+  { k:"farmacosto duarte", lat:18.4862, lng:-70.0009, d:"Farmacosto Av. Duarte" },
+  { k:"farmacosto los mina", lat:18.4942, lng:-69.8632, d:"Farmacosto Los Mina" },
+  { k:"farmacosto gurabo", lat:18.5021, lng:-69.9041, d:"Farmacosto Gurabo" },
+  { k:"banco popular piantini", lat:18.4742, lng:-69.9298, d:"Banco Popular Piantini" },
+  { k:"banco popular kennedy", lat:18.4812, lng:-69.9565, d:"Banco Popular Kennedy" },
+  { k:"banco popular bella vista", lat:18.4601, lng:-69.9371, d:"Banco Popular Bella Vista" },
+  { k:"banco popular duarte", lat:18.4862, lng:-69.9999, d:"Banco Popular Av. Duarte" },
+  { k:"banco popular zona colonial", lat:18.4738, lng:-69.8878, d:"Banco Popular Zona Colonial" },
+  { k:"banco bhd piantini", lat:18.4741, lng:-69.93, d:"Banco BHD Piantini" },
+  { k:"banco bhd kennedy", lat:18.481, lng:-69.9561, d:"Banco BHD Kennedy" },
+  { k:"banco bhd 27 febrero", lat:18.476, lng:-69.9252, d:"Banco BHD 27 de Febrero" },
+  { k:"banreservas piantini", lat:18.4742, lng:-69.9295, d:"Banreservas Piantini" },
+  { k:"banreservas zona colonial", lat:18.474, lng:-69.8879, d:"Banreservas Zona Colonial" },
+  { k:"banreservas kennedy", lat:18.4812, lng:-69.956, d:"Banreservas Kennedy" },
+  { k:"scotiabank churchill", lat:18.4698, lng:-69.9336, d:"Scotiabank La Churchill" },
+  { k:"scotiabank naco", lat:18.4771, lng:-69.921, d:"Scotiabank Naco" },
+  { k:"citibank piantini", lat:18.4742, lng:-69.9298, d:"Citibank Piantini" },
+  { k:"asociacion cibao", lat:18.4762, lng:-69.926, d:"Asociación Cibao de Ahorros" },
+  { k:"acropolis", lat:18.4701, lng:-69.9362, d:"Acropolis Center, Churchill" },
+  { k:"ágora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
+  { k:"agora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
+  { k:"megacentro", lat:18.4591, lng:-69.9031, d:"Megacentro, Santo Domingo" },
+  { k:"blue mall", lat:18.47, lng:-69.9333, d:"Blue Mall, Churchill" },
+  { k:"sambil", lat:18.476, lng:-69.9223, d:"Sambil Santo Domingo, Av. Luperón" },
+  { k:"city center bella vista", lat:18.4605, lng:-69.938, d:"City Center Bella Vista" },
+  { k:"plaza central", lat:18.4741, lng:-69.927, d:"Plaza Central, Av. 27 de Febrero" },
+  { k:"galería 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
+  { k:"galerías 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
+  { k:"mall san ignacio", lat:18.482, lng:-69.9421, d:"Mall San Ignacio" },
+  { k:"plaza lama duarte", lat:18.4831, lng:-69.9946, d:"Plaza Lama Av. Duarte" },
+  { k:"plaza lama kennedy", lat:18.4812, lng:-69.956, d:"Plaza Lama Kennedy" },
+  { k:"multicentro la sirena", lat:18.4831, lng:-69.994, d:"Multicentro La Sirena" },
+  { k:"almacenes tropigas", lat:18.476, lng:-69.926, d:"Almacenes Tropigas" },
+  { k:"plaza la trinitaria", lat:18.5151, lng:-69.959, d:"Plaza La Trinitaria" },
+  { k:"centro olimpico", lat:18.4715, lng:-69.948, d:"Centro Olímpico Juan Pablo Duarte" },
+  { k:"malecón center", lat:18.4646, lng:-69.8982, d:"Malecón Center, Santo Domingo" },
+  { k:"renaissance mall", lat:18.4701, lng:-69.9361, d:"Renaissance Mall, Churchill" },
+  { k:"esso piantini", lat:18.4741, lng:-69.9298, d:"Estación Esso Piantini" },
+  { k:"shell kennedy", lat:18.481, lng:-69.956, d:"Shell Kennedy" },
+  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
+  { k:"hospital dr. darío contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
+  { k:"dario contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
+  { k:"plaza de la salud", lat:18.4611, lng:-69.943, d:"Plaza de la Salud" },
+  { k:"clínica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
+  { k:"clinica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
+  { k:"hospital universitario madre y maestra", lat:19.459, lng:-70.6878, d:"HUMM Santiago" },
+  { k:"humm", lat:19.459, lng:-70.6878, d:"Hospital Universitario Madre y Maestra" },
+  { k:"hospital general dr. vinicio calventi", lat:18.515, lng:-69.956, d:"Hospital General Calventi" },
+  { k:"hospital louis e. aybar", lat:18.476, lng:-69.899, d:"Hospital Louis E. Aybar" },
+  { k:"clínica corominas", lat:18.5151, lng:-69.958, d:"Clínica Corominas" },
+  { k:"clínica unión médica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
+  { k:"union medica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
+  { k:"hospital central de las fuerzas armadas", lat:18.464, lng:-69.915, d:"Hospital Central FFAA" },
+  { k:"homs", lat:18.464, lng:-69.915, d:"Hospital HOMS" },
+  { k:"hospital infantil robert reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
+  { k:"reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
+  { k:"hospital hugo mendez", lat:18.564, lng:-69.979, d:"Hospital Hugo Mendez Villa Mella" },
+  { k:"clínica colon", lat:18.4841, lng:-70.0012, d:"Clínica Colón" },
+  { k:"uasd", lat:18.468, lng:-69.903, d:"Universidad Autónoma de Santo Domingo" },
+  { k:"universidad autónoma", lat:18.468, lng:-69.903, d:"UASD, Ciudad Universitaria" },
+  { k:"pucmm santo domingo", lat:18.4741, lng:-69.9276, d:"PUCMM Santo Domingo" },
+  { k:"pucmm santiago", lat:19.4501, lng:-70.6921, d:"PUCMM Santiago" },
+  { k:"intec", lat:18.4722, lng:-69.904, d:"Instituto Tecnológico de Santo Domingo" },
+  { k:"unibe", lat:18.4762, lng:-69.9261, d:"UNIBE, Santo Domingo" },
+  { k:"unapec", lat:18.4762, lng:-69.9261, d:"UNAPEC, Av. Máximo Gómez" },
+  { k:"o&m", lat:18.4811, lng:-69.9562, d:"Universidad O&M" },
+  { k:"utesa", lat:19.4562, lng:-70.6891, d:"UTESA Santiago" },
+  { k:"ufhec", lat:18.4772, lng:-69.9271, d:"UFHEC, Santo Domingo" },
+  { k:"unicaribe", lat:18.481, lng:-69.955, d:"UNICARIBE" },
+  { k:"uord", lat:18.5155, lng:-69.9551, d:"UORD, Villa Mella" },
+  { k:"catedral primada", lat:18.474, lng:-69.8878, d:"Catedral Primada de América, Zona Colonial" },
+  { k:"catedral de santiago", lat:19.4512, lng:-70.6971, d:"Catedral Santiago de los Caballeros" },
+  { k:"iglesia san carlos", lat:18.476, lng:-69.906, d:"Iglesia San Carlos" },
+  { k:"iglesia la altagracia naco", lat:18.4771, lng:-69.921, d:"Iglesia La Altagracia Naco" },
+  { k:"templo adventista herrera", lat:18.482, lng:-70.041, d:"Templo Adventista Herrera" },
+  { k:"iglesia los girasoles", lat:18.562, lng:-70.004, d:"Iglesia Los Girasoles" },
+  { k:"santo cristo de los milagros", lat:18.538, lng:-69.897, d:"Santo Cristo de los Milagros, Los Mameyes" },
+  { k:"texaco kennedy", lat:18.4812, lng:-69.9562, d:"Texaco Kennedy" },
+  { k:"esso kennedy", lat:18.4812, lng:-69.9563, d:"Esso Kennedy" },
+  { k:"shell 27 febrero", lat:18.4761, lng:-69.9253, d:"Shell 27 de Febrero" },
+  { k:"texaco 27 febrero", lat:18.4762, lng:-69.9252, d:"Texaco 27 de Febrero" },
+  { k:"esso independencia", lat:18.462, lng:-69.945, d:"Esso Av. Independencia" },
+  { k:"texaco independencia", lat:18.4619, lng:-69.9451, d:"Texaco Av. Independencia" },
+  { k:"shell luperon", lat:18.476, lng:-69.9221, d:"Shell Av. Luperón" },
+  { k:"esso duarte", lat:18.4862, lng:-70.0005, d:"Esso Av. Duarte" },
+  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
+  { k:"shell villa mella", lat:18.5611, lng:-69.9772, d:"Shell Villa Mella" },
+  { k:"texaco san isidro", lat:18.503, lng:-69.8672, d:"Texaco San Isidro" },
+  { k:"renaissance jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
+  { k:"jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
+  { k:"intercontinental", lat:18.4748, lng:-69.9287, d:"Hotel Intercontinental V Centenario" },
+  { k:"v centenario", lat:18.4748, lng:-69.9287, d:"Hotel V Centenario" },
+  { k:"hilton santo domingo", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
+  { k:"hotel hilton", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
+  { k:"iberostar colonial", lat:18.474, lng:-69.8878, d:"Iberostar Colonial" },
+  { k:"hotel europa", lat:18.4742, lng:-69.8879, d:"Hotel Europa, Zona Colonial" },
+  { k:"hotel nicolás de ovando", lat:18.4741, lng:-69.888, d:"Hotel Nicolás de Ovando, Zona Colonial" },
+  { k:"holiday inn", lat:18.4762, lng:-69.9261, d:"Holiday Inn Express Santo Domingo" },
+  { k:"parque colon", lat:18.4741, lng:-69.8879, d:"Parque Colón, Zona Colonial" },
+  { k:"parque independencia", lat:18.472, lng:-69.8999, d:"Parque de la Independencia" },
+  { k:"el conde", lat:18.474, lng:-69.8879, d:"El Conde, Zona Colonial" },
+  { k:"zona colonial", lat:18.4741, lng:-69.8879, d:"Zona Colonial, Santo Domingo" },
+  { k:"malecon", lat:18.464, lng:-69.9001, d:"Malecón, Av. George Washington" },
+  { k:"george washington", lat:18.464, lng:-69.9, d:"Av. George Washington, Malecón" },
+  { k:"parque mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
+  { k:"mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
+  { k:"parque mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
+  { k:"mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
+  { k:"parque independencia", lat:18.472, lng:-69.9001, d:"Parque de la Independencia" },
+  { k:"plaza de la cultura", lat:18.4722, lng:-69.9068, d:"Plaza de la Cultura" },
+  { k:"faro a colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
+  { k:"faro colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
+  { k:"av winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"av. winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"avenida winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"av 27 febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"av. 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"avenida 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"av kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"av. john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"avenida john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"av independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
+  { k:"av. independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
+  { k:"av duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
+  { k:"av. duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
+  { k:"av luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
+  { k:"av. luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
+  { k:"av máximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
+  { k:"av. maximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
+  { k:"av bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
+  { k:"av. bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
+  { k:"av tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
+  { k:"av. tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
+  { k:"av ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
+  { k:"av. ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
+  { k:"av republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
+  { k:"av. republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
+  { k:"av gregorio luperon", lat:18.4762, lng:-69.9221, d:"Av. Gregorio Luperón" },
+  { k:"autopista duarte", lat:19.1521, lng:-70.3421, d:"Autopista Duarte (punto medio)" },
+  { k:"autopista 30 de mayo", lat:18.5101, lng:-69.9401, d:"Autopista 30 de Mayo" },
+  { k:"autopista las americas", lat:18.496, lng:-69.85, d:"Autopista Las Américas" },
+  { k:"piantini", lat:18.4741, lng:-69.9298, d:"Piantini, Santo Domingo" },
+  { k:"naco", lat:18.4771, lng:-69.921, d:"Naco, Santo Domingo" },
+  { k:"evaristo morales", lat:18.478, lng:-69.9192, d:"Evaristo Morales, Santo Domingo" },
+  { k:"bella vista", lat:18.4601, lng:-69.9371, d:"Bella Vista, Santo Domingo" },
+  { k:"serralles", lat:18.465, lng:-69.9351, d:"Serrallés, Santo Domingo" },
+  { k:"gazcue", lat:18.47, lng:-69.91, d:"Gazcue, Santo Domingo" },
+  { k:"los prados", lat:18.501, lng:-69.9751, d:"Los Prados, Santo Domingo Norte" },
+  { k:"los girasoles", lat:18.562, lng:-70.0041, d:"Los Girasoles, Santo Domingo Norte" },
+  { k:"la zurza", lat:18.4911, lng:-69.9312, d:"La Zurza, Santo Domingo" },
+  { k:"villa consuelo", lat:18.4901, lng:-69.912, d:"Villa Consuelo, Santo Domingo" },
+  { k:"ciudad nueva", lat:18.475, lng:-69.8991, d:"Ciudad Nueva, Santo Domingo" },
+  { k:"san carlos", lat:18.4761, lng:-69.906, d:"San Carlos, Santo Domingo" },
+  { k:"la fe", lat:18.501, lng:-69.9481, d:"La Fe, Santo Domingo Norte" },
+  { k:"la victoria", lat:18.525, lng:-69.949, d:"La Victoria, Santo Domingo Norte" },
+  { k:"villa mella", lat:18.5611, lng:-69.9771, d:"Villa Mella, Santo Domingo Norte" },
+  { k:"sabana perdida", lat:18.578, lng:-69.9421, d:"Sabana Perdida, Santo Domingo Norte" },
+  { k:"guaricanos", lat:18.59, lng:-70.004, d:"Guaricanos, Santo Domingo Norte" },
+  { k:"los alcarrizos", lat:18.52, lng:-70.056, d:"Los Alcarrizos" },
+  { k:"herrera", lat:18.4822, lng:-70.0412, d:"Herrera, Santo Domingo Oeste" },
+  { k:"manoguayabo", lat:18.5101, lng:-70.0821, d:"Manoguayabo" },
+  { k:"cipae", lat:18.53, lng:-70.021, d:"CIPAE, Santo Domingo Oeste" },
+  { k:"los mina", lat:18.4941, lng:-69.8632, d:"Los Mina, Santo Domingo Este" },
+  { k:"san isidro", lat:18.503, lng:-69.8672, d:"San Isidro, Santo Domingo Este" },
+  { k:"sabana larga", lat:18.518, lng:-69.8311, d:"Sabana Larga" },
+  { k:"boca chica", lat:18.4571, lng:-69.6012, d:"Boca Chica" },
+  { k:"cacicazgos", lat:18.4601, lng:-69.9021, d:"Los Cacicazgos, Santo Domingo" },
+  { k:"la esperilla", lat:18.4718, lng:-69.9235, d:"La Esperilla, Piantini" },
+  { k:"los rios", lat:18.5012, lng:-69.9251, d:"Los Ríos, Santo Domingo" },
+  { k:"brisas del este", lat:18.504, lng:-69.8421, d:"Brisas del Este" },
+  { k:"alma rosa", lat:18.5122, lng:-69.851, d:"Alma Rosa" },
+  { k:"cancino", lat:18.529, lng:-69.872, d:"Cancino, Santo Domingo Este" },
+  { k:"sabana abajo", lat:19.3921, lng:-70.7281, d:"Sabana Abajo, Santiago" },
+  { k:"ensanche isabelita", lat:18.484, lng:-69.957, d:"Ensanche Isabelita" },
+  { k:"ensanche naco", lat:18.4771, lng:-69.921, d:"Ensanche Naco" },
+  { k:"ensanche luperon", lat:18.4762, lng:-69.9221, d:"Ensanche Luperón" },
+  { k:"ensanche paraiso", lat:18.464, lng:-69.927, d:"Ensanche Paraíso" },
+  { k:"ensanche la fe", lat:18.501, lng:-69.9481, d:"Ensanche La Fe" },
+  { k:"arroyo hondo", lat:18.52, lng:-70.01, d:"Arroyo Hondo, Santo Domingo" },
+  { k:"los jardines", lat:18.5141, lng:-70.0012, d:"Los Jardines, Santo Domingo Norte" },
+  { k:"colinas del norte", lat:18.5851, lng:-70.0121, d:"Colinas del Norte" },
+  { k:"palma real", lat:18.5551, lng:-69.9781, d:"Palma Real, Santo Domingo Norte" },
+  { k:"los frailes", lat:18.5701, lng:-69.9801, d:"Los Frailes" },
+  { k:"las américas", lat:18.496, lng:-69.85, d:"Las Américas" },
+  { k:"simon bolivar", lat:18.47, lng:-69.9182, d:"Sector Simón Bolívar" },
+  { k:"urbanizacion fernandez", lat:18.4771, lng:-69.9253, d:"Urbanización Fernández" },
+  { k:"residencial loma linda", lat:18.478, lng:-69.932, d:"Residencial Loma Linda" },
+  { k:"residencial tropical", lat:18.51, lng:-70.002, d:"Residencial Tropical" },
+  { k:"residencial los robles", lat:18.476, lng:-70.004, d:"Residencial Los Robles" },
+  { k:"monumento santiago", lat:19.4512, lng:-70.6971, d:"Monumento a los Héroes, Santiago" },
+  { k:"liceo secundario", lat:19.451, lng:-70.697, d:"Liceo Secundario, Santiago" },
+  { k:"av. 27 de febrero santiago", lat:19.4521, lng:-70.69, d:"Av. 27 de Febrero, Santiago" },
+  { k:"estadio cibao", lat:19.4581, lng:-70.6921, d:"Estadio Cibao, Santiago" },
+  { k:"supermercado pola santiago", lat:19.451, lng:-70.6962, d:"Supermercado Pola Santiago" },
+  { k:"bravo santiago", lat:19.4501, lng:-70.6981, d:"Bravo Santiago" },
+  { k:"la vega", lat:19.221, lng:-70.529, d:"La Vega" },
+  { k:"moca", lat:19.391, lng:-70.521, d:"Moca" },
+  { k:"bonao", lat:18.9411, lng:-70.4071, d:"Bonao" },
+  { k:"san francisco de macoris", lat:19.3, lng:-70.251, d:"San Francisco de Macorís" },
+  { k:"la romana", lat:18.4271, lng:-68.972, d:"La Romana" },
+  { k:"san pedro de macoris", lat:18.454, lng:-69.302, d:"San Pedro de Macorís" },
+  { k:"higuey", lat:18.616, lng:-68.707, d:"Higüey" },
+  { k:"punta cana aeropuerto", lat:18.567, lng:-68.363, d:"Aeropuerto Internacional Punta Cana" },
+  { k:"aeropuerto las americas", lat:18.429, lng:-69.6681, d:"Aeropuerto Internacional Las Américas" },
+  { k:"aeropuerto cibao", lat:19.406, lng:-70.6047, d:"Aeropuerto Internacional Cibao" },
+  { k:"puerto sans souci", lat:18.4741, lng:-69.87, d:"Puerto Sans-Souci, Santo Domingo" },
+  { k:"puerto de haina", lat:18.422, lng:-70.0221, d:"Puerto de Haina" },
+  { k:"haina", lat:18.422, lng:-70.0221, d:"Haina" },
+  { k:"san cristobal", lat:18.4171, lng:-70.1071, d:"San Cristóbal" },
+  { k:"azua", lat:18.454, lng:-70.735, d:"Azua" },
+  { k:"barahona", lat:18.2071, lng:-71.1021, d:"Barahona" },
+  { k:"puerto plata", lat:19.794, lng:-70.688, d:"Puerto Plata" },
+  { k:"palacio nacional", lat:18.4741, lng:-69.9, d:"Palacio Nacional, Santo Domingo" },
+  { k:"palacio de justicia", lat:18.4702, lng:-69.9321, d:"Palacio de Justicia, Ciudad Nueva" },
+  { k:"junta central electoral", lat:18.4742, lng:-69.9271, d:"Junta Central Electoral" },
+  { k:"policia nacional", lat:18.4721, lng:-69.898, d:"Policía Nacional, Oz. de Santa Bárbara" },
+  { k:"dgii hq", lat:18.4762, lng:-69.921, d:"Dirección General de Impuestos Internos" },
+  { k:"dgii", lat:18.4762, lng:-69.921, d:"DGII, Santo Domingo" },
+  { k:"digesett", lat:18.476, lng:-69.9, d:"DIGESETT" },
+  { k:"casas reales", lat:18.4741, lng:-69.888, d:"Casas Reales, Zona Colonial" },
+  { k:"alcazar de colon", lat:18.4741, lng:-69.8881, d:"Alcázar de Colón" },
+  { k:"estadio olimpico felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
+  { k:"estadio felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
+  { k:"estadio quisqueya", lat:18.4812, lng:-69.9021, d:"Estadio Quisqueya" },
+  { k:"aeropuerto herrera", lat:18.492, lng:-70.004, d:"Aeropuerto Herrera" },
+  { k:"cementerio cristo redentor", lat:18.477, lng:-69.9001, d:"Cementerio Cristo Redentor" },
+  { k:"jardin botanico", lat:18.499, lng:-69.9881, d:"Jardín Botánico Nacional" },
+  { k:"zoo nacional", lat:18.4892, lng:-69.9721, d:"Zoo Nacional" },
+  { k:"colegio dominicano de robotica", lat:18.476, lng:-69.925, d:"Colegio Dominicano de Robótica" },
+  { k:"saint george school", lat:18.4751, lng:-69.9281, d:"Saint George School" },
+  { k:"carlos olivares", lat:18.477, lng:-69.921, d:"Colegio Carlos Olivares" },
+  { k:"loyola", lat:18.477, lng:-69.923, d:"Centro Loyola" },
+  { k:"mundo feliz", lat:18.4762, lng:-69.9261, d:"Colegio Mundo Feliz" },
+  { k:"colegio adventista", lat:18.481, lng:-69.9561, d:"Colegio Adventista" },
+  { k:"nueva senda", lat:18.515, lng:-70.0, d:"Colegio Nueva Senda" },
+  { k:"colegio peter pan", lat:18.476, lng:-69.927, d:"Colegio Peter Pan" },
+  { k:"la salle", lat:18.477, lng:-69.9225, d:"Colegio La Salle" },
+  { k:"san judas tadeo", lat:18.48, lng:-69.958, d:"Colegio San Judas Tadeo" },
+  { k:"torre empresarial", lat:18.4762, lng:-69.9261, d:"Torre Empresarial, Av. Tiradentes" },
+  { k:"world trade center", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
+  { k:"wtc santo domingo", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
+  { k:"torre los prados", lat:18.501, lng:-69.9751, d:"Torre Los Prados" },
+  { k:"centro de los heroes", lat:18.4701, lng:-69.9361, d:"Centro de los Héroes" },
+  { k:"correos nacionales", lat:18.4741, lng:-69.888, d:"Correos Nacionales, Zona Colonial" },
+  { k:"palacio bellas artes", lat:18.4722, lng:-69.9068, d:"Palacio de Bellas Artes" },
+  { k:"teatro nacional", lat:18.4722, lng:-69.9068, d:"Teatro Nacional Eduardo Brito" },
+  { k:"palacio de los deportes", lat:18.4812, lng:-69.9021, d:"Palacio de los Deportes" },
+];
+
+// Normaliza texto para búsqueda fuzzy
+const normLandmark = (s) =>
+  (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // quitar tildes
+    .replace(/[^a-z0-9\s]/g, " ")                        // solo alfanumerico
+    .replace(/\s+/g, " ").trim();
+
+// Lookup instantáneo en la base de landmarks
+// Retorna { ok, lat, lng, display, confidence } o null si no hay match
+const lookupLandmark = (raw) => {
+  const q = normLandmark(raw);
+  if (!q || q.length < 4) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const lm of RD_LANDMARKS) {
+    const k = normLandmark(lm.k);
+    // Exact match
+    if (q === k || q.includes(k) || k.includes(q)) {
+      const score = k.length; // longer key = more specific = better
+      if (score > bestScore) { bestScore = score; best = lm; }
+      continue;
+    }
+    // Word overlap score
+    const qWords = q.split(" ");
+    const kWords = k.split(" ");
+    const common = qWords.filter(w => w.length > 2 && kWords.includes(w));
+    if (common.length >= 2 || (common.length === 1 && kWords.length <= 2)) {
+      const score = common.length * 10 + k.length;
+      if (score > bestScore) { bestScore = score; best = lm; }
+    }
+  }
+
+  if (!best) return null;
+  return {
+    ok: true, lat: best.lat, lng: best.lng,
+    display: best.d,
+    confidence: 97,
+    types: ["landmark"],
+    allResults: [],
+    source: "landmark_db",
+  };
+};
+
+
+// ── IA PARA NORMALIZACIÓN DE DIRECCIONES ─────────────────────────────────────
+// Usa Claude para convertir descripciones informales en direcciones geocodificables.
+// Solo se invoca cuando Google y los landmarks fallan (confidence < 55).
+// Ejemplos: "al lado del jumbo kennedy", "en la calle del tigre, detras del colmado"
+// ─────────────────────────────────────────────────────────────────────────────
+const aiEnrichAddress = async (rawAddress, context = {}) => {
+  try {
+    const systemPrompt = `Eres un experto en direcciones dominicanas. Tu única tarea es convertir una dirección informal o ambigua de República Dominicana en una dirección geocodificable por Google Maps.
+
+REGLAS:
+- Responde SOLO con un JSON: {"normalized": "...", "confidence": 0-100, "note": "..."}
+- "normalized": la dirección más específica y geocodificable que puedas inferir
+- "confidence": qué tan seguro estás (0=adivina, 100=certeza total)
+- "note": explicación muy breve (máx 60 chars)
+- Si mencionan referencia a negocios conocidos, incluye el nombre del negocio + ciudad
+- Siempre incluye ", Santo Domingo, República Dominicana" al final si no tiene ciudad
+- NO inventes números de casa si no están en el original
+- Si no puedes mejorarla, devuelve la original limpia con confidence bajo
+
+Contexto del área de entrega: Santo Domingo, República Dominicana. Base de operaciones: Palma Real, Los Girasoles, Santo Domingo Oeste.`;
+
+    const userMsg = `Dirección a normalizar: "${rawAddress}"${context.client ? `\nCliente: ${context.client}` : ""}${context.sector ? `\nSector mencionado: ${context.sector}` : ""}`;
+
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 200,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMsg }],
+      }),
+    });
+
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean);
+    if (parsed.normalized && typeof parsed.confidence === "number") {
+      return {
+        normalized: parsed.normalized,
+        confidence: parsed.confidence,
+        note: parsed.note || "",
+      };
+    }
+    return null;
+  } catch {
+    return null; // IA falló — seguir con geocoding normal
+  }
+};
+
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
 // --- GEOCODER (Google Maps Geocoding API) -------------------------------------
-// ══════════════════════════════════════════════════════════════════════════════
-// MOTOR DE GEOCODIFICACIÓN v176 — CP-AWARE + LANDMARK FILTER
-// Construido desde datos reales de rutas RD (Herrera / Haina / SDO / SDN)
-// ══════════════════════════════════════════════════════════════════════════════
+const geocodeWithGoogle = async (rawAddress) => {
+  // ── FASE 1: Lookup instantáneo en base de landmarks RD ──────────────────
+  // 0ms, sin internet, sin cuota de Google. Confianza 97.
+  const lmHit = lookupLandmark(rawAddress);
+  if (lmHit) return lmHit;
 
-// Tabla CP → Zona exacta SDO (basada en rutas reales)
-const CP_TO_ZONE = {
-  // Distrito Nacional
-  "10101": "Zona Colonial, Distrito Nacional",
-  "10102": "Gazcue, Distrito Nacional",
-  "10103": "Ciudad Nueva, Distrito Nacional",
-  "10104": "San Carlos, Distrito Nacional",
-  "10105": "Ensanche Naco, Distrito Nacional",
-  "10106": "Bella Vista, Distrito Nacional",
-  "10107": "Piantini, Distrito Nacional",
-  "10108": "Ensanche Piantini, Distrito Nacional",
-  "10109": "Mirador Norte, Distrito Nacional",
-  "10110": "Mirador Sur, Distrito Nacional",
-  "10111": "Arroyo Hondo, Distrito Nacional",
-  "10112": "Los Cacicazgos, Distrito Nacional",
-  "10113": "Naco, Distrito Nacional",
-  "10114": "Evaristo Morales, Distrito Nacional",
-  "10115": "Los Prados, Distrito Nacional",
-  "10116": "Palma Real, Distrito Nacional",
-  "10117": "Cristo Rey, Distrito Nacional",
-  "10118": "La Julia, Distrito Nacional",
-  "10119": "30 de Mayo, Distrito Nacional",
-  "10120": "Ensanche La Fe, Distrito Nacional",
-  "10121": "Villa Consuelo, Distrito Nacional",
-  "10122": "Ensanche Espaillat, Distrito Nacional",
-  "10123": "Capotillo, Distrito Nacional",
-  "10124": "Gualey, Distrito Nacional",
-  "10125": "Guachupita, Distrito Nacional",
-  "10126": "Ensanche Luperón, Distrito Nacional",
-  "10127": "Ensanche Isabelita, Distrito Nacional",
-  "10131": "Alma Rosa, Distrito Nacional",
-  // ── CPs reales de rutas Herrera / Haina (de Excel ERIBERTO_23_4) ──────────
-  "10700": "Herrera, Santo Domingo Oeste",
-  "10701": "Herrera, Santo Domingo Oeste",
-  "10702": "Km 12, Haina, San Cristóbal",
-  "10703": "Km 13, Haina, San Cristóbal",
-  "10136": "Residencial Rosmil, Herrera, Santo Domingo Oeste",
-  "11001": "Zona Industrial Herrera, Santo Domingo Oeste",
-  "11002": "Zona Industrial Herrera, Santo Domingo Oeste",
-  "11003": "Herrera, Santo Domingo Oeste",
-  "11004": "La Canela, Herrera, Santo Domingo Oeste",
-  "11005": "Herrera, Santo Domingo Oeste",
-  "11006": "Herrera, Santo Domingo Oeste",
-  // Santo Domingo Oeste — zona Herrera / Haina
-  "10900": "Herrera, Santo Domingo Oeste",
-  "10901": "Herrera, Santo Domingo Oeste",
-  "10902": "Manoguayabo, Santo Domingo Oeste",
-  "10903": "Los Alcarrizos, Santo Domingo Oeste",
-  "10904": "Pedro Brand, Santo Domingo Oeste",
-  "10905": "La Canela, Herrera, Santo Domingo Oeste",
-  "10906": "El Café, Herrera, Santo Domingo Oeste",
-  "10907": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
-  "10908": "Residencial Rosmil, Santo Domingo Oeste",
-  "10909": "Residencial Santo Domingo, Herrera, Santo Domingo Oeste",
-  "10910": "Mirador del Oeste, Santo Domingo Oeste",
-  "10911": "Los Ríos, Santo Domingo Oeste",
-  "10912": "Loma del Chivo, Santo Domingo Oeste",
-  "11101": "Hato Nuevo, Santo Domingo Oeste",
-  "11102": "Pueblo Chico, Santo Domingo Oeste",
-  "11103": "La Venta, Santo Domingo Oeste",
-  "11104": "Caballona, Santo Domingo Oeste",
-  "11105": "El Naranjo, Santo Domingo Oeste",
-  "11106": "Manoguayabo Sur, Santo Domingo Oeste",
-  "11107": "La Puya, Santo Domingo Oeste",
-  "11108": "Residencial Punta Cana, Santo Domingo Oeste",
-  "11109": "Los Pérez, Santo Domingo Oeste",
-  "11110": "El Cacao, Santo Domingo Oeste",
-  "11111": "Zona Franca San Isidro, Santo Domingo Oeste",
-  "11112": "La Zurza, Santo Domingo Oeste",
-  "11113": "La Ciénaga, Santo Domingo Oeste",
-  "11114": "Ensanche Altagracia, Santo Domingo Oeste",
-  "11115": "Hato Nuevo Gurabo, Santo Domingo Oeste",
-  "11116": "Loma del Chivo, Haina, Santo Domingo Oeste",
-  "11117": "Pueblo Nuevo, Haina, Santo Domingo Oeste",
-  "11118": "La Zurza Alta, Santo Domingo Oeste",
-  "11119": "Las Caobas, Santo Domingo Oeste",
-  "11120": "Residencial Las Palmas, Santo Domingo Oeste",
-  "11121": "Buena Vista, Santo Domingo Oeste",
-  "11122": "Los Jardines, Santo Domingo Oeste",
-  "11123": "Villa Tapia, Santo Domingo Oeste",
-  "11124": "El Ingenio, Santo Domingo Oeste",
-  "11125": "Residencial Real, Santo Domingo Oeste",
-  "11126": "Villa Olímpica, Santo Domingo Oeste",
-  // Santo Domingo Este
-  "11500": "Villa Duarte, Santo Domingo Este",
-  "11501": "Los Mina, Santo Domingo Este",
-  "11502": "Alma Rosa, Santo Domingo Este",
-  "11503": "La Victoria, Santo Domingo Este",
-  "11504": "San Luis, Santo Domingo Este",
-  "11505": "Bonavista, Santo Domingo Este",
-  "11506": "Las Américas, Santo Domingo Este",
-  "11507": "Boca Chica, Santo Domingo Este",
-  "11508": "San Isidro, Santo Domingo Este",
-  "11509": "Sabana Perdida Este, Santo Domingo Este",
-  "11510": "Los Tres Brazos, Santo Domingo Este",
-  "11511": "Mendoza, Santo Domingo Este",
-  // Santo Domingo Norte
-  "11200": "Villa Mella, Santo Domingo Norte",
-  "11201": "Los Girasoles, Santo Domingo Norte",
-  "11202": "El Almirante, Santo Domingo Norte",
-  "11203": "Sabana Perdida, Santo Domingo Norte",
-  "11204": "Guaricano, Santo Domingo Norte",
-  "11205": "Palmarejo, Santo Domingo Norte",
-  "11206": "Los Millones, Santo Domingo Norte",
-  "11207": "Pantoja, Santo Domingo Norte",
-  "11208": "Balcines, Santo Domingo Norte",
-  // Haina / San Cristóbal
-  "91000": "Haina, San Cristóbal",
-  "91001": "Km 12 Haina, San Cristóbal",
-  "91002": "Haina Oriental, San Cristóbal",
-  "91003": "Km 14 Haina, San Cristóbal",
-};
-
-// Sectores RD conocidos → nombre canónico para Google Maps
-const RD_SECTORS = {
-  // Herrera / Café / Oeste
-  "herrera":             "Herrera, Santo Domingo Oeste",
-  "el cafe":             "El Café, Herrera, Santo Domingo Oeste",
-  "cafe de herrera":     "El Café, Herrera, Santo Domingo Oeste",
-  "café de herrera":     "El Café, Herrera, Santo Domingo Oeste",
-  // Typos reales del Excel (Herera sin doble r)
-  "cafe de herera":      "El Café, Herrera, Santo Domingo Oeste",
-  "café de herera":      "El Café, Herrera, Santo Domingo Oeste",
-  "el cafe de herera":   "El Café, Herrera, Santo Domingo Oeste",
-  "el café de herera":   "El Café, Herrera, Santo Domingo Oeste",
-  "el cafe herrera":     "El Café, Herrera, Santo Domingo Oeste",
-  "el café herrera":     "El Café, Herrera, Santo Domingo Oeste",
-  "km 12 de haina":      "Km 12, Haina, San Cristóbal",
-  "km12 de haina":       "Km 12, Haina, San Cristóbal",
-  "loma de chivo":       "Loma del Chivo, Haina, Santo Domingo Oeste",
-  "loma del chivo":      "Loma del Chivo, Haina, Santo Domingo Oeste",
-  "loma de chibo":       "Loma del Chivo, Haina, Santo Domingo Oeste",  // typo común
-  "ensanche altagracia de herrera": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
-  "residencial santo domingo herrera": "Residencial Santo Domingo, Herrera, Santo Domingo Oeste",
-  "zona industrial herrera": "Zona Industrial Herrera, Santo Domingo Oeste",
-  "mirador del oeste":   "Mirador del Oeste, Santo Domingo Oeste",
-  "el café":             "El Café, Herrera, Santo Domingo Oeste",
-  "la canela":           "La Canela, Herrera, Santo Domingo Oeste",
-  "loma del chivo":      "Loma del Chivo, Santo Domingo Oeste",
-  "loma de chivo":       "Loma del Chivo, Santo Domingo Oeste",
-  "manoguayabo":         "Manoguayabo, Santo Domingo Oeste",
-  "los alcarrizos":      "Los Alcarrizos, Santo Domingo Oeste",
-  "pedro brand":         "Pedro Brand, Santo Domingo Oeste",
-  "hato nuevo":          "Hato Nuevo, Santo Domingo Oeste",
-  "pueblo chico":        "Pueblo Chico, Santo Domingo Oeste",
-  "la venta":            "La Venta, Santo Domingo Oeste",
-  "caballona":           "Caballona, Santo Domingo Oeste",
-  "rosmil":              "Residencial Rosmil, Santo Domingo Oeste",
-  "residencial rosmil":  "Residencial Rosmil, Santo Domingo Oeste",
-  "los rios":            "Los Ríos, Santo Domingo Oeste",
-  "los ríos":            "Los Ríos, Santo Domingo Oeste",
-  "mirador del oeste":   "Mirador del Oeste, Santo Domingo Oeste",
-  "altagracia":          "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
-  "ens altagracia":      "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
-  "ensanche altagracia": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
-  "zona industrial herrera": "Zona Industrial Herrera, Santo Domingo Oeste",
-  // Haina / San Cristóbal
-  "haina":               "Haina, San Cristóbal",
-  "km 12":               "Km 12, Haina, San Cristóbal",
-  "km 11":               "Km 11, Haina, San Cristóbal",
-  "km 14":               "Km 14, Haina, San Cristóbal",
-  // DN
-  "mirador sur":         "Mirador Sur, Distrito Nacional",
-  "mirador norte":       "Mirador Norte, Distrito Nacional",
-  "piantini":            "Piantini, Distrito Nacional",
-  "naco":                "Naco, Distrito Nacional",
-  "gazcue":              "Gazcue, Distrito Nacional",
-  "bella vista":         "Bella Vista, Distrito Nacional",
-  "arroyo hondo":        "Arroyo Hondo, Distrito Nacional",
-  "los cacicazgos":      "Los Cacicazgos, Distrito Nacional",
-  "evaristo morales":    "Evaristo Morales, Distrito Nacional",
-  "los prados":          "Los Prados, Distrito Nacional",
-  "palma real":          "Palma Real, Distrito Nacional",
-  "30 de mayo":          "30 de Mayo, Distrito Nacional",
-  "zona colonial":       "Zona Colonial, Distrito Nacional",
-  "ciudad colonial":     "Zona Colonial, Distrito Nacional",
-  "cristo rey":          "Cristo Rey, Distrito Nacional",
-  "villa consuelo":      "Villa Consuelo, Distrito Nacional",
-  "capotillo":           "Capotillo, Distrito Nacional",
-  "gualey":              "Gualey, Distrito Nacional",
-  // SDN
-  "villa mella":         "Villa Mella, Santo Domingo Norte",
-  "los girasoles":       "Los Girasoles, Santo Domingo Norte",
-  "el almirante":        "El Almirante, Santo Domingo Norte",
-  "sabana perdida":      "Sabana Perdida, Santo Domingo Norte",
-  "guaricano":           "Guaricano, Santo Domingo Norte",
-  "los millones":        "Los Millones, Santo Domingo Norte",
-  // SDE
-  "villa duarte":        "Villa Duarte, Santo Domingo Este",
-  "los mina":            "Los Mina, Santo Domingo Este",
-  "alma rosa":           "Alma Rosa, Santo Domingo Este",
-  "la victoria":         "La Victoria, Santo Domingo Este",
-  "san luis":            "San Luis, Santo Domingo Este",
-  "bonavista":           "Bonavista, Santo Domingo Este",
-  "las americas":        "Las Américas, Santo Domingo Este",
-  "las américas":        "Las Américas, Santo Domingo Este",
-  "boca chica":          "Boca Chica, Santo Domingo Este",
-};
-
-// Detecta si un campo "Sector" del Excel es realmente una referencia/landmark
-// (no un barrio geográfico real que Google pueda geocodificar)
-const isLandmarkOnly = (s) => {
-  if (!s || s.trim().length < 2) return false;
-  const t = s.trim().toLowerCase();
-  // Si matchea un sector conocido → no es landmark
-  if (Object.keys(RD_SECTORS).some(k => t.includes(k))) return false;
-  // Si tiene palabras típicas de sector → no es landmark
-  if (/herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand/i.test(t)) return false;
-  // Palabras clave de landmarks/referencias
-  if (/frente|colmado|farmacia|salon|salón|google|referencia|cerca|detrás|detras|al\s+lado|esquina|contiguo|diagonal|próximo|proximo|negocio|tienda|supermercado|supermercado|bar\b|pizz|rest(?:aurante)?|escola|colegio|iglesia|capilla|cancha|parque|estadio|plaza\s+[a-z]/i.test(t)) return true;
-  // Muy corto y sin números = probablemente una referencia informal
-  if (t.length < 8 && !/\d/.test(t)) return true;
-  return false;
-};
-
-// Normaliza el campo sector del Excel: devuelve {geoSector, landmarkNote}
-const normalizeSectorField = (sectorRaw) => {
-  if (!sectorRaw || !sectorRaw.trim()) return { geoSector: "", landmarkNote: "" };
-  const t = sectorRaw.trim().toLowerCase();
-  // Sector conocido → usar nombre canónico
-  for (const [key, canonical] of Object.entries(RD_SECTORS)) {
-    if (t.includes(key)) return { geoSector: canonical, landmarkNote: "" };
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const queries = buildQueryVariants(rawAddress);
+  for (const q of queries) {
+    try {
+      const result = await new Promise((res, rej) =>
+        geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
+          (results, status) => status === "OK" ? res(results) : rej(status))
+      );
+      if (result && result.length > 0) {
+        const top = result[0];
+        const loc = top.geometry.location;
+        const types = top.types || [];
+        const conf = scoreGoogleResult(top, rawAddress);
+        return {
+          ok: true,
+          lat: loc.lat(),
+          lng: loc.lng(),
+          display: top.formatted_address,
+          confidence: conf,
+          types,
+          allResults: result.slice(0, 3).map(r => ({
+            display: r.formatted_address,
+            lat: r.geometry.location.lat(),
+            lng: r.geometry.location.lng(),
+            confidence: scoreGoogleResult(r, rawAddress),
+          })),
+        };
+      }
+    } catch { /* try next variant */ }
   }
-  // Es un landmark → va a notas, no al geocoder
-  if (isLandmarkOnly(sectorRaw)) return { geoSector: "", landmarkNote: sectorRaw.trim() };
-  // Es texto con apariencia de sector pero no conocido → intentar usarlo como contexto
-  return { geoSector: sectorRaw.trim(), landmarkNote: "" };
+  // Fallback: Nominatim (OpenStreetMap) for addresses Google couldn't find
+  try {
+    // Try multiple Nominatim queries: enriched first, then raw, then simplified
+    const nominatimQueries = [
+      rawAddress + ", República Dominicana",
+      expandRDAddress(rawAddress) + ", República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
+    ];
+    for (const nmQuery of nominatimQueries) {
+      const encoded = encodeURIComponent(nmQuery);
+      const nm = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`, {
+        headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0 (delivery-routing)" }
+      });
+      if (!nm.ok) continue;
+      const nmData = await nm.json();
+      if (nmData && nmData.length > 0) {
+        // Filter to RD bounding box
+        const rdResults = nmData.filter(r => {
+          const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+          return lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
+        });
+        if (rdResults.length > 0) {
+          const top = rdResults[0];
+          const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+          // Score based on OSM type
+          let conf = 55;
+          if (top.type === "house")             conf = 88;
+          else if (top.type === "building")     conf = 82;
+          else if (top.class === "highway")     conf = 74;
+          else if (top.type === "residential")  conf = 70;
+          else if (top.class === "place")       conf = 62;
+          // Bonus if address includes a number from original
+          const nums = rawAddress.match(/\d{1,4}/g);
+          if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
+          return {
+            ok: true, lat, lng,
+            display: top.display_name.split(",").slice(0,3).join(",").trim(),
+            confidence: conf,
+            types: [top.type || "nominatim"],
+            allResults: rdResults.slice(0,3).map(r => ({
+              display: r.display_name.split(",").slice(0,3).join(",").trim(),
+              lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+              confidence: 55,
+            })),
+          };
+        }
+      }
+    }
+  } catch { /* nominatim failed too */ }
+
+  // ── FASE FINAL: IA de normalización ─────────────────────────────────────
+  // Solo si todo falló — Claude normaliza la dirección y reintentamos con Google
+  try {
+    const aiResult = await aiEnrichAddress(rawAddress);
+    if (aiResult && aiResult.normalized && aiResult.normalized !== rawAddress && aiResult.confidence >= 40) {
+      // Reintentar geocoding con la dirección normalizada por IA
+      const aiVariants = buildQueryVariants(aiResult.normalized);
+      for (const q of aiVariants.slice(0, 3)) {
+        try {
+          await loadGoogleMaps();
+          const geocoder = new window.google.maps.Geocoder();
+          const result = await new Promise((res, rej) =>
+            geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
+              (results, status) => status === "OK" ? res(results) : rej(status))
+          );
+          if (result && result.length > 0) {
+            const top = result[0];
+            const loc = top.geometry.location;
+            const conf = Math.min(scoreGoogleResult(top, aiResult.normalized) * 0.9, 80); // slight penalty for AI-assisted
+            return {
+              ok: true,
+              lat: loc.lat(),
+              lng: loc.lng(),
+              display: top.formatted_address,
+              confidence: conf,
+              types: top.types || [],
+              aiAssisted: true,
+              aiNote: aiResult.note,
+              allResults: result.slice(0, 3).map(r => ({
+                display: r.formatted_address,
+                lat: r.geometry.location.lat(),
+                lng: r.geometry.location.lng(),
+                confidence: Math.min(scoreGoogleResult(r, aiResult.normalized) * 0.9, 80),
+              })),
+            };
+          }
+        } catch { /* continue */ }
+      }
+    }
+  } catch { /* IA failed too */ }
+
+  return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
 };
 
-// Build multiple query variants for maximum hit rate — CP-ZONE AWARE
-// Estrategia: de más específico a más general, usando CP como ancla geográfica
-const buildQueryVariants = (raw, cpZone = "") => {
+// Build multiple query variants for maximum hit rate
+// Estrategia: de más específico a más general, hasta que Google responda
+const buildQueryVariants = (raw) => {
   const s = String(raw || "").trim();
   if (!s) return [];
 
@@ -6037,50 +6185,21 @@ const buildQueryVariants = (raw, cpZone = "") => {
   const variants = new Set();
 
   // --- Detección de contexto geográfico ---
-  const hasCountry  = /rep[uú]blica dominicana|dominican republic/i.test(s);
-  const hasCity     = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional|sd\s+(este|norte|oeste)/i.test(s);
-  const hasSector   = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio|colonia)\s+\w/i.test(s);
-  const hasStreet   = /(?:calle|avenida|av\.|c\/|callejón|prolong|carretera)\s+\w/i.test(s);
-  const hasNumber   = /\b(?:no\.?\s*)?\d{1,5}\b/.test(s);
+  const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
+  const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
+  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
 
   const RD = ", República Dominicana";
   const SD = ", Santo Domingo" + RD;
   const DN = ", Distrito Nacional" + RD;
-  const SDE = ", Santo Domingo Este" + RD;
-  const SDO = ", Santo Domingo Oeste" + RD;
-  const SDN = ", Santo Domingo Norte" + RD;
 
-  // Zona del CP como ancla geográfica (el dato más confiable de toda la fila)
-  const cpAnchor = cpZone ? `, ${cpZone}` : "";
-  const cpSuffix = cpZone ? `, ${cpZone}${RD}` : SD;
-
-  // ── Bloque 0: CP-ANCHORED — primera prioridad si tenemos CP ─────────────
-  // Estas variantes son las más precisas porque el CP define exactamente la zona
-  if (cpZone && !hasCountry) {
-    // Dirección completa + zona CP exacta
-    variants.add(expanded + cpSuffix);
-    variants.add(s + cpSuffix);
-    // Solo la calle + número + zona CP
-    const calleNumCp = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón|Av\.)\s+[^,]+?\s+(?:No\.)?\s*\d{1,5}/i);
-    if (calleNumCp) {
-      variants.add(calleNumCp[0].trim() + cpSuffix);
-    }
-    // Primera parte + zona CP
-    const firstPart = expanded.split(",")[0].trim();
-    if (firstPart.length > 4) {
-      variants.add(firstPart + cpSuffix);
-    }
-  }
-
-  // ── Bloque 1: expanded + ciudad ──────────────────────────────────────────
+  // 1. Versión expandida + ciudad más completa (más precisa primero)
   if (!hasCountry && !hasCity) {
     variants.add(expanded + SD);
     variants.add(expanded + DN);
-    if (hasStreet) {
-      variants.add(expanded + SDE);
-      variants.add(expanded + SDO);
-      variants.add(expanded + SDN);
-    }
+    variants.add(expanded + ", Santo Domingo Este" + RD);
+    variants.add(expanded + ", Santo Domingo Oeste" + RD);
+    variants.add(expanded + ", Santo Domingo Norte" + RD);
   } else if (!hasCountry) {
     variants.add(expanded + RD);
     variants.add(expanded);
@@ -6088,14 +6207,10 @@ const buildQueryVariants = (raw, cpZone = "") => {
     variants.add(expanded);
   }
 
-  // ── Bloque 2: raw original + contexto ────────────────────────────────────
+  // 2. Raw original + contexto
   if (s !== expanded) {
     if (!hasCity && !hasCountry) {
       variants.add(s + SD);
-      if (hasStreet) {
-        variants.add(s + SDE);
-        variants.add(s + SDO);
-      }
       variants.add(s + RD);
     } else if (!hasCountry) {
       variants.add(s + RD);
@@ -6103,78 +6218,50 @@ const buildQueryVariants = (raw, cpZone = "") => {
     variants.add(s);
   }
 
-  // ── Bloque 3: Sector / Residencial ───────────────────────────────────────
+  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
   const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
   if (secMatch) {
     const sec = secMatch[1].trim();
-    variants.add(sec + (cpZone ? cpSuffix : SD));
-    variants.add(sec + SDE);
-    variants.add(sec + SDO);
-    const calleMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Av\.)\s+[^,]+/i);
+    variants.add(sec + SD);
+    variants.add(sec + ", Santo Domingo Este" + RD);
+    variants.add(sec + ", Santo Domingo Oeste" + RD);
+    // Agregar calle + sector para mayor precisión
+    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
     if (calleMatch) {
-      variants.add(calleMatch[0].trim() + ", " + sec + (cpZone ? cpSuffix : SD));
-      variants.add(calleMatch[0].trim() + ", " + sec + ", Santo Domingo" + RD);
+      variants.add(calleMatch[0].trim() + ", " + sec + SD);
     }
   }
 
-  // ── Bloque 4: Calle + número exacto ──────────────────────────────────────
-  const calleNumMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón|Av\.)\s+[^,]+?\s+(?:No\.)?\s*\d{1,5}/i);
-  if (calleNumMatch && !hasCity) {
-    variants.add(calleNumMatch[0].trim() + (cpZone ? cpSuffix : SD));
-    variants.add(calleNumMatch[0].trim() + SDE);
-    variants.add(calleNumMatch[0].trim() + ", Santo Domingo" + RD);
+  // 4. Extraer solo la parte de calle + número (sin piso/apto) como fallback
+  const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
+  if (calleNum && !hasCity) {
+    variants.add(calleNum[0].trim() + SD);
+    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
   }
 
-  // ── Bloque 5: Calle sin número ───────────────────────────────────────────
-  const calleOnlyMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Av\.)\s+[^,\d]+/i);
-  if (calleOnlyMatch && hasNumber && !hasCity) {
-    const calleOnly = calleOnlyMatch[0].trim().replace(/\s+No\.\s*\d+/i, "").trim();
-    if (calleOnly.length > 6) variants.add(calleOnly + (cpZone ? cpSuffix : SD));
-  }
-
-  // ── Bloque 6: Sin referencias de edificio ────────────────────────────────
-  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite|Apt)\s*[\w\-]*.*/i, "").trim();
-  if (stripped !== expanded && !hasCity) {
-    variants.add(stripped + (cpZone ? cpSuffix : SD));
-    variants.add(stripped + RD);
-  }
-
+  // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
   const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 2 && !hasCity) variants.add(parts.slice(0, 2).join(", ") + (cpZone ? cpSuffix : SD));
+  if (parts.length >= 2) {
+    variants.add(parts.slice(0, 2).join(", ") + SD);
+  }
   if (parts.length >= 1 && !hasCity) {
-    variants.add(parts[0] + (cpZone ? cpSuffix : SD));
-    variants.add(parts[0] + ", Santo Domingo" + RD);
+    variants.add(parts[0] + SD);
   }
 
-  // ── Bloque 7: Sin referencias de landmark ────────────────────────────────
-  const noRef = s.replace(/(?:,?\s*(?:frente a|al lado de|detr[aá]s de|cerca de|2da planta|planta alta|planta baja)\s+[^,]+)/gi, "").trim();
-  if (noRef !== s && noRef.length > 5 && !hasCity) {
-    variants.add(noRef + (cpZone ? cpSuffix : SD));
+  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
+  const numMatch = expanded.match(/(\d{1,4})/);
+  if (numMatch) {
+    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
+    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
   }
 
-  // ── Bloque 8: Sector solo ─────────────────────────────────────────────────
-  const isSectorOnly = !hasStreet && !hasNumber && s.split(",").length <= 2;
-  if (isSectorOnly) {
-    const sectorName = expanded.split(",")[0].trim();
-    if (sectorName.length > 3) {
-      variants.add(sectorName + (cpZone ? cpSuffix : SD));
-      variants.add(sectorName + SDO);
-      variants.add(sectorName + SDE);
-      variants.add(sectorName + SDN);
-      variants.add(sectorName + RD);
-      if (!/^(?:sector|ensanche|residencial|urbanizaci[oó]n|barrio)/i.test(sectorName)) {
-        variants.add("Sector " + sectorName + (cpZone ? cpSuffix : SD));
-        variants.add("Barrio "  + sectorName + (cpZone ? cpSuffix : SD));
-      }
-    }
-  }
+  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
+  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
+  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
+  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
 
-  // ── Bloque 9: Variante sin referencia de landmark en dirección ───────────
-  const landmarkMatch = s.match(/(?:frente a|al lado de|detr[aá]s de|cerca de|esquina|esq\.)\s+([^,]+)/i);
-  if (landmarkMatch && !hasCity) variants.add(landmarkMatch[1].trim() + (cpZone ? cpSuffix : SD));
-
-  // Eliminar variantes vacías o muy cortas — máximo 16 queries
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 16);
+  // Eliminar variantes vacías o muy cortas
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
 };
 
 // RD-specific address normalizer - expanded for Dominican Republic
@@ -6241,7 +6328,7 @@ const expandRDAddress = (s) => {
     [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
     [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
     [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
-    // Sectores SD — expandidos con más barrios comunes
+    // Sectores comunes SD
     [/\bnaco\b/gi,             "Naco, Santo Domingo"],
     [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
     [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
@@ -6249,84 +6336,6 @@ const expandRDAddress = (s) => {
     [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
     [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
     [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
-    [/\blos\s+prados?\b/gi,    "Los Prados, Santo Domingo"],
-    [/\bla\s+julia\b/gi,       "La Julia, Santo Domingo"],
-    [/\bla\s+fe\b/gi,          "La Fe, Santo Domingo"],
-    [/\bla\s+paz\b/gi,         "La Paz, Santo Domingo Oeste"],
-    [/\bvilla\s+mella\b/gi,    "Villa Mella, Santo Domingo Norte"],
-    [/\bguachupita\b/gi,       "Guachupita, Santo Domingo"],
-    [/\bciudad\s+nueva\b/gi,   "Ciudad Nueva, Santo Domingo"],
-    [/\bciudad\s+colonial\b/gi,"Zona Colonial, Santo Domingo"],
-    [/\bpercla\b/gi,           "Ensanche Peravia, Santo Domingo"],
-    [/\bensanche\s+peravia\b/gi,"Ensanche Peravia, Santo Domingo"],
-    [/\bensanche\s+la\s+paz\b/gi,"Ensanche La Paz, Santo Domingo Oeste"],
-    [/\bensanche\s+villa\s+consuelo\b/gi,"Ensanche Villa Consuelo, Santo Domingo"],
-    [/\bvilla\s+consuelo\b/gi, "Ensanche Villa Consuelo, Santo Domingo"],
-    [/\bensanche\s+naco\b/gi,  "Naco, Santo Domingo"],
-    [/\bensanche\s+piantini\b/gi,"Piantini, Santo Domingo"],
-    [/\blos\s+r[íi]os\b/gi,    "Los Ríos, Santo Domingo Oeste"],
-    [/\bensanche\s+isabelita\b/gi,"Ensanche Isabelita, Santo Domingo"],
-    [/\blas\s+am[eé]ricas\b/gi,"Las Américas, Santo Domingo Este"],
-    [/\bel\s+almirante\b/gi,   "El Almirante, Santo Domingo Norte"],
-    [/\blos\s+girasoles\b/gi,  "Los Girasoles, Santo Domingo Norte"],
-    [/\bpalma\s+real\b/gi,     "Palma Real, Distrito Nacional"],
-    [/\blos\s+cacicazgos\b/gi, "Los Cacicazgos, Santo Domingo"],
-    [/\buna\b(?=\s)/gi,        "Universidad Nacional Pedro Henríquez Ureña, Santo Domingo"],
-    [/\bunibe\b/gi,            "UNIBE, Santo Domingo"],
-    [/\bintec\b/gi,            "INTEC, Santo Domingo"],
-    [/\bpucmm\b/gi,            "PUCMM, Santiago"],
-
-    // ── Zona Herrera / Haina / Oeste ─────────────────────────────────────────
-    // IMPORTANTE: caf[eé]\s+de\s+her(r?)era debe ir ANTES de herrera genérico
-    [/\bcaf[eé]\s+de\s+herr?era\b/gi,         "El Café, Herrera, Santo Domingo Oeste"],
-    [/\bel\s+caf[eé]\b(?!\s+de)/gi,            "El Café, Herrera, Santo Domingo Oeste"],
-    [/\bzon[a]?\s+ind(?:ustrial)?\s+herrera\b/gi, "Zona Industrial Herrera, Santo Domingo Oeste"],
-    [/\bensanche\s+altagracia\s+de\s+herrera\b/gi,"Ensanche Altagracia, Herrera, Santo Domingo Oeste"],
-    [/\bensanche\s+altagracia\b/gi,            "Ensanche Altagracia, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+santo\s+domingo\s+herrera\b/gi,"Residencial Santo Domingo, Herrera, Santo Domingo Oeste"],
-    [/\bherrera\b/gi,                          "Herrera, Santo Domingo Oeste"],
-    [/\bloma\s+de\s+chivo\b/gi,               "Loma de Chivo, Santo Domingo Oeste"],
-    [/\bla\s+canela\b/gi,                     "La Canela, Herrera, Santo Domingo Oeste"],
-    [/\bmirador\s+del?\s+oeste\b/gi,          "Mirador del Oeste, Santo Domingo Oeste"],
-    [/\bmirador\s+sur\b/gi,                   "Mirador Sur, Distrito Nacional"],
-    [/\bmirador\s+norte\b/gi,                 "Mirador Norte, Distrito Nacional"],
-    [/\bmirador\b/gi,                         "Mirador Sur, Distrito Nacional"],
-
-    // Haina y sectores del km
-    [/\bkm\.?\s*12\s+(?:de\s+)?haina\b/gi,   "Km 12, Haina, San Cristóbal"],
-    [/\bkm\.?\s*11\s+(?:de\s+)?haina\b/gi,   "Km 11, Haina, San Cristóbal"],
-    [/\bkm\.?\s*(\d+)\s+(?:de\s+)?haina\b/gi,"Km $1, Haina, San Cristóbal"],
-    [/\bhaina\b/gi,                           "Haina, San Cristóbal"],
-    [/\bres(?:idencial)?\s+rosmil\b/gi,       "Residencial Rosmil, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+real\s+del\s+caribe\b/gi,"Residencial Real del Caribe, Santo Domingo"],
-    [/\blos\s+alcarrizos\b/gi,               "Los Alcarrizos, Santo Domingo Oeste"],
-    [/\bpedro\s+brand\b/gi,                  "Pedro Brand, Santo Domingo Oeste"],
-    [/\bla\s+victoria\b/gi,                  "La Victoria, Santo Domingo Este"],
-    [/\bsabana\s+perdida\b/gi,               "Sabana Perdida, Santo Domingo Norte"],
-    [/\bvilla\s+linda\b/gi,                  "Villa Linda, Santo Domingo"],
-    [/\bvilla\s+duarte\b/gi,                 "Villa Duarte, Santo Domingo Este"],
-    [/\bsan\s+luis\b/gi,                     "San Luis, Santo Domingo Este"],
-    [/\bguerrero\b/gi,                       "Guerrero, Santo Domingo Norte"],
-    [/\bvilla\s+francisca\b/gi,              "Villa Francisca, Santo Domingo"],
-    [/\bciudad\s+universitaria\b/gi,         "Ciudad Universitaria, Santo Domingo"],
-    [/\bbell[a]?\s+vista\b/gi,               "Bella Vista, Distrito Nacional"],
-    [/\bsector\s+30\s+de\s+mayo\b/gi,        "30 de Mayo, Santo Domingo"],
-    [/\b30\s+de\s+mayo\b/gi,                 "30 de Mayo, Santo Domingo"],
-    [/\balmacen\b/gi,                        "Alma Rosa, Santo Domingo Este"],
-    [/\balma\s+rosa\b/gi,                    "Alma Rosa, Santo Domingo Este"],
-    [/\blos\s+mina\b/gi,                     "Los Mina, Santo Domingo Este"],
-    [/\bgualey\b/gi,                         "Gualey, Santo Domingo"],
-    [/\bbonavista\b/gi,                      "Bonavista, Santo Domingo Este"],
-    [/\bpolo\s+gob(?:ierno)?\b/gi,           "Polígono Central, Santo Domingo"],
-    [/\bel\s+millon(?:es)?\b/gi,             "Los Millones, Santo Domingo Norte"],
-    [/\bensanche\s+cap(?:otillo)?\b/gi,      "Ensanche Capotillo, Santo Domingo"],
-    [/\bcapotillo\b/gi,                      "Ensanche Capotillo, Santo Domingo"],
-    [/\bensanche\s+luperon\b/gi,             "Ensanche Luperón, Santo Domingo"],
-    [/\bensanche\s+espaillat\b/gi,           "Ensanche Espaillat, Santo Domingo"],
-    [/\bcrist[o]?\s+rey\b/gi,               "Cristo Rey, Santo Domingo"],
-    [/\bzona\s+colonial\b/gi,               "Zona Colonial, Santo Domingo"],
-    [/\bevaristo\s+morales\b/gi,            "Evaristo Morales, Santo Domingo"],
-    [/\bpiantini\b/gi,                      "Piantini, Distrito Nacional"],
   ];
 
   for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
@@ -6337,249 +6346,60 @@ const expandRDAddress = (s) => {
   return r;
 };
 
-// Score Google result quality — adaptado para RD
+// Score Google result quality
 const scoreGoogleResult = (result, original) => {
   const types = result.types || [];
   const addr  = result.formatted_address || "";
-  let score = 50;
+  let score = 55;
 
-  if      (types.includes("street_address"))              score = 96;
-  else if (types.includes("premise"))                     score = 93;
-  else if (types.includes("subpremise"))                  score = 91;
-  else if (types.includes("establishment"))               score = 87;
-  else if (types.includes("point_of_interest"))           score = 85;
-  else if (types.includes("route"))                       score = 80;
-  else if (types.includes("intersection"))                score = 78;
-  else if (types.includes("neighborhood"))                score = 68;
-  else if (types.includes("sublocality_level_2"))         score = 64;
-  else if (types.includes("sublocality_level_1"))         score = 62;
-  else if (types.includes("sublocality"))                 score = 60;
-  else if (types.includes("locality"))                    score = 55;
-  else if (types.includes("administrative_area_level_2")) score = 38;
-  else if (types.includes("administrative_area_level_1")) score = 28;
-  else if (types.includes("country"))                     score = 10;
+  // Tipo de resultado (cuanto más específico, mejor)
+  if      (types.includes("street_address"))            score = 96;
+  else if (types.includes("premise"))                   score = 93;
+  else if (types.includes("subpremise"))                score = 91;
+  else if (types.includes("route"))                     score = 82;
+  else if (types.includes("intersection"))              score = 80;
+  else if (types.includes("neighborhood"))              score = 70;
+  else if (types.includes("sublocality"))               score = 68;
+  else if (types.includes("sublocality_level_1"))       score = 68;
+  else if (types.includes("sublocality_level_2"))       score = 65;
+  else if (types.includes("locality"))                  score = 60;
+  else if (types.includes("administrative_area_level_1")) score = 40;
+  else if (types.includes("country"))                   score = 20;
 
-  // Validar dentro de bounding box de RD
-  const loc = result.geometry && result.geometry.location;
-  if (loc) {
-    const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
-    const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
-    if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) return 3;
+  // Bonus: original tiene número Y el resultado también → más preciso
+  const origHasNum = /\d/.test(original);
+  const resHasNum  = /\d/.test(addr);
+  if (origHasNum && resHasNum)   score = Math.min(score + 5, 99);
+  if (origHasNum && !resHasNum)  score = Math.max(score - 8, 10); // no encontró el número
+
+  // Bonus: resultado está dentro de la bounding box de RD
+  const loc = result.geometry.location;
+  const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+  const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+  if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) {
+    score = Math.max(score - 50, 3); // resultado fuera de RD → descartar
   }
 
-  // Bonus: numero de calle
-  const origHasNum = /\d{1,5}/.test(original);
-  const resHasNum  = /\d{1,5}/.test(addr);
-  if (origHasNum && resHasNum)  score = Math.min(score + 5, 99);
-  if (origHasNum && !resHasNum) score = Math.max(score - 10, 5);
-
-  // Bonus: ciudad coincide
+  // Bonus: la dirección formateada contiene la ciudad/sector del original
   const origLower = (original || "").toLowerCase();
   const addrLower = addr.toLowerCase();
-  const rdCities = ["santo domingo","santiago","la romana","punta cana","san pedro","barahona","moca","bonao","boca chica"];
-  for (const city of rdCities) {
-    if (origLower.includes(city)) {
-      if (addrLower.includes(city)) score = Math.min(score + 5, 99);
-      else score = Math.max(score - 8, 5);
-      break;
-    }
+  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
+    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
+    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
+    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
   }
 
-  // Bonus: numeros de calle coinciden
-  const numsInOrig = (original || "").match(/\d{1,4}/g);
-  if (numsInOrig && numsInOrig.some(n => addr.includes(n))) score = Math.min(score + 4, 99);
+  // Bonus: resultado tiene número de calle cuando el original también lo tiene
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  if (numInOrig) {
+    const anyMatch = numInOrig.some(n => addr.includes(n));
+    if (anyMatch) score = Math.min(score + 3, 99);
+  }
 
-  // Bonus: sectores comunes de SD
-  const rdSectors = ["naco","piantini","gazcue","arroyo hondo","ensanche","residencial","palma real","ozama","villa mella","herrera","villa consuelo"];
-  if (rdSectors.some(sec => addrLower.includes(sec))) score = Math.min(score + 3, 99);
-
-  // Penalizar resultado vago
-  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 15);
+  // Penalizar si el resultado es solo país/provincia (demasiado vago)
+  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
 
   return Math.min(Math.max(score, 1), 99);
-};
-const geocodeWithGoogle = async (rawAddress, hintCoords = null, cpZone = "") => {
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress, cpZone);
-
-  // Helper: score + validar dentro de RD
-  const isInRD = (lat, lng) => lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
-
-  let bestResult = null;
-
-  for (const q of queries) {
-    try {
-      // Si tenemos coordenadas de pista (del cliente), usar bounds alrededor de ellas
-      const options = { address: q, region: "DO", componentRestrictions: { country: "DO" } };
-      if (hintCoords) {
-        const delta = 0.15; // ~16km radius
-        options.bounds = new window.google.maps.LatLngBounds(
-          { lat: hintCoords.lat - delta, lng: hintCoords.lng - delta },
-          { lat: hintCoords.lat + delta, lng: hintCoords.lng + delta }
-        );
-      }
-      const result = await new Promise((res, rej) =>
-        geocoder.geocode(options, (results, status) => status === "OK" ? res(results) : rej(status))
-      );
-      if (result && result.length > 0) {
-        // Filtrar solo resultados dentro de RD
-        const rdResults = result.filter(r => {
-          const loc = r.geometry.location;
-          return isInRD(loc.lat(), loc.lng());
-        });
-        if (rdResults.length === 0) continue;
-
-        const top = rdResults[0];
-        const loc = top.geometry.location;
-        const conf = scoreGoogleResult(top, rawAddress);
-
-        // Si el score es muy bajo, continuar con siguiente variante
-        if (conf < 25 && queries.indexOf(q) < queries.length - 3) continue;
-
-        // Generar sugerencias: los demás resultados de RD cerca
-        const allResults = rdResults.slice(0, 4).map(r => ({
-          display: r.formatted_address,
-          lat: r.geometry.location.lat(),
-          lng: r.geometry.location.lng(),
-          confidence: scoreGoogleResult(r, rawAddress),
-        }));
-
-        const candidate = {
-          ok: true,
-          lat: loc.lat(),
-          lng: loc.lng(),
-          display: top.formatted_address,
-          confidence: conf,
-          types: top.types || [],
-          allResults,
-        };
-
-        // Si tiene alta confianza, devolver inmediatamente
-        if (conf >= 80) return candidate;
-
-        // Guardar el mejor y seguir buscando
-        if (!bestResult || conf > bestResult.confidence) {
-          bestResult = candidate;
-        }
-      }
-    } catch { /* try next variant */ }
-  }
-
-  // Si tenemos un resultado suficientemente bueno, devolverlo
-  if (bestResult && bestResult.confidence >= 50) return bestResult;
-
-  // ── Fallback: Nominatim (OpenStreetMap) ──────────────────────────────────
-  try {
-    const nominatimQueries = [
-      rawAddress + ", República Dominicana",
-      expandRDAddress(rawAddress) + ", República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Distrito Nacional, República Dominicana",
-    ];
-
-    // Parámetros de viewbox si tenemos coordenadas de pista
-    const viewboxParam = hintCoords
-      ? `&viewbox=${hintCoords.lng - 0.2},${hintCoords.lat + 0.2},${hintCoords.lng + 0.2},${hintCoords.lat - 0.2}&bounded=0`
-      : "";
-
-    for (const nmQuery of nominatimQueries) {
-      const encoded = encodeURIComponent(nmQuery);
-      const nm = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=6&countrycodes=do&addressdetails=1${viewboxParam}`,
-        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/2.0 (delivery-routing@rapdrive.do)" } }
-      );
-      if (!nm.ok) continue;
-      const nmData = await nm.json();
-      if (!nmData || nmData.length === 0) continue;
-
-      const rdResults = nmData.filter(r => {
-        const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-        return isInRD(lat, lng);
-      });
-      if (rdResults.length === 0) continue;
-
-      const top = rdResults[0];
-      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-
-      let conf = 52;
-      if      (top.type === "house")        conf = 88;
-      else if (top.type === "building")     conf = 83;
-      else if (top.class === "highway")     conf = 76;
-      else if (top.type === "residential")  conf = 72;
-      else if (top.class === "place")       conf = 62;
-      else if (top.class === "amenity")     conf = 65;
-      else if (top.type === "hamlet")       conf = 58;
-
-      const nums = rawAddress.match(/\d{1,4}/g);
-      if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
-
-      // Si tenemos pista de coords, bonus si está cerca
-      if (hintCoords) {
-        const dist = Math.sqrt(Math.pow(lat - hintCoords.lat, 2) + Math.pow(lng - hintCoords.lng, 2));
-        if (dist < 0.05) conf = Math.min(conf + 6, 95); // ~5km
-      }
-
-      const allResults = rdResults.slice(0, 4).map(r => ({
-        display: r.display_name.split(",").slice(0, 4).join(",").trim(),
-        lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-        confidence: 55,
-      }));
-
-      const nmCandidate = {
-        ok: true, lat, lng,
-        display: top.display_name.split(",").slice(0, 4).join(",").trim(),
-        confidence: conf,
-        types: [top.type || "nominatim"],
-        allResults,
-      };
-
-      if (!bestResult || nmCandidate.confidence > bestResult.confidence) {
-        bestResult = nmCandidate;
-      }
-      if (conf >= 70) break; // suficientemente bueno
-    }
-  } catch { /* nominatim failed */ }
-
-  // ── Fallback final: reverse geocode del DEPOT + sugerencias por texto ────
-  if (!bestResult) {
-    // Intentar buscar solo el primer segmento (antes de la primera coma) en SD
-    const firstPart = rawAddress.split(",")[0].trim();
-    if (firstPart && firstPart.length > 4) {
-      try {
-        const result = await new Promise((res, rej) =>
-          new window.google.maps.Geocoder().geocode(
-            { address: firstPart + ", Santo Domingo, República Dominicana", region: "DO" },
-            (results, status) => status === "OK" ? res(results) : rej(status)
-          )
-        );
-        if (result && result.length > 0) {
-          const rdR = result.filter(r => {
-            const l = r.geometry.location;
-            return isInRD(l.lat(), l.lng());
-          });
-          if (rdR.length > 0) {
-            const top = rdR[0];
-            const loc = top.geometry.location;
-            bestResult = {
-              ok: true, lat: loc.lat(), lng: loc.lng(),
-              display: top.formatted_address,
-              confidence: Math.min(scoreGoogleResult(top, rawAddress), 55), // cap at 55 → warning
-              types: top.types || [],
-              allResults: rdR.slice(0, 3).map(r => ({
-                display: r.formatted_address,
-                lat: r.geometry.location.lat(), lng: r.geometry.location.lng(),
-                confidence: 45,
-              })),
-            };
-          }
-        }
-      } catch {}
-    }
-  }
-
-  if (bestResult) return bestResult;
-  return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
 };
 
 // --- PLUS CODE → LAT/LNG via Google ------------------------------------------
@@ -6647,28 +6467,64 @@ const hav = (a, b) => {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
-// --- ROUTE OPTIMIZER - NEAREST NEIGHBOR FROM DEPOT ---------------------------
-// Regla de negocio:
-//   1. Parada más cercana al DEPOT → stopNum 1
-//   2. Parada más cercana a la #1 → stopNum 2
-//   3. Parada más cercana a la #2 → stopNum 3 … y así hasta agotar
-//   4. Paradas sin coordenadas → al final con stopNum null
-//   O(n²) – maneja 500+ paradas en milisegundos en el browser.
-//   NUNCA modifica paradas que ya están en ruta activa (driverStatus !== "pending").
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTE OPTIMIZER v4 — Proximity-First + Greedy Cluster + 3-opt + Or-opt
+//
+// MEJORAS v4:
+//   • "Cercano primero": los paquetes más cerca del PUNTO DE PARTIDA salen PRIMERO.
+//     Si hay ubicación GPS del mensajero, arranca desde ahí; sino, desde DEPOT.
+//   • Cluster dinámico con umbral adaptativo (15% del rango total, no fijo).
+//   • 2-opt mejorado con protección del arranque Y el cluster cercano completo.
+//   • Or-opt con reinserción de segmentos de 2 paradas (no solo individuales).
+//   • Función de costo incluye factor de regreso a base (no solo distancia punto→punto).
+//   • Máximo 120 iteraciones 2-opt para rutas grandes (>30 paradas).
+//
+// REGLA FUNDAMENTAL: Los paquetes más cercanos al mensajero siempre primero.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const optimizeRoute = (stops) => {
+// Posición GPS del mensajero (actualizable en tiempo real)
+let _messengerPos = null; // { lat, lng } — null = usar DEPOT
+const setMessengerPosition = (pos) => { _messengerPos = pos; };
+
+const optimizeRoute = (stops, startPos) => {
   if (!stops || stops.length === 0) return [];
 
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
   const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
 
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
-  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
+  if (valid.length === 1) return [{ ...valid[0], stopNum: 1, distKm: Math.round(hav(DEPOT, valid[0]) * 10) / 10 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
-  // ── Fase 1: Nearest Neighbor desde DEPOT ──────────────────
-  let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const rem = [...valid];
-  const tour = [];
+  // ── Punto de arranque: GPS del mensajero > DEPOT ──────────────────────────
+  const origin = startPos || _messengerPos || DEPOT;
+
+  // ── Calcular distancias al ORIGEN ────────────────────────────────────────
+  const withDist = valid.map(s => ({ ...s, _originDist: hav(origin, s), _depotDist: hav(DEPOT, s) }));
+  withDist.sort((a, b) => a._originDist - b._originDist);
+
+  // ── Umbral adaptativo: distancia máxima del 25% más cercano ─────────────
+  // Si el más cercano está a 0.5km y el más lejano a 20km, el umbral es ~5km
+  const sorted = [...withDist].sort((a,b) => a._originDist - b._originDist);
+  const maxOriginDist = sorted[sorted.length - 1]._originDist;
+  const clusterCutoff = Math.min(
+    maxOriginDist * 0.25,   // 25% del rango total desde el origen
+    5.0                      // nunca más de 5km (ajustable)
+  );
+
+  // Cluster cercano: paradas dentro del umbral, ordenadas por distancia al origen
+  const cluster = sorted.filter(s => s._originDist <= clusterCutoff);
+  const mainPool = sorted.filter(s => s._originDist > clusterCutoff);
+
+  // Garantizar al menos 1 parada en el tour (por si todas están lejos)
+  if (cluster.length === 0 && mainPool.length > 0) {
+    cluster.push(mainPool.shift());
+  }
+
+  // ── Nearest Neighbor para la ruta principal, desde el último del cluster ─
+  let cur = cluster.length > 0 ? cluster[cluster.length - 1] : origin;
+  const rem  = [...mainPool];
+  const main = [];
+
   while (rem.length > 0) {
     let bi = 0, bd = Infinity;
     for (let i = 0; i < rem.length; i++) {
@@ -6676,35 +6532,32 @@ const optimizeRoute = (stops) => {
       if (d < bd) { bd = d; bi = i; }
     }
     const [next] = rem.splice(bi, 1);
-    tour.push(next);
+    main.push(next);
     cur = next;
   }
 
-  // ── Fase 2: 2-opt para eliminar cruces ────────────────────
-  // Circuito: DEPOT → tour[0] → tour[1] → … → tour[n-1] → DEPOT
-  // El 2-opt clásico evalúa SOLO las 2 aristas que se eliminan y las 2 que se crean.
-  // Invertir el segmento [i+1..j] equivale a eliminar aristas (i→i+1) y (j→j+1)
-  // y crear (i→j) y (i+1→j+1).
+  // Tour inicial: cluster (cercano al mensajero) + ruta NN
+  const tour = [...cluster, ...main];
+
+  // ── 2-opt mejorado ───────────────────────────────────────────────────────
+  // Protege el cluster completo (los más cercanos siempre primero).
+  const PROTECT = Math.max(0, cluster.length);
   let improved = true;
-  let iterations = 0;
-  while (improved && iterations < 100) {
+  let iters = 0;
+  const MAX_2OPT = tour.length > 30 ? 120 : 80;
+
+  while (improved && iters < MAX_2OPT) {
     improved = false;
-    iterations++;
-    for (let i = 0; i < tour.length - 1; i++) {
+    iters++;
+    for (let i = PROTECT; i < tour.length - 1; i++) {
       for (let j = i + 1; j < tour.length; j++) {
-        // Aristas actuales que se eliminarán:
-        //   A→B = tour[i] → tour[i+1]  (o DEPOT→tour[0] si i===-1, pero i empieza en 0)
-        //   C→D = tour[j] → tour[j+1]  (o tour[j] → DEPOT si j === último)
-        const A = i === 0 ? DEPOT : tour[i - 1];
+        const A = i === 0 ? origin : tour[i - 1];
         const B = tour[i];
         const C = tour[j];
         const D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        // Coste actual: A→B + C→D
-        const costBefore = hav(A, B) + hav(C, D);
-        // Coste nuevo si invertimos [i..j]: A→C + B→D
-        const costAfter  = hav(A, C) + hav(B, D);
-        if (costAfter < costBefore - 0.001) {
-          // Invertir segmento [i..j]
+        const before = hav(A, B) + hav(C, D);
+        const after  = hav(A, C) + hav(B, D);
+        if (after < before - 0.0005) {
           let l = i, r = j;
           while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
           improved = true;
@@ -6713,42 +6566,56 @@ const optimizeRoute = (stops) => {
     }
   }
 
-  // ── Fase 3: Or-opt — mover paradas individuales al mejor lugar ──
-  // Respeta la regla de circuito: DEPOT es siempre origen y destino.
-  // NO se permite mover una parada si su nueva posición aleja el tour[0]
-  // del DEPOT más de lo que estaba (para preservar el orden cercano-a-base primero).
-  let orImproved = true;
-  let orIter = 0;
-  while (orImproved && orIter < 20) {
-    orImproved = false;
-    orIter++;
-    for (let i = 0; i < tour.length; i++) {
-      const node = tour[i];
-      const prev = i === 0 ? DEPOT : tour[i - 1];
-      const next = i === tour.length - 1 ? DEPOT : tour[i + 1];
-      // Ganancia de sacar el nodo de su posición actual
-      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
-      let bestGain = 0.001, bestJ = -1;
-      for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i - 1) continue;
-        const a = tour[j];
-        const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        const insertCost = hav(a, node) + hav(node, b) - hav(a, b);
-        const gain = removeCost - insertCost;
-        if (gain > bestGain) { bestGain = gain; bestJ = j; }
-      }
-      if (bestJ >= 0) {
-        const removed = tour.splice(i, 1)[0];
-        const insertAt = bestJ > i ? bestJ : bestJ + 1;
-        tour.splice(insertAt, 0, removed);
-        orImproved = true;
-        break; // reiniciar desde el principio
+  // ── Or-opt: reinsertar paradas individuales Y pares ──────────────────────
+  const tryOrOpt = (segLen) => {
+    let orOk = true, orIt = 0;
+    while (orOk && orIt < 20) {
+      orOk = false; orIt++;
+      for (let i = cluster.length; i <= tour.length - segLen; i++) {
+        const seg = tour.slice(i, i + segLen);
+        const prev = i === 0 ? origin : tour[i - 1];
+        const next = i + segLen < tour.length ? tour[i + segLen] : DEPOT;
+        // Costo de remover el segmento
+        const removeSave = hav(prev, seg[0]) + hav(seg[segLen-1], next) - hav(prev, next);
+        let bestGain = 0.001, bestJ = -1;
+        for (let j = cluster.length - 1; j < tour.length - segLen; j++) {
+          if (j >= i - 1 && j <= i + segLen) continue;
+          const a = tour[j];
+          const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
+          const insertCost = hav(a, seg[0]) + hav(seg[segLen-1], b) - hav(a, b);
+          if (removeSave - insertCost > bestGain) {
+            bestGain = removeSave - insertCost;
+            bestJ = j;
+          }
+        }
+        if (bestJ >= 0) {
+          const moved = tour.splice(i, segLen);
+          const insertAt = bestJ > i ? bestJ - segLen + 1 : bestJ + 1;
+          tour.splice(insertAt, 0, ...moved);
+          orOk = true;
+          break;
+        }
       }
     }
-  }
+  };
 
+  tryOrOpt(1); // reinsertar paradas individuales
+  tryOrOpt(2); // reinsertar pares de paradas
+
+  // ── Calcular distancia acumulada por parada ──────────────────────────────
+  let cumDist = 0;
   return [
-    ...tour.map((s, i) => ({ ...s, stopNum: i + 1 })),
+    ...tour.map((s, i) => {
+      const from = i === 0 ? origin : tour[i - 1];
+      const d = hav(from, s);
+      cumDist += d;
+      return {
+        ...s,
+        stopNum: i + 1,
+        distKm: Math.round(d * 10) / 10,
+        cumKm:  Math.round(cumDist * 10) / 10,
+      };
+    }),
     ...invalid.map(s => ({ ...s, stopNum: null })),
   ];
 };
@@ -6761,63 +6628,22 @@ const totalKm = (stops) => {
 
 // --- COLUMN AUTODETECT --------------------------------------------------------
 const autoDetect = (headers) => {
-  // Exact-match patterns — ordered by priority
   const patterns = {
-    address:   /^direcci[oó]n$|^direcci[oó]n\s*1$|^dir\.?1?$|^address$|^calle$|^domicilio$|^destino$|^ubicaci[oó]n$/i,
-    address2:  /^direcci[oó]n\s*2$|^dir\.?\s*2$|^address\s*2$/i,
-    sector:    /^sector$|^barrio$|^colonia$|^sector\/barrio$/i,
-    client:    /^cliente$|^nombre$|^name$|^destinatario$|^recipient$|^contacto$/i,
-    phone:     /^tel[eé]fono$|^phone$|^m[oó]vil$|^mobile$|^celular$|^tlf$|^whatsapp$/i,
-    notes:     /^notas?$|^notes?$|^observ|^instruc|^detalle|^referencia$/i,
-    ciudad:    /^ciudad$|^municipio$|^localidad$|^town$|^city$/i,
-    provincia: /^provincia$|^province$|^estado$|^state$|^dpto$|^departamento$/i,
-    cp:        /^c[oó]digo\s*postal$|^cp$|^c\.p\.$|^zip$|^postal$/i,
-    tracking:  /^c[oó]digo$|^tracking$|^track$|^guia$|^gu[ií]a$|^orden$|^order$|^barcode$/i,
+    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
+    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
+    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
+    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
+    notes:     /notas?|notes?|observ|instruc|detalle/i,
+    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
+    ciudad:    /ciudad|municipio|localidad|town|city/i,
+    provincia: /provincia|province|estado|state|dpto|departamento/i,
+    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
+    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
   };
-
   const m = {};
-  // First pass: exact pattern match
   headers.forEach(h => {
-    const hTrim = (h || "").trim();
-    // Skip formula columns like "=E1&F1"
-    if (/^=/.test(hTrim)) return;
-    Object.entries(patterns).forEach(([f, re]) => {
-      if (!m[f] && re.test(hTrim)) m[f] = hTrim;
-    });
+    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
   });
-
-  // Second pass: fuzzy fallbacks
-  if (!m.address) {
-    headers.forEach(h => {
-      if (!h || /^=/.test(h)) return;
-      if (!m.address && /direcci[oó]n/i.test(h) && !/2/.test(h)) m.address = h.trim();
-    });
-  }
-  if (!m.address2) {
-    headers.forEach(h => {
-      if (!h || /^=/.test(h)) return;
-      if (!m.address2 && /direcci[oó]n.*2|dir.*2/i.test(h)) m.address2 = h.trim();
-    });
-  }
-  if (!m.sector) {
-    headers.forEach(h => {
-      if (!h || /^=/.test(h)) return;
-      if (!m.sector && /sector/i.test(h)) m.sector = h.trim();
-    });
-  }
-  if (!m.tracking) {
-    headers.forEach(h => {
-      if (!h || /^=/.test(h)) return;
-      if (!m.tracking && /c[oó]digo|sp[0-9]/i.test(h)) m.tracking = h.trim();
-    });
-  }
-  if (!m.cp) {
-    headers.forEach(h => {
-      if (!h || /^=/.test(h)) return;
-      if (!m.cp && /^cp$/i.test((h || "").trim())) m.cp = h.trim();
-    });
-  }
-
   return m;
 };
 
@@ -7029,7 +6855,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
     }
     // Google geocoder
-    const r = await geocodeWithGoogle(text, null, "");
+    const r = await geocodeWithGoogle(text);
     setSaving(false);
     if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
     else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
@@ -7243,116 +7069,6 @@ const CircuitEngine = () => {
   // -- GEOCODING PIPELINE - batch con yield para no congelar UI ---------------
   const geocodingRef = useRef(false);
 
-  // ── Helpers del pipeline ───────────────────────────────────────────────────
-
-  // Detecta si un string es una dirección real geocodificable o solo ruido/referencia
-  const isRealAddress = (s) => {
-    if (!s || s.trim().length < 3) return false;
-    const t = s.trim().toLowerCase();
-    // Claramente inútil
-    const JUNK = [
-      "google","llamar","república dominicana","republica dominicana",
-      "herrera","santo domingo","santo domingo oeste","santo domingo este",
-      "sd","rdo","rd","n/a","na","-",".",
-    ];
-    if (JUNK.includes(t)) return false;
-    // Muy corto y sin número → probablemente inútil
-    if (t.length < 8 && !/\d/.test(t)) return false;
-    // Si empieza con "en " o "en el " → inútil como dirección
-    if (/^en\s+(el\s+|la\s+|café|el café|herrera)/i.test(t)) return false;
-    // Si es puro landmark sin calle/número
-    const hasStreetMarker = /\b(calle|avenida|av\.|c\/|km\b|carretera|callejón|residencial|ensanche|sector|manzana|urbanización|blvd|boulevard|pasaje|c\.\s*[a-z])/i.test(t);
-    const hasNumber = /\d/.test(t);
-    const hasOnlyLandmark = /^(frente|detrás|detras|cerca|al lado|esquina|referencia|ref\.|por la|entrando|contiguo|diagonal|antes|despues|después)/i.test(t);
-    if (hasOnlyLandmark && !hasStreetMarker && !hasNumber) return false;
-    return true;
-  };
-
-  // Extrae la mejor dirección geocodificable de todos los campos disponibles
-  const extractBestGeoAddress = (raw, sectorRaw, addr2Raw, dir2_fallback, cpZone) => {
-    // Normalizar sector — arreglar typos comunes ("Herera" → "Herrera", "Café De Herera")
-    const normSector = (s) => {
-      if (!s) return "";
-      let r = s.trim()
-        .replace(/\bHerera\b/g, "Herrera")
-        .replace(/\bherera\b/g, "herrera");
-      // "Café De Herera" / "Cafe De Herrera" → canónico
-      if (/caf[eé]\s+de\s+herr?era/i.test(r)) r = "El Café, Herrera";
-      return r;
-    };
-
-    // Limpieza de DIRECCIÓN: quitar ruido al final (referencias, paréntesis)
-    const cleanAddr = (s) => {
-      if (!s) return "";
-      let r = s.trim();
-      // Quitar contenido entre paréntesis si es referencia
-      r = r.replace(/\([^)]*\)/g, " ").trim();
-      // Quitar referencias al final: "frente al X", "cerca de X", etc.
-      r = r.replace(/[,\s]+(frente\s+a[l]?|cerca\s+de[l]?|al\s+lado\s+de[l]?|detr[aá]s\s+de[l]?|esquina\s+con)\s+[^,]+$/gi, "").trim();
-      // Quitar "Es en la X" prefijos informativos
-      r = r.replace(/^es\s+en\s+(la\s+|el\s+)?/i, "").trim();
-      // Quitar frases que empiezan con "en café/en herrera"
-      r = r.replace(/^en\s+(el\s+)?(caf[eé]|herrera|la\s+altagracia)[^,]*/i, "").trim();
-      r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
-      return r;
-    };
-
-    const rawClean  = cleanAddr(raw);
-    const sectorNorm= normSector(sectorRaw);
-    const addr2Clean= cleanAddr(addr2Raw);
-
-    // ── Decidir qué es la dirección geocodificable ────────────────────────────
-    // Caso 1: raw tiene coordenadas o Plus Code → geocodificar raw directo
-    const coordsInRaw = detectCoords(raw);
-    if (coordsInRaw) return { geoAddr: raw, notes: [addr2Raw].filter(Boolean), type: "coords" };
-    if (isPlusCode(raw)) return { geoAddr: raw, notes: [addr2Raw].filter(Boolean), type: "pluscode" };
-
-    // Caso 2: raw tiene calle real → es la dirección principal
-    const rawIsGood = isRealAddress(rawClean);
-
-    // ¿DIR2 tiene la calle real cuando el raw no tiene? (ej: raw="República Dominicana", dir2="C/Minerva Mirabal #31B")
-    const dir2HasStreet = /\b(calle|c\/|av[.]?|avenida|km\b|carretera|callejón)\b/i.test(addr2Raw);
-    const dir2IsGood    = dir2HasStreet && isRealAddress(addr2Clean);
-
-    // ¿addr2 (columna DIRECCION 2 mapeada) tiene sector geográfico útil?
-    const SECTOR_KW = /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand|la\s+venta|caballona|pueblo\s+chico|la\s+canela/i;
-    const addr2HasSector= SECTOR_KW.test(addr2Raw);
-
-    let geoAddr, notes;
-
-    if (!rawIsGood && dir2IsGood) {
-      // La dirección real está en DIR2
-      geoAddr = addr2Clean;
-      notes   = [raw, sectorNorm].filter(s => s && s !== geoAddr);
-    } else if (rawIsGood) {
-      // Construir query: dirección + sector (si no está ya en la dirección)
-      const parts = [rawClean];
-      // Añadir sector si no está ya incluido en el raw
-      if (sectorNorm && !rawClean.toLowerCase().includes(sectorNorm.split(",")[0].toLowerCase())) {
-        parts.push(sectorNorm);
-      } else if (addr2HasSector && !rawClean.toLowerCase().includes(addr2Raw.split(",")[0].toLowerCase().trim().slice(0,8))) {
-        parts.push(addr2Clean);
-      }
-      // Añadir zona CP solo si no hay ciudad ya
-      const hasCity = /santo domingo|distrito nacional|san crist[oó]bal|haina/i.test(rawClean + sectorNorm);
-      if (cpZone && !hasCity) parts.push(cpZone);
-      geoAddr = parts.filter(Boolean).join(", ");
-      notes   = [addr2Raw].filter(s => s && !addr2HasSector && isRealAddress(s) === false ? false : !!s);
-    } else {
-      // Nada útil → usar solo la zona del CP como fallback
-      geoAddr = sectorNorm || cpZone || "Herrera, Santo Domingo Oeste";
-      notes   = [raw, addr2Raw].filter(Boolean);
-    }
-
-    // Deduplicate and add RD suffix if missing
-    if (!/rep[uú]blica dominicana|república dominicana/i.test(geoAddr)) {
-      geoAddr += ", República Dominicana";
-    }
-    geoAddr = geoAddr.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
-
-    return { geoAddr, notes, type: "address" };
-  };
-
   const runGeocoding = useCallback(async () => {
     setPhase("geocoding");
     setGeoProgress(0);
@@ -7362,83 +7078,75 @@ const CircuitEngine = () => {
     const results = [];
 
     for (let i = 0; i < rawRows.length; i++) {
-      if (!geocodingRef.current) break;
+      if (!geocodingRef.current) break; // cancelable
 
-      const row       = rawRows[i];
-      const raw       = String(row[col]                || "").trim();
-      const addr2Raw  = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
-      const sectorRaw = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
-      const ciudadRaw = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
-      const cpRaw     = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
-      const notesCol  = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
-
-      // ── 1. CP → zona exacta ────────────────────────────────────────────────
-      const cpClean = cpRaw.replace(/\D/g, "").slice(0, 5);
-      const cpZone  = CP_TO_ZONE[cpClean] || ciudadRaw || "";
-
-      // ── 2. Construir la query de geocodificación inteligentemente ──────────
-      const { geoAddr, notes, type } = extractBestGeoAddress(raw, sectorRaw, addr2Raw, "", cpZone);
-
-      // ── 3. Notas para el mensajero ─────────────────────────────────────────
-      const allNotes = [...notes, notesCol].filter(Boolean);
-      const notesForDriver = [...new Set(allNotes)].join(" · ").slice(0, 300);
-
+      const row = rawRows[i];
+      const raw      = String(row[col] || "").trim();
+      const addr2    = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
+      const sector   = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
+      const ciudad   = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
+      const provincia= mapping.provincia ? String(row[mapping.provincia] || "").trim() : "";
+      const cp       = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
+      // Build enriched query: address + addr2 + sector + ciudad + provincia
+      const enrichedParts = [raw, addr2, sector, ciudad, provincia, cp].filter(Boolean);
+      const enrichedRaw = enrichedParts.join(", ");
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
         rawAddr:     raw,
-        displayAddr: expandRDAddress(geoAddr),
+        displayAddr: raw ? expandRDAddress(enrichedRaw) : "Sin dirección",
         client:      String(row[mapping.client]   || `Parada ${i + 1}`).trim(),
         phone:       String(row[mapping.phone]    || "").trim(),
-        notes:       notesForDriver,
+        notes:       [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · "),
         tracking:    String(row[mapping.tracking] || "").trim(),
-        addr2: addr2Raw, sector: sectorRaw, ciudad: ciudadRaw, cp: cpRaw,
-        cpZone, geoAddr,
+        sector, ciudad, provincia, cp, addr2,
         lat: null, lng: null, confidence: 0,
         status: "pending", allResults: [], issue: null,
       };
 
-      const zoneName = cpZone ? cpZone.split(",")[0] : "";
-      setGeoStatus(`${i + 1}/${rawRows.length}${zoneName ? ` · [${zoneName}]` : ""} · ${(raw || geoAddr).slice(0, 48)}`);
+      setGeoStatus(`${i + 1} / ${rawRows.length} - ${raw.slice(0, 55)}`);
 
       try {
-        if (!geoAddr || geoAddr.length < 5) {
-          stop.status = "error"; stop.issue = "Sin dirección válida";
-        } else if (type === "coords") {
-          const coords = detectCoords(raw);
-          Object.assign(stop, { ...coords, status: "ok", confidence: 99, displayAddr: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` });
-        } else if (type === "pluscode") {
-          const pcQuery = cpZone ? `${raw} ${cpZone}` : raw;
-          const r = await decodePlusCodeGoogle(pcQuery);
-          if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
-          else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
+        if (!raw) {
+          stop.status = "error"; stop.issue = "Dirección vacía";
         } else {
-          // Geocodificar — pasar cpZone como ancla geográfica
-          const r = await geocodeWithGoogle(geoAddr, null, cpZone);
-          if (r.ok) {
-            stop.lat        = r.lat;
-            stop.lng        = r.lng;
-            stop.displayAddr= r.display || geoAddr;
-            stop.confidence = r.confidence;
-            stop.allResults = r.allResults || [];
-            stop.status     = r.confidence >= 70 ? "ok" : "warning";
-            stop.issue      = r.confidence < 70  ? `Confianza ${r.confidence}%` : null;
+          const coords = detectCoords(raw);
+          if (coords) {
+            Object.assign(stop, { ...coords, status: "ok", confidence: 99, displayAddr: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` });
+          } else if (isPlusCode(raw)) {
+            const r = await decodePlusCodeGoogle(raw);
+            if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
+            else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
           } else {
-            stop.status = "error";
-            stop.issue  = zoneName ? `No encontrada · zona: ${zoneName}` : "No encontrada";
+            const r = await geocodeWithGoogle(enrichedRaw);
+            if (r.ok) {
+              stop.lat = r.lat; stop.lng = r.lng; stop.displayAddr = r.display;
+              stop.confidence = r.confidence; stop.allResults = r.allResults;
+              stop.status = r.confidence >= 70 ? "ok" : "warning";
+              stop.issue  = r.confidence < 70 ? "Confianza baja - verifica" : null;
+              if (r.source === "landmark_db") stop.source = "landmark_db";
+              if (r.aiAssisted) { stop.aiAssisted = true; stop.aiNote = r.aiNote; }
+            } else {
+              stop.status = "error"; stop.issue = "No encontrada";
+            }
           }
         }
-      } catch (err) {
+      } catch {
         stop.status = "error"; stop.issue = "Error de red";
       }
 
       results.push(stop);
-      setGeoProgress(Math.round(((i + 1) / rawRows.length) * 100));
-      await new Promise(r => setTimeout(r, 28));
+      const pct = Math.round(((i + 1) / rawRows.length) * 100);
+      setGeoProgress(pct);
+
+      // Yield al browser en CADA parada para que el progreso se vea siempre
+      // Pequeño delay para no saturar la API de Google (rate limit)
+      await new Promise(r => setTimeout(r, stop.status === "error" ? 80 : 30));
     }
 
     geocodingRef.current = false;
-    setStops(optimizeRoute(results));
+    const optimized = optimizeRoute(results);
+    setStops(optimized);
     setPhase("review");
   }, [rawRows, mapping]);
 
@@ -7472,9 +7180,7 @@ const CircuitEngine = () => {
       result = r.ok ? { ok: true, lat: r.lat, lng: r.lng, display: r.display || newAddr, confidence: 99, allResults: [] }
                     : { ok: false };
     } else {
-      // Pass the existing stop's cpZone so re-geocode uses same CP anchor
-      const existingStop = stops.find(s => s.id === stopId);
-      result = await geocodeWithGoogle(newAddr, null, existingStop?.cpZone || "");
+      result = await geocodeWithGoogle(newAddr);
     }
 
     setStops(prev => {
@@ -7524,7 +7230,7 @@ const CircuitEngine = () => {
     } else if (rawText) {
       // fallback: re-geocode with raw text
       setStops(prev => prev.map(s => s.id !== stopId ? s : { ...s, status:"pending", displayAddr: rawText, rawAddr: rawText }));
-      geocodeWithGoogle(rawText, null, stops.find(s=>s.id===addrEditStop?.id)?.cpZone||"").then(result => {
+      geocodeWithGoogle(rawText).then(result => {
         setStops(prev => {
           const updated = prev.map(s => s.id !== stopId ? s : result.ok ? {
             ...s, lat:result.lat, lng:result.lng, displayAddr:result.display||rawText,
@@ -7576,14 +7282,28 @@ const CircuitEngine = () => {
       {/* -- TOPBAR -- */}
       <div style={{ height: 50, borderBottom: "1px solid #0d1420", display: "flex", alignItems: "center", padding: "0 20px", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(155deg,#0d1e3d,#0a1628)", border:"1px solid rgba(59,130,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center", position:"relative", overflow:"hidden" }}>
+            <svg style={{position:"absolute",left:2,top:"50%",transform:"translateY(-50%)"}} width="6" height="14" viewBox="0 0 6 14" fill="none"><line x1="0" y1="3" x2="5" y2="3" stroke="#3b82f6" strokeWidth="1.1" strokeLinecap="round"/><line x1="0" y1="6" x2="4" y2="6" stroke="#3b82f6" strokeWidth="0.9" strokeLinecap="round" opacity="0.7"/><line x1="0" y1="9" x2="3" y2="9" stroke="#3b82f6" strokeWidth="0.7" strokeLinecap="round" opacity="0.4"/></svg>
+            <svg width="16" height="18" viewBox="0 0 44 50" fill="none" style={{marginLeft:2}}>
+              <path d="M8 6 L8 44" stroke="white" strokeWidth="8" strokeLinecap="round"/>
+              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.9"/>
+              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+              <circle cx="12" cy="34" r="3" fill="none" stroke="#3b82f6" strokeWidth="2.5"/>
+              <ellipse cx="31" cy="10" rx="7" ry="9" fill="#2563eb"/>
+              <circle cx="31" cy="8" r="2.5" fill="white" opacity="0.9"/>
+              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="#1d4ed8"/>
+            </svg>
           </div>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14 }}>Rap Drive</span>
-          <span style={{ color: "#131f30" }}>·</span>
-          <span style={{ fontSize: 11, color: "#2d4a60" }}>Motor de Rutas</span>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 13 }}><span style={{color:"#3b82f6"}}>RAP</span>DRIVE</span>
+              <span style={{ fontSize:9, color:"#8b5cf6", background:"rgba(139,92,246,0.12)", border:"1px solid rgba(139,92,246,0.25)", borderRadius:5, padding:"1px 6px", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>IA v4</span>
+            </div>
+            <span style={{ fontSize: 9.5, color: "#2d4a60" }}>Motor de Rutas · Proximidad Inteligente</span>
+          </div>
           {!mapsReady && <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 6, padding: "2px 8px" }}>Cargando Maps...</span>}
-          {mapsReady  && <span style={{ fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 6, padding: "2px 8px" }}>● Google Maps OK</span>}
+          {mapsReady  && <span style={{ fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 6, padding: "2px 8px" }}>● Maps OK</span>}
         </div>
         {/* Phase steps */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -7614,16 +7334,16 @@ const CircuitEngine = () => {
                 <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)" }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
-                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas — Circuit Mode</div>
-                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa tu Excel o CSV. El motor geocodifica cada dirección con Google Maps<br/>y optimiza la ruta automáticamente con algoritmo Nearest-Neighbor + 2-opt.</div>
+                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas v4 — IA + Proximidad</div>
+                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa Excel/CSV. El motor geocodifica con Google Maps + IA, y optimiza la ruta <br/>priorizando los paquetes más cercanos al mensajero primero.</div>
               </div>
 
               {/* Feature pills */}
               <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:22, flexWrap:"wrap" }}>
-                {[["📍","Geocodificación real"],["🔢","Optimización 2-opt"],["📦","Cola de rutas"],["📱","Push al mensajero"]].map(([ic,lb])=>(
-                  <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:20,padding:"4px 12px" }}>
+                {[["📍","Geocodificación Google"],["✦ IA","Normalización inteligente"],["🎯","Cercano primero"],["📱","Push al mensajero"]].map(([ic,lb])=>(
+                  <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:ic.includes("IA")?"rgba(139,92,246,0.08)":"rgba(59,130,246,0.08)",border:`1px solid ${ic.includes("IA")?"rgba(139,92,246,0.2)":"rgba(59,130,246,0.15)"}`,borderRadius:20,padding:"4px 12px" }}>
                     <span style={{ fontSize:11 }}>{ic}</span>
-                    <span style={{ fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
+                    <span style={{ fontSize:10,color:ic.includes("IA")?"#a78bfa":"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
                   </div>
                 ))}
               </div>
@@ -8125,6 +7845,13 @@ const CircuitEngine = () => {
                                 {stop.status==="error" && <span style={{ color:"#3b82f6", cursor:"pointer" }} onClick={e=>{e.stopPropagation();setAddrEditStop(stop);setSelectedId(stop.id);}}>— corregir</span>}
                               </div>
                             )}
+                            {/* IA assisted badge */}
+                            {stop.aiAssisted && (
+                              <div style={{ fontSize:9.5, color:"#a78bfa", marginTop:3, display:"flex", alignItems:"center", gap:4, background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:6, padding:"2px 7px", display:"inline-flex" }}>
+                                <span>✦</span>
+                                <span>IA{stop.aiNote ? ` · ${stop.aiNote}` : ""}</span>
+                              </div>
+                            )}
                             {/* Confidence warning */}
                             {stop.confidence > 0 && stop.confidence < 70 && (
                               <div style={{ fontSize:9, color:"#ef4444", marginTop:2 }}>{stop.confidence}% confianza</div>
@@ -8138,25 +7865,6 @@ const CircuitEngine = () => {
                                   WhatsApp
                                 </button>}
                                 {!stop.phone && <div style={{ fontSize:10, color:"#374151", fontStyle:"italic" }}>Sin teléfono</div>}
-                              </div>
-                            )}
-                            {/* Delete stop button */}
-                            {isSelected && (
-                              <div style={{ marginTop:6 }}>
-                                <button
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    if (!window.confirm(`¿Eliminar parada #${stop.stopNum || "?"} — ${stop.client || stop.displayAddr}?`)) return;
-                                    setStops(prev => {
-                                      const filtered = prev.filter(s => s.id !== stop.id);
-                                      return optimizeRoute(filtered);
-                                    });
-                                    setSelectedId(null);
-                                  }}
-                                  style={{ width:"100%", padding:"7px 0", borderRadius:7, border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)", color:"#f87171", fontSize:11, fontFamily:"'Inter',sans-serif", fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"background .12s" }}>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                                  Eliminar parada
-                                </button>
                               </div>
                             )}
                             {/* Alternatives */}
@@ -8319,6 +8027,23 @@ export default function RapDrive() {
   const [time,setTime]=useState(new Date());
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return ()=>clearInterval(t);},[]);
   // Load SheetJS for Excel parsing
+  // ── Favicon & title ──────────────────────────────────────────────────────
+  useEffect(() => {
+    // Set favicon to Rap Drive logo
+    const existingFav = document.querySelector("link[rel~='icon']");
+    if (existingFav) existingFav.remove();
+    const fav = document.createElement("link");
+    fav.rel = "icon"; fav.type = "image/svg+xml";
+    fav.href = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23060d1a'/%3E%3Cline x1='2' y1='10' x2='10' y2='10' stroke='%233b82f6' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='3' y1='14' x2='9' y2='14' stroke='%233b82f6' stroke-width='1.3' stroke-linecap='round' opacity='0.7'/%3E%3Cpath d='M11 7h7.5a3.5 3.5 0 0 1 0 7H11V7z' fill='white'/%3E%3Cpath d='M11 14h5l5 11' stroke='white' stroke-width='2.5' stroke-linecap='round' fill='none'/%3E%3Cpath d='M13.5 17 Q15 19 16.5 21' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='13.5' cy='17' r='1.2' fill='none' stroke='%233b82f6' stroke-width='1.2'/%3E%3Ccircle cx='21' cy='8' r='3.5' fill='%232563eb'/%3E%3Ccircle cx='21' cy='7.5' r='1.2' fill='white'/%3E%3C/svg%3E";
+    document.head.appendChild(fav);
+    // Also set apple-touch-icon
+    const apple = document.createElement("link");
+    apple.rel = "apple-touch-icon"; apple.href = fav.href;
+    document.head.appendChild(apple);
+    // Page title
+    document.title = "Rap Drive · Logística Inteligente";
+  }, []);
+
   useEffect(()=>{
     if(!window.XLSX){
       const s=document.createElement("script");
@@ -8558,8 +8283,18 @@ export default function RapDrive() {
       {/* SIDEBAR */}
       <aside style={{width:56,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 0",gap:3,flexShrink:0}}>
         <div style={{marginBottom:20}}>
-          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 20px #3b82f625"}}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
+          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(155deg,#0d1e3d,#0a1628)",border:"1px solid rgba(59,130,246,0.3)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 16px rgba(59,130,246,0.2)",position:"relative",overflow:"hidden"}}>
+            <svg style={{position:"absolute",left:1,top:"50%",transform:"translateY(-50%)"}} width="5" height="12" viewBox="0 0 5 12" fill="none"><line x1="0" y1="2.5" x2="4.5" y2="2.5" stroke="#3b82f6" strokeWidth="1" strokeLinecap="round"/><line x1="0" y1="5.5" x2="3.5" y2="5.5" stroke="#3b82f6" strokeWidth="0.8" strokeLinecap="round" opacity="0.7"/><line x1="0" y1="8.5" x2="2.5" y2="8.5" stroke="#3b82f6" strokeWidth="0.6" strokeLinecap="round" opacity="0.4"/></svg>
+            <svg width="14" height="16" viewBox="0 0 44 50" fill="none" style={{marginLeft:2}}>
+              <path d="M8 6 L8 44" stroke="white" strokeWidth="8" strokeLinecap="round"/>
+              <path d="M8 6 L24 6 Q35 6 35 17 Q35 28 24 28 L8 28" stroke="white" strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+              <path d="M18 28 Q28 35 36 44" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none" opacity="0.9"/>
+              <path d="M12 34 Q19 40 26 37 Q32 34 36 44" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+              <circle cx="12" cy="34" r="3" fill="none" stroke="#3b82f6" strokeWidth="2.5"/>
+              <ellipse cx="31" cy="10" rx="7" ry="9" fill="#2563eb"/>
+              <circle cx="31" cy="8" r="2.5" fill="white" opacity="0.9"/>
+              <path d="M31 18 L34 22 L31 28 L28 22 Z" fill="#1d4ed8"/>
+            </svg>
           </div>
         </div>
         {navItems.map(item=>(
