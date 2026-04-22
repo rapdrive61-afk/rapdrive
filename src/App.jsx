@@ -5793,193 +5793,214 @@ const loadSheetJS = () => new Promise((res) => {
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
 // --- GEOCODER (Google Maps Geocoding API) -------------------------------------
-const geocodeWithGoogle = async (rawAddress, hintCoords = null) => {
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress);
+// ══════════════════════════════════════════════════════════════════════════════
+// MOTOR DE GEOCODIFICACIÓN v176 — CP-AWARE + LANDMARK FILTER
+// Construido desde datos reales de rutas RD (Herrera / Haina / SDO / SDN)
+// ══════════════════════════════════════════════════════════════════════════════
 
-  // Helper: score + validar dentro de RD
-  const isInRD = (lat, lng) => lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
-
-  let bestResult = null;
-
-  for (const q of queries) {
-    try {
-      // Si tenemos coordenadas de pista (del cliente), usar bounds alrededor de ellas
-      const options = { address: q, region: "DO", componentRestrictions: { country: "DO" } };
-      if (hintCoords) {
-        const delta = 0.15; // ~16km radius
-        options.bounds = new window.google.maps.LatLngBounds(
-          { lat: hintCoords.lat - delta, lng: hintCoords.lng - delta },
-          { lat: hintCoords.lat + delta, lng: hintCoords.lng + delta }
-        );
-      }
-      const result = await new Promise((res, rej) =>
-        geocoder.geocode(options, (results, status) => status === "OK" ? res(results) : rej(status))
-      );
-      if (result && result.length > 0) {
-        // Filtrar solo resultados dentro de RD
-        const rdResults = result.filter(r => {
-          const loc = r.geometry.location;
-          return isInRD(loc.lat(), loc.lng());
-        });
-        if (rdResults.length === 0) continue;
-
-        const top = rdResults[0];
-        const loc = top.geometry.location;
-        const conf = scoreGoogleResult(top, rawAddress);
-
-        // Si el score es muy bajo, continuar con siguiente variante
-        if (conf < 25 && queries.indexOf(q) < queries.length - 3) continue;
-
-        // Generar sugerencias: los demás resultados de RD cerca
-        const allResults = rdResults.slice(0, 4).map(r => ({
-          display: r.formatted_address,
-          lat: r.geometry.location.lat(),
-          lng: r.geometry.location.lng(),
-          confidence: scoreGoogleResult(r, rawAddress),
-        }));
-
-        const candidate = {
-          ok: true,
-          lat: loc.lat(),
-          lng: loc.lng(),
-          display: top.formatted_address,
-          confidence: conf,
-          types: top.types || [],
-          allResults,
-        };
-
-        // Si tiene alta confianza, devolver inmediatamente
-        if (conf >= 80) return candidate;
-
-        // Guardar el mejor y seguir buscando
-        if (!bestResult || conf > bestResult.confidence) {
-          bestResult = candidate;
-        }
-      }
-    } catch { /* try next variant */ }
-  }
-
-  // Si tenemos un resultado suficientemente bueno, devolverlo
-  if (bestResult && bestResult.confidence >= 50) return bestResult;
-
-  // ── Fallback: Nominatim (OpenStreetMap) ──────────────────────────────────
-  try {
-    const nominatimQueries = [
-      rawAddress + ", República Dominicana",
-      expandRDAddress(rawAddress) + ", República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Distrito Nacional, República Dominicana",
-    ];
-
-    // Parámetros de viewbox si tenemos coordenadas de pista
-    const viewboxParam = hintCoords
-      ? `&viewbox=${hintCoords.lng - 0.2},${hintCoords.lat + 0.2},${hintCoords.lng + 0.2},${hintCoords.lat - 0.2}&bounded=0`
-      : "";
-
-    for (const nmQuery of nominatimQueries) {
-      const encoded = encodeURIComponent(nmQuery);
-      const nm = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=6&countrycodes=do&addressdetails=1${viewboxParam}`,
-        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/2.0 (delivery-routing@rapdrive.do)" } }
-      );
-      if (!nm.ok) continue;
-      const nmData = await nm.json();
-      if (!nmData || nmData.length === 0) continue;
-
-      const rdResults = nmData.filter(r => {
-        const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-        return isInRD(lat, lng);
-      });
-      if (rdResults.length === 0) continue;
-
-      const top = rdResults[0];
-      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-
-      let conf = 52;
-      if      (top.type === "house")        conf = 88;
-      else if (top.type === "building")     conf = 83;
-      else if (top.class === "highway")     conf = 76;
-      else if (top.type === "residential")  conf = 72;
-      else if (top.class === "place")       conf = 62;
-      else if (top.class === "amenity")     conf = 65;
-      else if (top.type === "hamlet")       conf = 58;
-
-      const nums = rawAddress.match(/\d{1,4}/g);
-      if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
-
-      // Si tenemos pista de coords, bonus si está cerca
-      if (hintCoords) {
-        const dist = Math.sqrt(Math.pow(lat - hintCoords.lat, 2) + Math.pow(lng - hintCoords.lng, 2));
-        if (dist < 0.05) conf = Math.min(conf + 6, 95); // ~5km
-      }
-
-      const allResults = rdResults.slice(0, 4).map(r => ({
-        display: r.display_name.split(",").slice(0, 4).join(",").trim(),
-        lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-        confidence: 55,
-      }));
-
-      const nmCandidate = {
-        ok: true, lat, lng,
-        display: top.display_name.split(",").slice(0, 4).join(",").trim(),
-        confidence: conf,
-        types: [top.type || "nominatim"],
-        allResults,
-      };
-
-      if (!bestResult || nmCandidate.confidence > bestResult.confidence) {
-        bestResult = nmCandidate;
-      }
-      if (conf >= 70) break; // suficientemente bueno
-    }
-  } catch { /* nominatim failed */ }
-
-  // ── Fallback final: reverse geocode del DEPOT + sugerencias por texto ────
-  if (!bestResult) {
-    // Intentar buscar solo el primer segmento (antes de la primera coma) en SD
-    const firstPart = rawAddress.split(",")[0].trim();
-    if (firstPart && firstPart.length > 4) {
-      try {
-        const result = await new Promise((res, rej) =>
-          new window.google.maps.Geocoder().geocode(
-            { address: firstPart + ", Santo Domingo, República Dominicana", region: "DO" },
-            (results, status) => status === "OK" ? res(results) : rej(status)
-          )
-        );
-        if (result && result.length > 0) {
-          const rdR = result.filter(r => {
-            const l = r.geometry.location;
-            return isInRD(l.lat(), l.lng());
-          });
-          if (rdR.length > 0) {
-            const top = rdR[0];
-            const loc = top.geometry.location;
-            bestResult = {
-              ok: true, lat: loc.lat(), lng: loc.lng(),
-              display: top.formatted_address,
-              confidence: Math.min(scoreGoogleResult(top, rawAddress), 55), // cap at 55 → warning
-              types: top.types || [],
-              allResults: rdR.slice(0, 3).map(r => ({
-                display: r.formatted_address,
-                lat: r.geometry.location.lat(), lng: r.geometry.location.lng(),
-                confidence: 45,
-              })),
-            };
-          }
-        }
-      } catch {}
-    }
-  }
-
-  if (bestResult) return bestResult;
-  return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+// Tabla CP → Zona exacta SDO (basada en rutas reales)
+const CP_TO_ZONE = {
+  // Distrito Nacional
+  "10101": "Zona Colonial, Distrito Nacional",
+  "10102": "Gazcue, Distrito Nacional",
+  "10103": "Ciudad Nueva, Distrito Nacional",
+  "10104": "San Carlos, Distrito Nacional",
+  "10105": "Ensanche Naco, Distrito Nacional",
+  "10106": "Bella Vista, Distrito Nacional",
+  "10107": "Piantini, Distrito Nacional",
+  "10108": "Ensanche Piantini, Distrito Nacional",
+  "10109": "Mirador Norte, Distrito Nacional",
+  "10110": "Mirador Sur, Distrito Nacional",
+  "10111": "Arroyo Hondo, Distrito Nacional",
+  "10112": "Los Cacicazgos, Distrito Nacional",
+  "10113": "Naco, Distrito Nacional",
+  "10114": "Evaristo Morales, Distrito Nacional",
+  "10115": "Los Prados, Distrito Nacional",
+  "10116": "Palma Real, Distrito Nacional",
+  "10117": "Cristo Rey, Distrito Nacional",
+  "10118": "La Julia, Distrito Nacional",
+  "10119": "30 de Mayo, Distrito Nacional",
+  "10120": "Ensanche La Fe, Distrito Nacional",
+  "10121": "Villa Consuelo, Distrito Nacional",
+  "10122": "Ensanche Espaillat, Distrito Nacional",
+  "10123": "Capotillo, Distrito Nacional",
+  "10124": "Gualey, Distrito Nacional",
+  "10125": "Guachupita, Distrito Nacional",
+  "10126": "Ensanche Luperón, Distrito Nacional",
+  "10127": "Ensanche Isabelita, Distrito Nacional",
+  "10131": "Alma Rosa, Distrito Nacional",
+  // Santo Domingo Oeste — zona Herrera / Haina
+  "10900": "Herrera, Santo Domingo Oeste",
+  "10901": "Herrera, Santo Domingo Oeste",
+  "10902": "Manoguayabo, Santo Domingo Oeste",
+  "10903": "Los Alcarrizos, Santo Domingo Oeste",
+  "10904": "Pedro Brand, Santo Domingo Oeste",
+  "10905": "La Canela, Herrera, Santo Domingo Oeste",
+  "10906": "El Café, Herrera, Santo Domingo Oeste",
+  "10907": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
+  "10908": "Residencial Rosmil, Santo Domingo Oeste",
+  "10909": "Residencial Santo Domingo, Herrera, Santo Domingo Oeste",
+  "10910": "Mirador del Oeste, Santo Domingo Oeste",
+  "10911": "Los Ríos, Santo Domingo Oeste",
+  "10912": "Loma del Chivo, Santo Domingo Oeste",
+  "11101": "Hato Nuevo, Santo Domingo Oeste",
+  "11102": "Pueblo Chico, Santo Domingo Oeste",
+  "11103": "La Venta, Santo Domingo Oeste",
+  "11104": "Caballona, Santo Domingo Oeste",
+  "11105": "El Naranjo, Santo Domingo Oeste",
+  "11106": "Manoguayabo Sur, Santo Domingo Oeste",
+  "11107": "La Puya, Santo Domingo Oeste",
+  "11108": "Residencial Punta Cana, Santo Domingo Oeste",
+  "11109": "Los Pérez, Santo Domingo Oeste",
+  "11110": "El Cacao, Santo Domingo Oeste",
+  "11111": "Zona Franca San Isidro, Santo Domingo Oeste",
+  "11112": "La Zurza, Santo Domingo Oeste",
+  "11113": "La Ciénaga, Santo Domingo Oeste",
+  "11114": "Ensanche Altagracia, Santo Domingo Oeste",
+  "11115": "Hato Nuevo Gurabo, Santo Domingo Oeste",
+  "11116": "Loma del Chivo, Haina, Santo Domingo Oeste",
+  "11117": "Pueblo Nuevo, Haina, Santo Domingo Oeste",
+  "11118": "La Zurza Alta, Santo Domingo Oeste",
+  "11119": "Las Caobas, Santo Domingo Oeste",
+  "11120": "Residencial Las Palmas, Santo Domingo Oeste",
+  "11121": "Buena Vista, Santo Domingo Oeste",
+  "11122": "Los Jardines, Santo Domingo Oeste",
+  "11123": "Villa Tapia, Santo Domingo Oeste",
+  "11124": "El Ingenio, Santo Domingo Oeste",
+  "11125": "Residencial Real, Santo Domingo Oeste",
+  "11126": "Villa Olímpica, Santo Domingo Oeste",
+  // Santo Domingo Este
+  "11500": "Villa Duarte, Santo Domingo Este",
+  "11501": "Los Mina, Santo Domingo Este",
+  "11502": "Alma Rosa, Santo Domingo Este",
+  "11503": "La Victoria, Santo Domingo Este",
+  "11504": "San Luis, Santo Domingo Este",
+  "11505": "Bonavista, Santo Domingo Este",
+  "11506": "Las Américas, Santo Domingo Este",
+  "11507": "Boca Chica, Santo Domingo Este",
+  "11508": "San Isidro, Santo Domingo Este",
+  "11509": "Sabana Perdida Este, Santo Domingo Este",
+  "11510": "Los Tres Brazos, Santo Domingo Este",
+  "11511": "Mendoza, Santo Domingo Este",
+  // Santo Domingo Norte
+  "11200": "Villa Mella, Santo Domingo Norte",
+  "11201": "Los Girasoles, Santo Domingo Norte",
+  "11202": "El Almirante, Santo Domingo Norte",
+  "11203": "Sabana Perdida, Santo Domingo Norte",
+  "11204": "Guaricano, Santo Domingo Norte",
+  "11205": "Palmarejo, Santo Domingo Norte",
+  "11206": "Los Millones, Santo Domingo Norte",
+  "11207": "Pantoja, Santo Domingo Norte",
+  "11208": "Balcines, Santo Domingo Norte",
+  // Haina / San Cristóbal
+  "91000": "Haina, San Cristóbal",
+  "91001": "Km 12 Haina, San Cristóbal",
+  "91002": "Haina Oriental, San Cristóbal",
+  "91003": "Km 14 Haina, San Cristóbal",
 };
 
-// Build multiple query variants for maximum hit rate
-// Estrategia: de más específico a más general, hasta que Google responda
-const buildQueryVariants = (raw) => {
+// Sectores RD conocidos → nombre canónico para Google Maps
+const RD_SECTORS = {
+  // Herrera / Café / Oeste
+  "herrera":             "Herrera, Santo Domingo Oeste",
+  "el cafe":             "El Café, Herrera, Santo Domingo Oeste",
+  "cafe de herrera":     "El Café, Herrera, Santo Domingo Oeste",
+  "el café":             "El Café, Herrera, Santo Domingo Oeste",
+  "la canela":           "La Canela, Herrera, Santo Domingo Oeste",
+  "loma del chivo":      "Loma del Chivo, Santo Domingo Oeste",
+  "loma de chivo":       "Loma del Chivo, Santo Domingo Oeste",
+  "manoguayabo":         "Manoguayabo, Santo Domingo Oeste",
+  "los alcarrizos":      "Los Alcarrizos, Santo Domingo Oeste",
+  "pedro brand":         "Pedro Brand, Santo Domingo Oeste",
+  "hato nuevo":          "Hato Nuevo, Santo Domingo Oeste",
+  "pueblo chico":        "Pueblo Chico, Santo Domingo Oeste",
+  "la venta":            "La Venta, Santo Domingo Oeste",
+  "caballona":           "Caballona, Santo Domingo Oeste",
+  "rosmil":              "Residencial Rosmil, Santo Domingo Oeste",
+  "residencial rosmil":  "Residencial Rosmil, Santo Domingo Oeste",
+  "los rios":            "Los Ríos, Santo Domingo Oeste",
+  "los ríos":            "Los Ríos, Santo Domingo Oeste",
+  "mirador del oeste":   "Mirador del Oeste, Santo Domingo Oeste",
+  "altagracia":          "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
+  "ens altagracia":      "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
+  "ensanche altagracia": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
+  "zona industrial herrera": "Zona Industrial Herrera, Santo Domingo Oeste",
+  // Haina / San Cristóbal
+  "haina":               "Haina, San Cristóbal",
+  "km 12":               "Km 12, Haina, San Cristóbal",
+  "km 11":               "Km 11, Haina, San Cristóbal",
+  "km 14":               "Km 14, Haina, San Cristóbal",
+  // DN
+  "mirador sur":         "Mirador Sur, Distrito Nacional",
+  "mirador norte":       "Mirador Norte, Distrito Nacional",
+  "piantini":            "Piantini, Distrito Nacional",
+  "naco":                "Naco, Distrito Nacional",
+  "gazcue":              "Gazcue, Distrito Nacional",
+  "bella vista":         "Bella Vista, Distrito Nacional",
+  "arroyo hondo":        "Arroyo Hondo, Distrito Nacional",
+  "los cacicazgos":      "Los Cacicazgos, Distrito Nacional",
+  "evaristo morales":    "Evaristo Morales, Distrito Nacional",
+  "los prados":          "Los Prados, Distrito Nacional",
+  "palma real":          "Palma Real, Distrito Nacional",
+  "30 de mayo":          "30 de Mayo, Distrito Nacional",
+  "zona colonial":       "Zona Colonial, Distrito Nacional",
+  "ciudad colonial":     "Zona Colonial, Distrito Nacional",
+  "cristo rey":          "Cristo Rey, Distrito Nacional",
+  "villa consuelo":      "Villa Consuelo, Distrito Nacional",
+  "capotillo":           "Capotillo, Distrito Nacional",
+  "gualey":              "Gualey, Distrito Nacional",
+  // SDN
+  "villa mella":         "Villa Mella, Santo Domingo Norte",
+  "los girasoles":       "Los Girasoles, Santo Domingo Norte",
+  "el almirante":        "El Almirante, Santo Domingo Norte",
+  "sabana perdida":      "Sabana Perdida, Santo Domingo Norte",
+  "guaricano":           "Guaricano, Santo Domingo Norte",
+  "los millones":        "Los Millones, Santo Domingo Norte",
+  // SDE
+  "villa duarte":        "Villa Duarte, Santo Domingo Este",
+  "los mina":            "Los Mina, Santo Domingo Este",
+  "alma rosa":           "Alma Rosa, Santo Domingo Este",
+  "la victoria":         "La Victoria, Santo Domingo Este",
+  "san luis":            "San Luis, Santo Domingo Este",
+  "bonavista":           "Bonavista, Santo Domingo Este",
+  "las americas":        "Las Américas, Santo Domingo Este",
+  "las américas":        "Las Américas, Santo Domingo Este",
+  "boca chica":          "Boca Chica, Santo Domingo Este",
+};
+
+// Detecta si un campo "Sector" del Excel es realmente una referencia/landmark
+// (no un barrio geográfico real que Google pueda geocodificar)
+const isLandmarkOnly = (s) => {
+  if (!s || s.trim().length < 2) return false;
+  const t = s.trim().toLowerCase();
+  // Si matchea un sector conocido → no es landmark
+  if (Object.keys(RD_SECTORS).some(k => t.includes(k))) return false;
+  // Si tiene palabras típicas de sector → no es landmark
+  if (/herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand/i.test(t)) return false;
+  // Palabras clave de landmarks/referencias
+  if (/frente|colmado|farmacia|salon|salón|google|referencia|cerca|detrás|detras|al\s+lado|esquina|contiguo|diagonal|próximo|proximo|negocio|tienda|supermercado|supermercado|bar\b|pizz|rest(?:aurante)?|escola|colegio|iglesia|capilla|cancha|parque|estadio|plaza\s+[a-z]/i.test(t)) return true;
+  // Muy corto y sin números = probablemente una referencia informal
+  if (t.length < 8 && !/\d/.test(t)) return true;
+  return false;
+};
+
+// Normaliza el campo sector del Excel: devuelve {geoSector, landmarkNote}
+const normalizeSectorField = (sectorRaw) => {
+  if (!sectorRaw || !sectorRaw.trim()) return { geoSector: "", landmarkNote: "" };
+  const t = sectorRaw.trim().toLowerCase();
+  // Sector conocido → usar nombre canónico
+  for (const [key, canonical] of Object.entries(RD_SECTORS)) {
+    if (t.includes(key)) return { geoSector: canonical, landmarkNote: "" };
+  }
+  // Es un landmark → va a notas, no al geocoder
+  if (isLandmarkOnly(sectorRaw)) return { geoSector: "", landmarkNote: sectorRaw.trim() };
+  // Es texto con apariencia de sector pero no conocido → intentar usarlo como contexto
+  return { geoSector: sectorRaw.trim(), landmarkNote: "" };
+};
+
+// Build multiple query variants for maximum hit rate — CP-ZONE AWARE
+// Estrategia: de más específico a más general, usando CP como ancla geográfica
+const buildQueryVariants = (raw, cpZone = "") => {
   const s = String(raw || "").trim();
   if (!s) return [];
 
@@ -6000,11 +6021,32 @@ const buildQueryVariants = (raw) => {
   const SDO = ", Santo Domingo Oeste" + RD;
   const SDN = ", Santo Domingo Norte" + RD;
 
+  // Zona del CP como ancla geográfica (el dato más confiable de toda la fila)
+  const cpAnchor = cpZone ? `, ${cpZone}` : "";
+  const cpSuffix = cpZone ? `, ${cpZone}${RD}` : SD;
+
+  // ── Bloque 0: CP-ANCHORED — primera prioridad si tenemos CP ─────────────
+  // Estas variantes son las más precisas porque el CP define exactamente la zona
+  if (cpZone && !hasCountry) {
+    // Dirección completa + zona CP exacta
+    variants.add(expanded + cpSuffix);
+    variants.add(s + cpSuffix);
+    // Solo la calle + número + zona CP
+    const calleNumCp = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón|Av\.)\s+[^,]+?\s+(?:No\.)?\s*\d{1,5}/i);
+    if (calleNumCp) {
+      variants.add(calleNumCp[0].trim() + cpSuffix);
+    }
+    // Primera parte + zona CP
+    const firstPart = expanded.split(",")[0].trim();
+    if (firstPart.length > 4) {
+      variants.add(firstPart + cpSuffix);
+    }
+  }
+
   // ── Bloque 1: expanded + ciudad ──────────────────────────────────────────
   if (!hasCountry && !hasCity) {
     variants.add(expanded + SD);
     variants.add(expanded + DN);
-    // Si tiene calle pero sin ciudad, probar todas las provincias SD
     if (hasStreet) {
       variants.add(expanded + SDE);
       variants.add(expanded + SDO);
@@ -6017,7 +6059,7 @@ const buildQueryVariants = (raw) => {
     variants.add(expanded);
   }
 
-  // ── Bloque 2: raw original + contexto (si difiere del expanded) ──────────
+  // ── Bloque 2: raw original + contexto ────────────────────────────────────
   if (s !== expanded) {
     if (!hasCity && !hasCountry) {
       variants.add(s + SD);
@@ -6032,87 +6074,78 @@ const buildQueryVariants = (raw) => {
     variants.add(s);
   }
 
-  // ── Bloque 3: Sector / Residencial aislado ───────────────────────────────
+  // ── Bloque 3: Sector / Residencial ───────────────────────────────────────
   const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
   if (secMatch) {
     const sec = secMatch[1].trim();
-    variants.add(sec + SD);
+    variants.add(sec + (cpZone ? cpSuffix : SD));
     variants.add(sec + SDE);
     variants.add(sec + SDO);
-    // Calle + sector
     const calleMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Av\.)\s+[^,]+/i);
     if (calleMatch) {
-      variants.add(calleMatch[0].trim() + ", " + sec + SD);
+      variants.add(calleMatch[0].trim() + ", " + sec + (cpZone ? cpSuffix : SD));
       variants.add(calleMatch[0].trim() + ", " + sec + ", Santo Domingo" + RD);
     }
   }
 
-  // ── Bloque 4: Extraer calle + número exacto ──────────────────────────────
+  // ── Bloque 4: Calle + número exacto ──────────────────────────────────────
   const calleNumMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón|Av\.)\s+[^,]+?\s+(?:No\.)?\s*\d{1,5}/i);
   if (calleNumMatch && !hasCity) {
-    variants.add(calleNumMatch[0].trim() + SD);
+    variants.add(calleNumMatch[0].trim() + (cpZone ? cpSuffix : SD));
     variants.add(calleNumMatch[0].trim() + SDE);
     variants.add(calleNumMatch[0].trim() + ", Santo Domingo" + RD);
   }
 
-  // ── Bloque 5: Solo calle sin número (en caso de typo en número) ──────────
+  // ── Bloque 5: Calle sin número ───────────────────────────────────────────
   const calleOnlyMatch = expanded.match(/(?:Calle|Avenida|Prolongación|Av\.)\s+[^,\d]+/i);
   if (calleOnlyMatch && hasNumber && !hasCity) {
     const calleOnly = calleOnlyMatch[0].trim().replace(/\s+No\.\s*\d+/i, "").trim();
-    if (calleOnly.length > 6) variants.add(calleOnly + SD);
+    if (calleOnly.length > 6) variants.add(calleOnly + (cpZone ? cpSuffix : SD));
   }
 
-  // ── Bloque 6: Primeras 2 partes sin extras (Apto/Torre/etc.) ────────────
+  // ── Bloque 6: Sin referencias de edificio ────────────────────────────────
   const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite|Apt)\s*[\w\-]*.*/i, "").trim();
   if (stripped !== expanded && !hasCity) {
-    variants.add(stripped + SD);
+    variants.add(stripped + (cpZone ? cpSuffix : SD));
     variants.add(stripped + RD);
   }
 
   const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 2 && !hasCity) {
-    variants.add(parts.slice(0, 2).join(", ") + SD);
-  }
+  if (parts.length >= 2 && !hasCity) variants.add(parts.slice(0, 2).join(", ") + (cpZone ? cpSuffix : SD));
   if (parts.length >= 1 && !hasCity) {
-    variants.add(parts[0] + SD);
+    variants.add(parts[0] + (cpZone ? cpSuffix : SD));
     variants.add(parts[0] + ", Santo Domingo" + RD);
   }
 
-  // ── Bloque 7: Variante con landmark / referencias ────────────────────────
-  // Si el raw tiene "frente a", "detrás de", "al lado de" → extraer landmark
-  const landmarkMatch = s.match(/(?:frente a|al lado de|detr[aá]s de|cerca de|esquina|esq\.)\s+([^,]+)/i);
-  if (landmarkMatch && !hasCity) {
-    variants.add(landmarkMatch[1].trim() + SD);
-  }
-
-  // ── Bloque 8: Versión sin palabras clave de referencia ───────────────────
+  // ── Bloque 7: Sin referencias de landmark ────────────────────────────────
   const noRef = s.replace(/(?:,?\s*(?:frente a|al lado de|detr[aá]s de|cerca de|2da planta|planta alta|planta baja)\s+[^,]+)/gi, "").trim();
   if (noRef !== s && noRef.length > 5 && !hasCity) {
-    variants.add(noRef + SD);
+    variants.add(noRef + (cpZone ? cpSuffix : SD));
   }
 
-  // ── Bloque 9: Dirección que es SOLO sector/barrio (sin calle ni número) ──
-  // Detectar si el input es básicamente solo un nombre de barrio/sector
+  // ── Bloque 8: Sector solo ─────────────────────────────────────────────────
   const isSectorOnly = !hasStreet && !hasNumber && s.split(",").length <= 2;
   if (isSectorOnly) {
-    // Para sectores puros: buscar directamente el sector en las variantes de SD
     const sectorName = expanded.split(",")[0].trim();
     if (sectorName.length > 3) {
-      variants.add(sectorName + SD);
-      variants.add(sectorName + ", Santo Domingo Oeste" + RD);
-      variants.add(sectorName + ", Santo Domingo Este" + RD);
-      variants.add(sectorName + ", Santo Domingo Norte" + RD);
+      variants.add(sectorName + (cpZone ? cpSuffix : SD));
+      variants.add(sectorName + SDO);
+      variants.add(sectorName + SDE);
+      variants.add(sectorName + SDN);
       variants.add(sectorName + RD);
-      // También con "Sector" explícito por si Google lo reconoce mejor
       if (!/^(?:sector|ensanche|residencial|urbanizaci[oó]n|barrio)/i.test(sectorName)) {
-        variants.add("Sector " + sectorName + SD);
-        variants.add("Barrio " + sectorName + SD);
+        variants.add("Sector " + sectorName + (cpZone ? cpSuffix : SD));
+        variants.add("Barrio "  + sectorName + (cpZone ? cpSuffix : SD));
       }
     }
   }
 
-  // Eliminar variantes vacías o muy cortas
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 14);
+  // ── Bloque 9: Variante sin referencia de landmark en dirección ───────────
+  const landmarkMatch = s.match(/(?:frente a|al lado de|detr[aá]s de|cerca de|esquina|esq\.)\s+([^,]+)/i);
+  if (landmarkMatch && !hasCity) variants.add(landmarkMatch[1].trim() + (cpZone ? cpSuffix : SD));
+
+  // Eliminar variantes vacías o muy cortas — máximo 16 queries
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 16);
 };
 
 // RD-specific address normalizer - expanded for Dominican Republic
@@ -6336,6 +6369,190 @@ const scoreGoogleResult = (result, original) => {
 
   return Math.min(Math.max(score, 1), 99);
 };
+const geocodeWithGoogle = async (rawAddress, hintCoords = null, cpZone = "") => {
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const queries = buildQueryVariants(rawAddress, cpZone);
+
+  // Helper: score + validar dentro de RD
+  const isInRD = (lat, lng) => lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
+
+  let bestResult = null;
+
+  for (const q of queries) {
+    try {
+      // Si tenemos coordenadas de pista (del cliente), usar bounds alrededor de ellas
+      const options = { address: q, region: "DO", componentRestrictions: { country: "DO" } };
+      if (hintCoords) {
+        const delta = 0.15; // ~16km radius
+        options.bounds = new window.google.maps.LatLngBounds(
+          { lat: hintCoords.lat - delta, lng: hintCoords.lng - delta },
+          { lat: hintCoords.lat + delta, lng: hintCoords.lng + delta }
+        );
+      }
+      const result = await new Promise((res, rej) =>
+        geocoder.geocode(options, (results, status) => status === "OK" ? res(results) : rej(status))
+      );
+      if (result && result.length > 0) {
+        // Filtrar solo resultados dentro de RD
+        const rdResults = result.filter(r => {
+          const loc = r.geometry.location;
+          return isInRD(loc.lat(), loc.lng());
+        });
+        if (rdResults.length === 0) continue;
+
+        const top = rdResults[0];
+        const loc = top.geometry.location;
+        const conf = scoreGoogleResult(top, rawAddress);
+
+        // Si el score es muy bajo, continuar con siguiente variante
+        if (conf < 25 && queries.indexOf(q) < queries.length - 3) continue;
+
+        // Generar sugerencias: los demás resultados de RD cerca
+        const allResults = rdResults.slice(0, 4).map(r => ({
+          display: r.formatted_address,
+          lat: r.geometry.location.lat(),
+          lng: r.geometry.location.lng(),
+          confidence: scoreGoogleResult(r, rawAddress),
+        }));
+
+        const candidate = {
+          ok: true,
+          lat: loc.lat(),
+          lng: loc.lng(),
+          display: top.formatted_address,
+          confidence: conf,
+          types: top.types || [],
+          allResults,
+        };
+
+        // Si tiene alta confianza, devolver inmediatamente
+        if (conf >= 80) return candidate;
+
+        // Guardar el mejor y seguir buscando
+        if (!bestResult || conf > bestResult.confidence) {
+          bestResult = candidate;
+        }
+      }
+    } catch { /* try next variant */ }
+  }
+
+  // Si tenemos un resultado suficientemente bueno, devolverlo
+  if (bestResult && bestResult.confidence >= 50) return bestResult;
+
+  // ── Fallback: Nominatim (OpenStreetMap) ──────────────────────────────────
+  try {
+    const nominatimQueries = [
+      rawAddress + ", República Dominicana",
+      expandRDAddress(rawAddress) + ", República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Distrito Nacional, República Dominicana",
+    ];
+
+    // Parámetros de viewbox si tenemos coordenadas de pista
+    const viewboxParam = hintCoords
+      ? `&viewbox=${hintCoords.lng - 0.2},${hintCoords.lat + 0.2},${hintCoords.lng + 0.2},${hintCoords.lat - 0.2}&bounded=0`
+      : "";
+
+    for (const nmQuery of nominatimQueries) {
+      const encoded = encodeURIComponent(nmQuery);
+      const nm = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=6&countrycodes=do&addressdetails=1${viewboxParam}`,
+        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/2.0 (delivery-routing@rapdrive.do)" } }
+      );
+      if (!nm.ok) continue;
+      const nmData = await nm.json();
+      if (!nmData || nmData.length === 0) continue;
+
+      const rdResults = nmData.filter(r => {
+        const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+        return isInRD(lat, lng);
+      });
+      if (rdResults.length === 0) continue;
+
+      const top = rdResults[0];
+      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+
+      let conf = 52;
+      if      (top.type === "house")        conf = 88;
+      else if (top.type === "building")     conf = 83;
+      else if (top.class === "highway")     conf = 76;
+      else if (top.type === "residential")  conf = 72;
+      else if (top.class === "place")       conf = 62;
+      else if (top.class === "amenity")     conf = 65;
+      else if (top.type === "hamlet")       conf = 58;
+
+      const nums = rawAddress.match(/\d{1,4}/g);
+      if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
+
+      // Si tenemos pista de coords, bonus si está cerca
+      if (hintCoords) {
+        const dist = Math.sqrt(Math.pow(lat - hintCoords.lat, 2) + Math.pow(lng - hintCoords.lng, 2));
+        if (dist < 0.05) conf = Math.min(conf + 6, 95); // ~5km
+      }
+
+      const allResults = rdResults.slice(0, 4).map(r => ({
+        display: r.display_name.split(",").slice(0, 4).join(",").trim(),
+        lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+        confidence: 55,
+      }));
+
+      const nmCandidate = {
+        ok: true, lat, lng,
+        display: top.display_name.split(",").slice(0, 4).join(",").trim(),
+        confidence: conf,
+        types: [top.type || "nominatim"],
+        allResults,
+      };
+
+      if (!bestResult || nmCandidate.confidence > bestResult.confidence) {
+        bestResult = nmCandidate;
+      }
+      if (conf >= 70) break; // suficientemente bueno
+    }
+  } catch { /* nominatim failed */ }
+
+  // ── Fallback final: reverse geocode del DEPOT + sugerencias por texto ────
+  if (!bestResult) {
+    // Intentar buscar solo el primer segmento (antes de la primera coma) en SD
+    const firstPart = rawAddress.split(",")[0].trim();
+    if (firstPart && firstPart.length > 4) {
+      try {
+        const result = await new Promise((res, rej) =>
+          new window.google.maps.Geocoder().geocode(
+            { address: firstPart + ", Santo Domingo, República Dominicana", region: "DO" },
+            (results, status) => status === "OK" ? res(results) : rej(status)
+          )
+        );
+        if (result && result.length > 0) {
+          const rdR = result.filter(r => {
+            const l = r.geometry.location;
+            return isInRD(l.lat(), l.lng());
+          });
+          if (rdR.length > 0) {
+            const top = rdR[0];
+            const loc = top.geometry.location;
+            bestResult = {
+              ok: true, lat: loc.lat(), lng: loc.lng(),
+              display: top.formatted_address,
+              confidence: Math.min(scoreGoogleResult(top, rawAddress), 55), // cap at 55 → warning
+              types: top.types || [],
+              allResults: rdR.slice(0, 3).map(r => ({
+                display: r.formatted_address,
+                lat: r.geometry.location.lat(), lng: r.geometry.location.lng(),
+                confidence: 45,
+              })),
+            };
+          }
+        }
+      } catch {}
+    }
+  }
+
+  if (bestResult) return bestResult;
+  return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+};
+
 // --- PLUS CODE → LAT/LNG via Google ------------------------------------------
 const decodePlusCodeGoogle = async (code) => {
   await loadGoogleMaps();
@@ -6752,7 +6969,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
     }
     // Google geocoder
-    const r = await geocodeWithGoogle(text);
+    const r = await geocodeWithGoogle(text, null, "");
     setSaving(false);
     if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
     else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
@@ -6977,38 +7194,42 @@ const CircuitEngine = () => {
     for (let i = 0; i < rawRows.length; i++) {
       if (!geocodingRef.current) break; // cancelable
 
-      const row = rawRows[i];
-      const raw      = String(row[col] || "").trim();
-      const addr2    = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
-      const sectorRaw= mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
-      const ciudad   = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
-      const provincia= mapping.provincia ? String(row[mapping.provincia] || "").trim() : "";
-      const cp       = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
-      const notesRaw = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
+      const row       = rawRows[i];
+      const raw       = String(row[col] || "").trim();
+      const addr2Raw  = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
+      const sectorRaw = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
+      const ciudadRaw = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
+      const cpRaw     = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
+      const notesRaw  = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
 
-      // ── Estrategia de construcción de query ──────────────────────────────
-      // En excels de delivery RD, DIRECCIÓN 2 suele ser el sector geográfico
-      // y SECTOR puede ser una referencia (landmark, negocio). Usamos:
-      //   Query geocodificación: DIRECCIÓN + DIRECCIÓN2 (como sector) + CIUDAD
-      //   Notas para mensajero: SECTOR (referencia) + notas adicionales
-      //
-      // Detectar si addr2 parece un sector/barrio geográfico real
-      const addr2IsSector = addr2 && /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo/i.test(addr2);
-      // Detectar si sectorRaw parece una referencia (landmark) vs sector geográfico real
-      const sectorIsRef = sectorRaw && !/herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela/i.test(sectorRaw);
+      // ── 1. Resolver zona del CP (ancla geográfica más confiable) ───────────
+      const cpClean = cpRaw.replace(/\D/g, "").slice(0, 5);
+      const cpZone  = CP_TO_ZONE[cpClean] || "";
 
-      // Parts para geocodificación: dirección principal + addr2 (si es sector) + ciudad
-      const geoAddr2Part = addr2IsSector ? addr2 : "";
-      const enrichedParts = [raw, geoAddr2Part, ciudad].filter(Boolean);
-      const enrichedRaw = enrichedParts.join(", ");
+      // ── 2. Normalizar sector: ¿geográfico real o landmark/referencia? ───────
+      const { geoSector, landmarkNote } = normalizeSectorField(sectorRaw);
 
-      // Notas para el mensajero: referencias + addr2 no-sector + sector-referencia
-      const noteParts = [
-        sectorIsRef ? sectorRaw : (!addr2IsSector ? addr2 : ""),
-        notesRaw,
-        sectorIsRef ? "" : (!addr2IsSector ? "" : sectorRaw),
+      // addr2 — detectar si es sector geográfico real
+      const addr2IsSector = addr2Raw && /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand|la\s+venta|caballona|pueblo\s+chico/i.test(addr2Raw);
+
+      // ── 3. Construir dirección para geocodificar ───────────────────────────
+      // Prioridad: addr1 + addr2(si sector) + geoSector + ciudad
+      // Si tenemos cpZone, ese ya incluye ciudad/provincia → no duplicar
+      const geoParts = [
+        raw,
+        addr2IsSector ? addr2Raw : "",
+        geoSector && !cpZone ? geoSector : "",   // si hay CP, la zona ya viene del CP
+        ciudadRaw && !cpZone ? ciudadRaw : "",
       ].filter(Boolean);
-      const notesForDriver = noteParts.join(" · ");
+      const enrichedRaw = geoParts.join(", ");
+
+      // ── 4. Notas para el mensajero (landmarks + referencias) ───────────────
+      const noteParts = [
+        landmarkNote,
+        !addr2IsSector && addr2Raw ? addr2Raw : "",
+        notesRaw,
+      ].filter(Boolean);
+      const notesForDriver = [...new Set(noteParts)].join(" · ");
 
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
@@ -7019,12 +7240,15 @@ const CircuitEngine = () => {
         phone:       String(row[mapping.phone]    || "").trim(),
         notes:       notesForDriver,
         tracking:    String(row[mapping.tracking] || "").trim(),
-        addr2, sector: sectorRaw, ciudad, provincia, cp,
+        addr2: addr2Raw, sector: sectorRaw, ciudad: ciudadRaw, cp: cpRaw,
+        cpZone,        // zona resuelta del CP — útil para display
+        geoSector,     // sector canónico si se reconoció
+        landmarkNote,  // referencia del campo sector
         lat: null, lng: null, confidence: 0,
         status: "pending", allResults: [], issue: null,
       };
 
-      setGeoStatus(`${i + 1} / ${rawRows.length} - ${raw.slice(0, 55)}`);
+      setGeoStatus(`${i + 1}/${rawRows.length} · ${cpZone ? `[${cpZone.split(",")[0]}] ` : ""}${raw.slice(0, 50)}`);
 
       try {
         if (!raw) {
@@ -7032,20 +7256,30 @@ const CircuitEngine = () => {
         } else {
           const coords = detectCoords(raw);
           if (coords) {
+            // Coordenadas directas — máxima confianza
             Object.assign(stop, { ...coords, status: "ok", confidence: 99, displayAddr: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` });
           } else if (isPlusCode(raw)) {
-            const r = await decodePlusCodeGoogle(raw);
+            // Plus Code — usar zona CP como contexto si disponible
+            const pcQuery = cpZone ? `${raw} ${cpZone}` : raw;
+            const r = await decodePlusCodeGoogle(pcQuery);
             if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
             else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
           } else {
-            const r = await geocodeWithGoogle(enrichedRaw);
+            // Geocodificación normal — pasar cpZone para que buildQueryVariants lo use
+            const hintCoords = cpZone ? null : null; // futuro: coords del depot de la zona
+            const r = await geocodeWithGoogle(enrichedRaw, hintCoords, cpZone);
             if (r.ok) {
-              stop.lat = r.lat; stop.lng = r.lng; stop.displayAddr = r.display;
-              stop.confidence = r.confidence; stop.allResults = r.allResults;
+              stop.lat = r.lat; stop.lng = r.lng;
+              stop.displayAddr  = r.display;
+              stop.confidence   = r.confidence;
+              stop.allResults   = r.allResults;
               stop.status = r.confidence >= 70 ? "ok" : "warning";
-              stop.issue  = r.confidence < 70 ? "Confianza baja - verifica" : null;
+              stop.issue  = r.confidence < 70  ? `Confianza ${r.confidence}% — verifica` : null;
             } else {
-              stop.status = "error"; stop.issue = "No encontrada";
+              stop.status = "error";
+              stop.issue  = cpZone
+                ? `No encontrada en ${cpZone.split(",")[0]}`
+                : "No encontrada";
             }
           }
         }
@@ -7054,12 +7288,10 @@ const CircuitEngine = () => {
       }
 
       results.push(stop);
-      const pct = Math.round(((i + 1) / rawRows.length) * 100);
-      setGeoProgress(pct);
+      setGeoProgress(Math.round(((i + 1) / rawRows.length) * 100));
 
-      // Yield al browser en CADA parada para que el progreso se vea siempre
-      // Pequeño delay para no saturar la API de Google (rate limit)
-      await new Promise(r => setTimeout(r, stop.status === "error" ? 80 : 30));
+      // Yield al browser — pequeño delay anti rate-limit
+      await new Promise(r => setTimeout(r, stop.status === "error" ? 60 : 25));
     }
 
     geocodingRef.current = false;
@@ -7098,7 +7330,9 @@ const CircuitEngine = () => {
       result = r.ok ? { ok: true, lat: r.lat, lng: r.lng, display: r.display || newAddr, confidence: 99, allResults: [] }
                     : { ok: false };
     } else {
-      result = await geocodeWithGoogle(newAddr);
+      // Pass the existing stop's cpZone so re-geocode uses same CP anchor
+      const existingStop = stops.find(s => s.id === stopId);
+      result = await geocodeWithGoogle(newAddr, null, existingStop?.cpZone || "");
     }
 
     setStops(prev => {
@@ -7148,7 +7382,7 @@ const CircuitEngine = () => {
     } else if (rawText) {
       // fallback: re-geocode with raw text
       setStops(prev => prev.map(s => s.id !== stopId ? s : { ...s, status:"pending", displayAddr: rawText, rawAddr: rawText }));
-      geocodeWithGoogle(rawText).then(result => {
+      geocodeWithGoogle(rawText, null, stops.find(s=>s.id===addrEditStop?.id)?.cpZone||"").then(result => {
         setStops(prev => {
           const updated = prev.map(s => s.id !== stopId ? s : result.ok ? {
             ...s, lat:result.lat, lng:result.lng, displayAddr:result.display||rawText,
