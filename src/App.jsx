@@ -5829,6 +5829,18 @@ const CP_TO_ZONE = {
   "10126": "Ensanche Luperón, Distrito Nacional",
   "10127": "Ensanche Isabelita, Distrito Nacional",
   "10131": "Alma Rosa, Distrito Nacional",
+  // ── CPs reales de rutas Herrera / Haina (de Excel ERIBERTO_23_4) ──────────
+  "10700": "Herrera, Santo Domingo Oeste",
+  "10701": "Herrera, Santo Domingo Oeste",
+  "10702": "Km 12, Haina, San Cristóbal",
+  "10703": "Km 13, Haina, San Cristóbal",
+  "10136": "Residencial Rosmil, Herrera, Santo Domingo Oeste",
+  "11001": "Zona Industrial Herrera, Santo Domingo Oeste",
+  "11002": "Zona Industrial Herrera, Santo Domingo Oeste",
+  "11003": "Herrera, Santo Domingo Oeste",
+  "11004": "La Canela, Herrera, Santo Domingo Oeste",
+  "11005": "Herrera, Santo Domingo Oeste",
+  "11006": "Herrera, Santo Domingo Oeste",
   // Santo Domingo Oeste — zona Herrera / Haina
   "10900": "Herrera, Santo Domingo Oeste",
   "10901": "Herrera, Santo Domingo Oeste",
@@ -5905,6 +5917,23 @@ const RD_SECTORS = {
   "herrera":             "Herrera, Santo Domingo Oeste",
   "el cafe":             "El Café, Herrera, Santo Domingo Oeste",
   "cafe de herrera":     "El Café, Herrera, Santo Domingo Oeste",
+  "café de herrera":     "El Café, Herrera, Santo Domingo Oeste",
+  // Typos reales del Excel (Herera sin doble r)
+  "cafe de herera":      "El Café, Herrera, Santo Domingo Oeste",
+  "café de herera":      "El Café, Herrera, Santo Domingo Oeste",
+  "el cafe de herera":   "El Café, Herrera, Santo Domingo Oeste",
+  "el café de herera":   "El Café, Herrera, Santo Domingo Oeste",
+  "el cafe herrera":     "El Café, Herrera, Santo Domingo Oeste",
+  "el café herrera":     "El Café, Herrera, Santo Domingo Oeste",
+  "km 12 de haina":      "Km 12, Haina, San Cristóbal",
+  "km12 de haina":       "Km 12, Haina, San Cristóbal",
+  "loma de chivo":       "Loma del Chivo, Haina, Santo Domingo Oeste",
+  "loma del chivo":      "Loma del Chivo, Haina, Santo Domingo Oeste",
+  "loma de chibo":       "Loma del Chivo, Haina, Santo Domingo Oeste",  // typo común
+  "ensanche altagracia de herrera": "Ensanche Altagracia, Herrera, Santo Domingo Oeste",
+  "residencial santo domingo herrera": "Residencial Santo Domingo, Herrera, Santo Domingo Oeste",
+  "zona industrial herrera": "Zona Industrial Herrera, Santo Domingo Oeste",
+  "mirador del oeste":   "Mirador del Oeste, Santo Domingo Oeste",
   "el café":             "El Café, Herrera, Santo Domingo Oeste",
   "la canela":           "La Canela, Herrera, Santo Domingo Oeste",
   "loma del chivo":      "Loma del Chivo, Santo Domingo Oeste",
@@ -6732,32 +6761,63 @@ const totalKm = (stops) => {
 
 // --- COLUMN AUTODETECT --------------------------------------------------------
 const autoDetect = (headers) => {
+  // Exact-match patterns — ordered by priority
   const patterns = {
-    address:   /^direcci[oó]n$|^direcci[oó]n\s*1$|^dir\.?$|^address$|^calle$|^domicilio$|^destino$|^ubicaci[oó]n$|^lugar$|direcci[oó]n\b(?!\s*2)/i,
-    address2:  /^direcci[oó]n\s*2$|^dir\.?\s*2$|^address\s*2$|^dir2$/i,
+    address:   /^direcci[oó]n$|^direcci[oó]n\s*1$|^dir\.?1?$|^address$|^calle$|^domicilio$|^destino$|^ubicaci[oó]n$/i,
+    address2:  /^direcci[oó]n\s*2$|^dir\.?\s*2$|^address\s*2$/i,
+    sector:    /^sector$|^barrio$|^colonia$|^sector\/barrio$/i,
     client:    /^cliente$|^nombre$|^name$|^destinatario$|^recipient$|^contacto$/i,
     phone:     /^tel[eé]fono$|^phone$|^m[oó]vil$|^mobile$|^celular$|^tlf$|^whatsapp$/i,
-    notes:     /^notas?$|^notes?$|^observ|^instruc|^detalle|^sector$|^referencia$/i,
+    notes:     /^notas?$|^notes?$|^observ|^instruc|^detalle|^referencia$/i,
     ciudad:    /^ciudad$|^municipio$|^localidad$|^town$|^city$/i,
     provincia: /^provincia$|^province$|^estado$|^state$|^dpto$|^departamento$/i,
     cp:        /^c[oó]digo\s*postal$|^cp$|^c\.p\.$|^zip$|^postal$/i,
-    tracking:  /^c[oó]digo$|^tracking$|^track$|^guia$|^gu[ií]a$|^orden$|^order$|^sp\d|^barcode$/i,
+    tracking:  /^c[oó]digo$|^tracking$|^track$|^guia$|^gu[ií]a$|^orden$|^order$|^barcode$/i,
   };
+
   const m = {};
+  // First pass: exact pattern match
   headers.forEach(h => {
     const hTrim = (h || "").trim();
-    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(hTrim)) m[f] = hTrim; });
+    // Skip formula columns like "=E1&F1"
+    if (/^=/.test(hTrim)) return;
+    Object.entries(patterns).forEach(([f, re]) => {
+      if (!m[f] && re.test(hTrim)) m[f] = hTrim;
+    });
   });
-  // Fallback patterns si el exacto no coincidió
+
+  // Second pass: fuzzy fallbacks
   if (!m.address) {
-    headers.forEach(h => { if (!m.address && /direcci[oó]n/i.test(h) && !/2/.test(h)) m.address = h; });
+    headers.forEach(h => {
+      if (!h || /^=/.test(h)) return;
+      if (!m.address && /direcci[oó]n/i.test(h) && !/2/.test(h)) m.address = h.trim();
+    });
   }
   if (!m.address2) {
-    headers.forEach(h => { if (!m.address2 && /direcci[oó]n.*2|dir.*2/i.test(h)) m.address2 = h; });
+    headers.forEach(h => {
+      if (!h || /^=/.test(h)) return;
+      if (!m.address2 && /direcci[oó]n.*2|dir.*2/i.test(h)) m.address2 = h.trim();
+    });
+  }
+  if (!m.sector) {
+    headers.forEach(h => {
+      if (!h || /^=/.test(h)) return;
+      if (!m.sector && /sector/i.test(h)) m.sector = h.trim();
+    });
   }
   if (!m.tracking) {
-    headers.forEach(h => { if (!m.tracking && /c[oó]digo|sp[0-9]/i.test(h)) m.tracking = h; });
+    headers.forEach(h => {
+      if (!h || /^=/.test(h)) return;
+      if (!m.tracking && /c[oó]digo|sp[0-9]/i.test(h)) m.tracking = h.trim();
+    });
   }
+  if (!m.cp) {
+    headers.forEach(h => {
+      if (!h || /^=/.test(h)) return;
+      if (!m.cp && /^cp$/i.test((h || "").trim())) m.cp = h.trim();
+    });
+  }
+
   return m;
 };
 
@@ -7183,6 +7243,116 @@ const CircuitEngine = () => {
   // -- GEOCODING PIPELINE - batch con yield para no congelar UI ---------------
   const geocodingRef = useRef(false);
 
+  // ── Helpers del pipeline ───────────────────────────────────────────────────
+
+  // Detecta si un string es una dirección real geocodificable o solo ruido/referencia
+  const isRealAddress = (s) => {
+    if (!s || s.trim().length < 3) return false;
+    const t = s.trim().toLowerCase();
+    // Claramente inútil
+    const JUNK = [
+      "google","llamar","república dominicana","republica dominicana",
+      "herrera","santo domingo","santo domingo oeste","santo domingo este",
+      "sd","rdo","rd","n/a","na","-",".",
+    ];
+    if (JUNK.includes(t)) return false;
+    // Muy corto y sin número → probablemente inútil
+    if (t.length < 8 && !/\d/.test(t)) return false;
+    // Si empieza con "en " o "en el " → inútil como dirección
+    if (/^en\s+(el\s+|la\s+|café|el café|herrera)/i.test(t)) return false;
+    // Si es puro landmark sin calle/número
+    const hasStreetMarker = /\b(calle|avenida|av\.|c\/|km\b|carretera|callejón|residencial|ensanche|sector|manzana|urbanización|blvd|boulevard|pasaje|c\.\s*[a-z])/i.test(t);
+    const hasNumber = /\d/.test(t);
+    const hasOnlyLandmark = /^(frente|detrás|detras|cerca|al lado|esquina|referencia|ref\.|por la|entrando|contiguo|diagonal|antes|despues|después)/i.test(t);
+    if (hasOnlyLandmark && !hasStreetMarker && !hasNumber) return false;
+    return true;
+  };
+
+  // Extrae la mejor dirección geocodificable de todos los campos disponibles
+  const extractBestGeoAddress = (raw, sectorRaw, addr2Raw, dir2_fallback, cpZone) => {
+    // Normalizar sector — arreglar typos comunes ("Herera" → "Herrera", "Café De Herera")
+    const normSector = (s) => {
+      if (!s) return "";
+      let r = s.trim()
+        .replace(/\bHerera\b/g, "Herrera")
+        .replace(/\bherera\b/g, "herrera");
+      // "Café De Herera" / "Cafe De Herrera" → canónico
+      if (/caf[eé]\s+de\s+herr?era/i.test(r)) r = "El Café, Herrera";
+      return r;
+    };
+
+    // Limpieza de DIRECCIÓN: quitar ruido al final (referencias, paréntesis)
+    const cleanAddr = (s) => {
+      if (!s) return "";
+      let r = s.trim();
+      // Quitar contenido entre paréntesis si es referencia
+      r = r.replace(/\([^)]*\)/g, " ").trim();
+      // Quitar referencias al final: "frente al X", "cerca de X", etc.
+      r = r.replace(/[,\s]+(frente\s+a[l]?|cerca\s+de[l]?|al\s+lado\s+de[l]?|detr[aá]s\s+de[l]?|esquina\s+con)\s+[^,]+$/gi, "").trim();
+      // Quitar "Es en la X" prefijos informativos
+      r = r.replace(/^es\s+en\s+(la\s+|el\s+)?/i, "").trim();
+      // Quitar frases que empiezan con "en café/en herrera"
+      r = r.replace(/^en\s+(el\s+)?(caf[eé]|herrera|la\s+altagracia)[^,]*/i, "").trim();
+      r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
+      return r;
+    };
+
+    const rawClean  = cleanAddr(raw);
+    const sectorNorm= normSector(sectorRaw);
+    const addr2Clean= cleanAddr(addr2Raw);
+
+    // ── Decidir qué es la dirección geocodificable ────────────────────────────
+    // Caso 1: raw tiene coordenadas o Plus Code → geocodificar raw directo
+    const coordsInRaw = detectCoords(raw);
+    if (coordsInRaw) return { geoAddr: raw, notes: [addr2Raw].filter(Boolean), type: "coords" };
+    if (isPlusCode(raw)) return { geoAddr: raw, notes: [addr2Raw].filter(Boolean), type: "pluscode" };
+
+    // Caso 2: raw tiene calle real → es la dirección principal
+    const rawIsGood = isRealAddress(rawClean);
+
+    // ¿DIR2 tiene la calle real cuando el raw no tiene? (ej: raw="República Dominicana", dir2="C/Minerva Mirabal #31B")
+    const dir2HasStreet = /\b(calle|c\/|av[.]?|avenida|km\b|carretera|callejón)\b/i.test(addr2Raw);
+    const dir2IsGood    = dir2HasStreet && isRealAddress(addr2Clean);
+
+    // ¿addr2 (columna DIRECCION 2 mapeada) tiene sector geográfico útil?
+    const SECTOR_KW = /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand|la\s+venta|caballona|pueblo\s+chico|la\s+canela/i;
+    const addr2HasSector= SECTOR_KW.test(addr2Raw);
+
+    let geoAddr, notes;
+
+    if (!rawIsGood && dir2IsGood) {
+      // La dirección real está en DIR2
+      geoAddr = addr2Clean;
+      notes   = [raw, sectorNorm].filter(s => s && s !== geoAddr);
+    } else if (rawIsGood) {
+      // Construir query: dirección + sector (si no está ya en la dirección)
+      const parts = [rawClean];
+      // Añadir sector si no está ya incluido en el raw
+      if (sectorNorm && !rawClean.toLowerCase().includes(sectorNorm.split(",")[0].toLowerCase())) {
+        parts.push(sectorNorm);
+      } else if (addr2HasSector && !rawClean.toLowerCase().includes(addr2Raw.split(",")[0].toLowerCase().trim().slice(0,8))) {
+        parts.push(addr2Clean);
+      }
+      // Añadir zona CP solo si no hay ciudad ya
+      const hasCity = /santo domingo|distrito nacional|san crist[oó]bal|haina/i.test(rawClean + sectorNorm);
+      if (cpZone && !hasCity) parts.push(cpZone);
+      geoAddr = parts.filter(Boolean).join(", ");
+      notes   = [addr2Raw].filter(s => s && !addr2HasSector && isRealAddress(s) === false ? false : !!s);
+    } else {
+      // Nada útil → usar solo la zona del CP como fallback
+      geoAddr = sectorNorm || cpZone || "Herrera, Santo Domingo Oeste";
+      notes   = [raw, addr2Raw].filter(Boolean);
+    }
+
+    // Deduplicate and add RD suffix if missing
+    if (!/rep[uú]blica dominicana|república dominicana/i.test(geoAddr)) {
+      geoAddr += ", República Dominicana";
+    }
+    geoAddr = geoAddr.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
+
+    return { geoAddr, notes, type: "address" };
+  };
+
   const runGeocoding = useCallback(async () => {
     setPhase("geocoding");
     setGeoProgress(0);
@@ -7192,111 +7362,83 @@ const CircuitEngine = () => {
     const results = [];
 
     for (let i = 0; i < rawRows.length; i++) {
-      if (!geocodingRef.current) break; // cancelable
+      if (!geocodingRef.current) break;
 
       const row       = rawRows[i];
-      const raw       = String(row[col] || "").trim();
+      const raw       = String(row[col]                || "").trim();
       const addr2Raw  = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
       const sectorRaw = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
       const ciudadRaw = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
       const cpRaw     = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
-      const notesRaw  = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
+      const notesCol  = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
 
-      // ── 1. Resolver zona del CP (ancla geográfica más confiable) ───────────
+      // ── 1. CP → zona exacta ────────────────────────────────────────────────
       const cpClean = cpRaw.replace(/\D/g, "").slice(0, 5);
-      const cpZone  = CP_TO_ZONE[cpClean] || "";
+      const cpZone  = CP_TO_ZONE[cpClean] || ciudadRaw || "";
 
-      // ── 2. Normalizar sector: ¿geográfico real o landmark/referencia? ───────
-      const { geoSector, landmarkNote } = normalizeSectorField(sectorRaw);
+      // ── 2. Construir la query de geocodificación inteligentemente ──────────
+      const { geoAddr, notes, type } = extractBestGeoAddress(raw, sectorRaw, addr2Raw, "", cpZone);
 
-      // addr2 — detectar si es sector geográfico real
-      const addr2IsSector = addr2Raw && /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo|alcarrizos|manoguayabo|hato\s+nuevo|pedro\s+brand|la\s+venta|caballona|pueblo\s+chico/i.test(addr2Raw);
-
-      // ── 3. Construir dirección para geocodificar ───────────────────────────
-      // Prioridad: addr1 + addr2(si sector) + geoSector + ciudad
-      // Si tenemos cpZone, ese ya incluye ciudad/provincia → no duplicar
-      const geoParts = [
-        raw,
-        addr2IsSector ? addr2Raw : "",
-        geoSector && !cpZone ? geoSector : "",   // si hay CP, la zona ya viene del CP
-        ciudadRaw && !cpZone ? ciudadRaw : "",
-      ].filter(Boolean);
-      const enrichedRaw = geoParts.join(", ");
-
-      // ── 4. Notas para el mensajero (landmarks + referencias) ───────────────
-      const noteParts = [
-        landmarkNote,
-        !addr2IsSector && addr2Raw ? addr2Raw : "",
-        notesRaw,
-      ].filter(Boolean);
-      const notesForDriver = [...new Set(noteParts)].join(" · ");
+      // ── 3. Notas para el mensajero ─────────────────────────────────────────
+      const allNotes = [...notes, notesCol].filter(Boolean);
+      const notesForDriver = [...new Set(allNotes)].join(" · ").slice(0, 300);
 
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
         rawAddr:     raw,
-        displayAddr: raw ? expandRDAddress(enrichedRaw) : "Sin dirección",
+        displayAddr: expandRDAddress(geoAddr),
         client:      String(row[mapping.client]   || `Parada ${i + 1}`).trim(),
         phone:       String(row[mapping.phone]    || "").trim(),
         notes:       notesForDriver,
         tracking:    String(row[mapping.tracking] || "").trim(),
         addr2: addr2Raw, sector: sectorRaw, ciudad: ciudadRaw, cp: cpRaw,
-        cpZone,        // zona resuelta del CP — útil para display
-        geoSector,     // sector canónico si se reconoció
-        landmarkNote,  // referencia del campo sector
+        cpZone, geoAddr,
         lat: null, lng: null, confidence: 0,
         status: "pending", allResults: [], issue: null,
       };
 
-      setGeoStatus(`${i + 1}/${rawRows.length} · ${cpZone ? `[${cpZone.split(",")[0]}] ` : ""}${raw.slice(0, 50)}`);
+      const zoneName = cpZone ? cpZone.split(",")[0] : "";
+      setGeoStatus(`${i + 1}/${rawRows.length}${zoneName ? ` · [${zoneName}]` : ""} · ${(raw || geoAddr).slice(0, 48)}`);
 
       try {
-        if (!raw) {
-          stop.status = "error"; stop.issue = "Dirección vacía";
-        } else {
+        if (!geoAddr || geoAddr.length < 5) {
+          stop.status = "error"; stop.issue = "Sin dirección válida";
+        } else if (type === "coords") {
           const coords = detectCoords(raw);
-          if (coords) {
-            // Coordenadas directas — máxima confianza
-            Object.assign(stop, { ...coords, status: "ok", confidence: 99, displayAddr: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` });
-          } else if (isPlusCode(raw)) {
-            // Plus Code — usar zona CP como contexto si disponible
-            const pcQuery = cpZone ? `${raw} ${cpZone}` : raw;
-            const r = await decodePlusCodeGoogle(pcQuery);
-            if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
-            else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
+          Object.assign(stop, { ...coords, status: "ok", confidence: 99, displayAddr: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` });
+        } else if (type === "pluscode") {
+          const pcQuery = cpZone ? `${raw} ${cpZone}` : raw;
+          const r = await decodePlusCodeGoogle(pcQuery);
+          if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
+          else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
+        } else {
+          // Geocodificar — pasar cpZone como ancla geográfica
+          const r = await geocodeWithGoogle(geoAddr, null, cpZone);
+          if (r.ok) {
+            stop.lat        = r.lat;
+            stop.lng        = r.lng;
+            stop.displayAddr= r.display || geoAddr;
+            stop.confidence = r.confidence;
+            stop.allResults = r.allResults || [];
+            stop.status     = r.confidence >= 70 ? "ok" : "warning";
+            stop.issue      = r.confidence < 70  ? `Confianza ${r.confidence}%` : null;
           } else {
-            // Geocodificación normal — pasar cpZone para que buildQueryVariants lo use
-            const hintCoords = cpZone ? null : null; // futuro: coords del depot de la zona
-            const r = await geocodeWithGoogle(enrichedRaw, hintCoords, cpZone);
-            if (r.ok) {
-              stop.lat = r.lat; stop.lng = r.lng;
-              stop.displayAddr  = r.display;
-              stop.confidence   = r.confidence;
-              stop.allResults   = r.allResults;
-              stop.status = r.confidence >= 70 ? "ok" : "warning";
-              stop.issue  = r.confidence < 70  ? `Confianza ${r.confidence}% — verifica` : null;
-            } else {
-              stop.status = "error";
-              stop.issue  = cpZone
-                ? `No encontrada en ${cpZone.split(",")[0]}`
-                : "No encontrada";
-            }
+            stop.status = "error";
+            stop.issue  = zoneName ? `No encontrada · zona: ${zoneName}` : "No encontrada";
           }
         }
-      } catch {
+      } catch (err) {
         stop.status = "error"; stop.issue = "Error de red";
       }
 
       results.push(stop);
       setGeoProgress(Math.round(((i + 1) / rawRows.length) * 100));
-
-      // Yield al browser — pequeño delay anti rate-limit
-      await new Promise(r => setTimeout(r, stop.status === "error" ? 60 : 25));
+      await new Promise(r => setTimeout(r, 28));
     }
 
     geocodingRef.current = false;
-    const optimized = optimizeRoute(results);
-    setStops(optimized);
+    setStops(optimizeRoute(results));
     setPhase("review");
   }, [rawRows, mapping]);
 
