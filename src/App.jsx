@@ -6091,8 +6091,28 @@ const buildQueryVariants = (raw) => {
     variants.add(noRef + SD);
   }
 
+  // ── Bloque 9: Dirección que es SOLO sector/barrio (sin calle ni número) ──
+  // Detectar si el input es básicamente solo un nombre de barrio/sector
+  const isSectorOnly = !hasStreet && !hasNumber && s.split(",").length <= 2;
+  if (isSectorOnly) {
+    // Para sectores puros: buscar directamente el sector en las variantes de SD
+    const sectorName = expanded.split(",")[0].trim();
+    if (sectorName.length > 3) {
+      variants.add(sectorName + SD);
+      variants.add(sectorName + ", Santo Domingo Oeste" + RD);
+      variants.add(sectorName + ", Santo Domingo Este" + RD);
+      variants.add(sectorName + ", Santo Domingo Norte" + RD);
+      variants.add(sectorName + RD);
+      // También con "Sector" explícito por si Google lo reconoce mejor
+      if (!/^(?:sector|ensanche|residencial|urbanizaci[oó]n|barrio)/i.test(sectorName)) {
+        variants.add("Sector " + sectorName + SD);
+        variants.add("Barrio " + sectorName + SD);
+      }
+    }
+  }
+
   // Eliminar variantes vacías o muy cortas
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 12);
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 14);
 };
 
 // RD-specific address normalizer - expanded for Dominican Republic
@@ -6182,11 +6202,9 @@ const expandRDAddress = (s) => {
     [/\bvilla\s+consuelo\b/gi, "Ensanche Villa Consuelo, Santo Domingo"],
     [/\bensanche\s+naco\b/gi,  "Naco, Santo Domingo"],
     [/\bensanche\s+piantini\b/gi,"Piantini, Santo Domingo"],
-    [/\blos\s+ríos\b/gi,       "Los Ríos, Santo Domingo Oeste"],
-    [/\bherrera\b/gi,          "Herrera, Santo Domingo Oeste"],
+    [/\blos\s+r[íi]os\b/gi,    "Los Ríos, Santo Domingo Oeste"],
     [/\bensanche\s+isabelita\b/gi,"Ensanche Isabelita, Santo Domingo"],
-    [/\blas\s+américas\b/gi,   "Las Américas, Santo Domingo Este"],
-    [/\bozama\b/gi,            "Ensanche Ozama, Santo Domingo Este"],
+    [/\blas\s+am[eé]ricas\b/gi,"Las Américas, Santo Domingo Este"],
     [/\bel\s+almirante\b/gi,   "El Almirante, Santo Domingo Norte"],
     [/\blos\s+girasoles\b/gi,  "Los Girasoles, Santo Domingo Norte"],
     [/\bpalma\s+real\b/gi,     "Palma Real, Distrito Nacional"],
@@ -6195,6 +6213,58 @@ const expandRDAddress = (s) => {
     [/\bunibe\b/gi,            "UNIBE, Santo Domingo"],
     [/\bintec\b/gi,            "INTEC, Santo Domingo"],
     [/\bpucmm\b/gi,            "PUCMM, Santiago"],
+
+    // ── Zona Herrera / Haina / Oeste ─────────────────────────────────────────
+    // IMPORTANTE: caf[eé]\s+de\s+her(r?)era debe ir ANTES de herrera genérico
+    [/\bcaf[eé]\s+de\s+herr?era\b/gi,         "El Café, Herrera, Santo Domingo Oeste"],
+    [/\bel\s+caf[eé]\b(?!\s+de)/gi,            "El Café, Herrera, Santo Domingo Oeste"],
+    [/\bzon[a]?\s+ind(?:ustrial)?\s+herrera\b/gi, "Zona Industrial Herrera, Santo Domingo Oeste"],
+    [/\bensanche\s+altagracia\s+de\s+herrera\b/gi,"Ensanche Altagracia, Herrera, Santo Domingo Oeste"],
+    [/\bensanche\s+altagracia\b/gi,            "Ensanche Altagracia, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+santo\s+domingo\s+herrera\b/gi,"Residencial Santo Domingo, Herrera, Santo Domingo Oeste"],
+    [/\bherrera\b/gi,                          "Herrera, Santo Domingo Oeste"],
+    [/\bloma\s+de\s+chivo\b/gi,               "Loma de Chivo, Santo Domingo Oeste"],
+    [/\bla\s+canela\b/gi,                     "La Canela, Herrera, Santo Domingo Oeste"],
+    [/\bmirador\s+del?\s+oeste\b/gi,          "Mirador del Oeste, Santo Domingo Oeste"],
+    [/\bmirador\s+sur\b/gi,                   "Mirador Sur, Distrito Nacional"],
+    [/\bmirador\s+norte\b/gi,                 "Mirador Norte, Distrito Nacional"],
+    [/\bmirador\b/gi,                         "Mirador Sur, Distrito Nacional"],
+
+    // Haina y sectores del km
+    [/\bkm\.?\s*12\s+(?:de\s+)?haina\b/gi,   "Km 12, Haina, San Cristóbal"],
+    [/\bkm\.?\s*11\s+(?:de\s+)?haina\b/gi,   "Km 11, Haina, San Cristóbal"],
+    [/\bkm\.?\s*(\d+)\s+(?:de\s+)?haina\b/gi,"Km $1, Haina, San Cristóbal"],
+    [/\bhaina\b/gi,                           "Haina, San Cristóbal"],
+    [/\bres(?:idencial)?\s+rosmil\b/gi,       "Residencial Rosmil, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+real\s+del\s+caribe\b/gi,"Residencial Real del Caribe, Santo Domingo"],
+    [/\blos\s+alcarrizos\b/gi,               "Los Alcarrizos, Santo Domingo Oeste"],
+    [/\bpedro\s+brand\b/gi,                  "Pedro Brand, Santo Domingo Oeste"],
+    [/\bla\s+victoria\b/gi,                  "La Victoria, Santo Domingo Este"],
+    [/\bsabana\s+perdida\b/gi,               "Sabana Perdida, Santo Domingo Norte"],
+    [/\bvilla\s+linda\b/gi,                  "Villa Linda, Santo Domingo"],
+    [/\bvilla\s+duarte\b/gi,                 "Villa Duarte, Santo Domingo Este"],
+    [/\bsan\s+luis\b/gi,                     "San Luis, Santo Domingo Este"],
+    [/\bguerrero\b/gi,                       "Guerrero, Santo Domingo Norte"],
+    [/\bvilla\s+francisca\b/gi,              "Villa Francisca, Santo Domingo"],
+    [/\bciudad\s+universitaria\b/gi,         "Ciudad Universitaria, Santo Domingo"],
+    [/\bbell[a]?\s+vista\b/gi,               "Bella Vista, Distrito Nacional"],
+    [/\bsector\s+30\s+de\s+mayo\b/gi,        "30 de Mayo, Santo Domingo"],
+    [/\b30\s+de\s+mayo\b/gi,                 "30 de Mayo, Santo Domingo"],
+    [/\balmacen\b/gi,                        "Alma Rosa, Santo Domingo Este"],
+    [/\balma\s+rosa\b/gi,                    "Alma Rosa, Santo Domingo Este"],
+    [/\blos\s+mina\b/gi,                     "Los Mina, Santo Domingo Este"],
+    [/\bgualey\b/gi,                         "Gualey, Santo Domingo"],
+    [/\bbonavista\b/gi,                      "Bonavista, Santo Domingo Este"],
+    [/\bpolo\s+gob(?:ierno)?\b/gi,           "Polígono Central, Santo Domingo"],
+    [/\bel\s+millon(?:es)?\b/gi,             "Los Millones, Santo Domingo Norte"],
+    [/\bensanche\s+cap(?:otillo)?\b/gi,      "Ensanche Capotillo, Santo Domingo"],
+    [/\bcapotillo\b/gi,                      "Ensanche Capotillo, Santo Domingo"],
+    [/\bensanche\s+luperon\b/gi,             "Ensanche Luperón, Santo Domingo"],
+    [/\bensanche\s+espaillat\b/gi,           "Ensanche Espaillat, Santo Domingo"],
+    [/\bcrist[o]?\s+rey\b/gi,               "Cristo Rey, Santo Domingo"],
+    [/\bzona\s+colonial\b/gi,               "Zona Colonial, Santo Domingo"],
+    [/\bevaristo\s+morales\b/gi,            "Evaristo Morales, Santo Domingo"],
+    [/\bpiantini\b/gi,                      "Piantini, Distrito Nacional"],
   ];
 
   for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
@@ -6446,21 +6516,31 @@ const totalKm = (stops) => {
 // --- COLUMN AUTODETECT --------------------------------------------------------
 const autoDetect = (headers) => {
   const patterns = {
-    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
-    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
-    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
-    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
-    notes:     /notas?|notes?|observ|instruc|detalle/i,
-    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
-    ciudad:    /ciudad|municipio|localidad|town|city/i,
-    provincia: /provincia|province|estado|state|dpto|departamento/i,
-    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
-    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
+    address:   /^direcci[oó]n$|^direcci[oó]n\s*1$|^dir\.?$|^address$|^calle$|^domicilio$|^destino$|^ubicaci[oó]n$|^lugar$|direcci[oó]n\b(?!\s*2)/i,
+    address2:  /^direcci[oó]n\s*2$|^dir\.?\s*2$|^address\s*2$|^dir2$/i,
+    client:    /^cliente$|^nombre$|^name$|^destinatario$|^recipient$|^contacto$/i,
+    phone:     /^tel[eé]fono$|^phone$|^m[oó]vil$|^mobile$|^celular$|^tlf$|^whatsapp$/i,
+    notes:     /^notas?$|^notes?$|^observ|^instruc|^detalle|^sector$|^referencia$/i,
+    ciudad:    /^ciudad$|^municipio$|^localidad$|^town$|^city$/i,
+    provincia: /^provincia$|^province$|^estado$|^state$|^dpto$|^departamento$/i,
+    cp:        /^c[oó]digo\s*postal$|^cp$|^c\.p\.$|^zip$|^postal$/i,
+    tracking:  /^c[oó]digo$|^tracking$|^track$|^guia$|^gu[ií]a$|^orden$|^order$|^sp\d|^barcode$/i,
   };
   const m = {};
   headers.forEach(h => {
-    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
+    const hTrim = (h || "").trim();
+    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(hTrim)) m[f] = hTrim; });
   });
+  // Fallback patterns si el exacto no coincidió
+  if (!m.address) {
+    headers.forEach(h => { if (!m.address && /direcci[oó]n/i.test(h) && !/2/.test(h)) m.address = h; });
+  }
+  if (!m.address2) {
+    headers.forEach(h => { if (!m.address2 && /direcci[oó]n.*2|dir.*2/i.test(h)) m.address2 = h; });
+  }
+  if (!m.tracking) {
+    headers.forEach(h => { if (!m.tracking && /c[oó]digo|sp[0-9]/i.test(h)) m.tracking = h; });
+  }
   return m;
 };
 
@@ -6900,13 +6980,36 @@ const CircuitEngine = () => {
       const row = rawRows[i];
       const raw      = String(row[col] || "").trim();
       const addr2    = mapping.address2  ? String(row[mapping.address2]  || "").trim() : "";
-      const sector   = mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
+      const sectorRaw= mapping.sector    ? String(row[mapping.sector]    || "").trim() : "";
       const ciudad   = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
       const provincia= mapping.provincia ? String(row[mapping.provincia] || "").trim() : "";
       const cp       = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
-      // Build enriched query: address + addr2 + sector + ciudad + provincia
-      const enrichedParts = [raw, addr2, sector, ciudad, provincia, cp].filter(Boolean);
+      const notesRaw = mapping.notes     ? String(row[mapping.notes]     || "").trim() : "";
+
+      // ── Estrategia de construcción de query ──────────────────────────────
+      // En excels de delivery RD, DIRECCIÓN 2 suele ser el sector geográfico
+      // y SECTOR puede ser una referencia (landmark, negocio). Usamos:
+      //   Query geocodificación: DIRECCIÓN + DIRECCIÓN2 (como sector) + CIUDAD
+      //   Notas para mensajero: SECTOR (referencia) + notas adicionales
+      //
+      // Detectar si addr2 parece un sector/barrio geográfico real
+      const addr2IsSector = addr2 && /herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela|girasoles|palma\s+real|ozama|villa\s+mella|naco|piantini|gazcue|arroyo\s+hondo/i.test(addr2);
+      // Detectar si sectorRaw parece una referencia (landmark) vs sector geográfico real
+      const sectorIsRef = sectorRaw && !/herrera|haina|caf[eé]|loma|ensanche|residencial|zona\s+ind|mirador|km\s+\d|altagracia|rosmil|canela/i.test(sectorRaw);
+
+      // Parts para geocodificación: dirección principal + addr2 (si es sector) + ciudad
+      const geoAddr2Part = addr2IsSector ? addr2 : "";
+      const enrichedParts = [raw, geoAddr2Part, ciudad].filter(Boolean);
       const enrichedRaw = enrichedParts.join(", ");
+
+      // Notas para el mensajero: referencias + addr2 no-sector + sector-referencia
+      const noteParts = [
+        sectorIsRef ? sectorRaw : (!addr2IsSector ? addr2 : ""),
+        notesRaw,
+        sectorIsRef ? "" : (!addr2IsSector ? "" : sectorRaw),
+      ].filter(Boolean);
+      const notesForDriver = noteParts.join(" · ");
+
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
@@ -6914,9 +7017,9 @@ const CircuitEngine = () => {
         displayAddr: raw ? expandRDAddress(enrichedRaw) : "Sin dirección",
         client:      String(row[mapping.client]   || `Parada ${i + 1}`).trim(),
         phone:       String(row[mapping.phone]    || "").trim(),
-        notes:       [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · "),
+        notes:       notesForDriver,
         tracking:    String(row[mapping.tracking] || "").trim(),
-        sector, ciudad, provincia, cp, addr2,
+        addr2, sector: sectorRaw, ciudad, provincia, cp,
         lat: null, lng: null, confidence: 0,
         status: "pending", allResults: [], issue: null,
       };
