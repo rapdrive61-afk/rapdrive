@@ -5598,11 +5598,353 @@ const loadSheetJS = () => new Promise((res) => {
   document.head.appendChild(s);
 });
 
+// ── BASE DE LANDMARKS RD (285 puntos) ──────────────────────────────────────────────────
+// Búsqueda O(n) instantánea, 0ms, sin internet
+const RD_LANDMARKS = [
+  { k:"jumbo churchill", lat:18.4698, lng:-69.9337, d:"Jumbo La Churchill, Santo Domingo" },
+  { k:"jumbo independencia", lat:18.462, lng:-69.9451, d:"Jumbo Av. Independencia, Santo Domingo" },
+  { k:"jumbo kennedy", lat:18.4812, lng:-69.9565, d:"Jumbo Av. John F. Kennedy, Santo Domingo" },
+  { k:"jumbo miraflores", lat:18.4803, lng:-69.9421, d:"Jumbo Miraflores, Santo Domingo" },
+  { k:"jumbo duarte", lat:18.4859, lng:-70.0009, d:"Jumbo Av. Duarte, Santo Domingo" },
+  { k:"jumbo 27 de febrero", lat:18.4761, lng:-69.9251, d:"Jumbo Av. 27 de Febrero, Santo Domingo" },
+  { k:"jumbo lope de vega", lat:18.476, lng:-69.927, d:"Jumbo Lope de Vega, Santo Domingo" },
+  { k:"jumbo bávaro", lat:18.6831, lng:-68.4067, d:"Jumbo Bávaro, La Altagracia" },
+  { k:"jumbo santiago", lat:19.4517, lng:-70.697, d:"Jumbo Santiago, Santiago" },
+  { k:"nacional villa mella", lat:18.5612, lng:-69.9769, d:"Supermercado Nacional Villa Mella" },
+  { k:"nacional naco", lat:18.4771, lng:-69.922, d:"Supermercado Nacional Naco" },
+  { k:"nacional los cacaos", lat:18.54, lng:-69.912, d:"Supermercado Nacional Los Cacaos" },
+  { k:"nacional bella vista", lat:18.4571, lng:-69.9371, d:"Supermercado Nacional Bella Vista" },
+  { k:"nacional herrera", lat:18.4822, lng:-70.0412, d:"Supermercado Nacional Herrera" },
+  { k:"bravo piantini", lat:18.4742, lng:-69.9297, d:"Bravo Piantini, Santo Domingo" },
+  { k:"bravo anacaona", lat:18.4601, lng:-69.9552, d:"Bravo Anacaona, Santo Domingo" },
+  { k:"bravo megacentro", lat:18.4598, lng:-69.9032, d:"Bravo Megacentro, Santo Domingo" },
+  { k:"plazas tropicales", lat:18.4655, lng:-69.9289, d:"Plazas Tropicales, Santo Domingo" },
+  { k:"la sirena duarte", lat:18.4831, lng:-69.9946, d:"La Sirena Av. Duarte" },
+  { k:"la sirena 27 febrero", lat:18.474, lng:-69.9272, d:"La Sirena 27 de Febrero" },
+  { k:"la sirena km9", lat:18.5094, lng:-69.9863, d:"La Sirena Km 9" },
+  { k:"la sirena herrera", lat:18.481, lng:-70.038, d:"La Sirena Herrera" },
+  { k:"la sirena mella", lat:18.515, lng:-69.958, d:"La sirena Villa Mella" },
+  { k:"la sirena san isidro", lat:18.5032, lng:-69.8674, d:"La Sirena San Isidro" },
+  { k:"iberia superstore", lat:18.4838, lng:-69.9441, d:"Iberia Superstore, Bella Vista" },
+  { k:"pola bella vista", lat:18.4601, lng:-69.939, d:"Pola Bella Vista" },
+  { k:"pola piantini", lat:18.4742, lng:-69.93, d:"Pola Piantini" },
+  { k:"carol piantini", lat:18.474, lng:-69.9295, d:"Farmacia Carol Piantini" },
+  { k:"carol naco", lat:18.477, lng:-69.9212, d:"Farmacia Carol Naco" },
+  { k:"carol la esperilla", lat:18.4718, lng:-69.9235, d:"Farmacia Carol La Esperilla" },
+  { k:"carol bella vista", lat:18.4601, lng:-69.9371, d:"Farmacia Carol Bella Vista" },
+  { k:"carol lincoln", lat:18.4757, lng:-69.9267, d:"Farmacia Carol Av. Lincoln" },
+  { k:"carol kennedy", lat:18.481, lng:-69.956, d:"Farmacia Carol Kennedy" },
+  { k:"farmacia carol 27 febrero", lat:18.4761, lng:-69.9251, d:"Farmacia Carol 27 de Febrero" },
+  { k:"farmacosto kennedy", lat:18.4812, lng:-69.9561, d:"Farmacosto Kennedy" },
+  { k:"farmacosto herrera", lat:18.4822, lng:-70.0421, d:"Farmacosto Herrera" },
+  { k:"farmacosto villa mella", lat:18.561, lng:-69.9771, d:"Farmacosto Villa Mella" },
+  { k:"farmacosto san carlos", lat:18.476, lng:-69.906, d:"Farmacosto San Carlos" },
+  { k:"farmacosto duarte", lat:18.4862, lng:-70.0009, d:"Farmacosto Av. Duarte" },
+  { k:"farmacosto los mina", lat:18.4942, lng:-69.8632, d:"Farmacosto Los Mina" },
+  { k:"farmacosto gurabo", lat:18.5021, lng:-69.9041, d:"Farmacosto Gurabo" },
+  { k:"banco popular piantini", lat:18.4742, lng:-69.9298, d:"Banco Popular Piantini" },
+  { k:"banco popular kennedy", lat:18.4812, lng:-69.9565, d:"Banco Popular Kennedy" },
+  { k:"banco popular bella vista", lat:18.4601, lng:-69.9371, d:"Banco Popular Bella Vista" },
+  { k:"banco popular duarte", lat:18.4862, lng:-69.9999, d:"Banco Popular Av. Duarte" },
+  { k:"banco popular zona colonial", lat:18.4738, lng:-69.8878, d:"Banco Popular Zona Colonial" },
+  { k:"banco bhd piantini", lat:18.4741, lng:-69.93, d:"Banco BHD Piantini" },
+  { k:"banco bhd kennedy", lat:18.481, lng:-69.9561, d:"Banco BHD Kennedy" },
+  { k:"banco bhd 27 febrero", lat:18.476, lng:-69.9252, d:"Banco BHD 27 de Febrero" },
+  { k:"banreservas piantini", lat:18.4742, lng:-69.9295, d:"Banreservas Piantini" },
+  { k:"banreservas zona colonial", lat:18.474, lng:-69.8879, d:"Banreservas Zona Colonial" },
+  { k:"banreservas kennedy", lat:18.4812, lng:-69.956, d:"Banreservas Kennedy" },
+  { k:"scotiabank churchill", lat:18.4698, lng:-69.9336, d:"Scotiabank La Churchill" },
+  { k:"scotiabank naco", lat:18.4771, lng:-69.921, d:"Scotiabank Naco" },
+  { k:"citibank piantini", lat:18.4742, lng:-69.9298, d:"Citibank Piantini" },
+  { k:"asociacion cibao", lat:18.4762, lng:-69.926, d:"Asociación Cibao de Ahorros" },
+  { k:"acropolis", lat:18.4701, lng:-69.9362, d:"Acropolis Center, Churchill" },
+  { k:"ágora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
+  { k:"agora mall", lat:18.4598, lng:-69.9022, d:"Ágora Mall, Los Cacicazgos" },
+  { k:"megacentro", lat:18.4591, lng:-69.9031, d:"Megacentro, Santo Domingo" },
+  { k:"blue mall", lat:18.47, lng:-69.9333, d:"Blue Mall, Churchill" },
+  { k:"sambil", lat:18.476, lng:-69.9223, d:"Sambil Santo Domingo, Av. Luperón" },
+  { k:"city center bella vista", lat:18.4605, lng:-69.938, d:"City Center Bella Vista" },
+  { k:"plaza central", lat:18.4741, lng:-69.927, d:"Plaza Central, Av. 27 de Febrero" },
+  { k:"galería 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
+  { k:"galerías 360", lat:18.4732, lng:-69.9279, d:"Galería 360, Naco" },
+  { k:"mall san ignacio", lat:18.482, lng:-69.9421, d:"Mall San Ignacio" },
+  { k:"plaza lama duarte", lat:18.4831, lng:-69.9946, d:"Plaza Lama Av. Duarte" },
+  { k:"plaza lama kennedy", lat:18.4812, lng:-69.956, d:"Plaza Lama Kennedy" },
+  { k:"multicentro la sirena", lat:18.4831, lng:-69.994, d:"Multicentro La Sirena" },
+  { k:"almacenes tropigas", lat:18.476, lng:-69.926, d:"Almacenes Tropigas" },
+  { k:"plaza la trinitaria", lat:18.5151, lng:-69.959, d:"Plaza La Trinitaria" },
+  { k:"centro olimpico", lat:18.4715, lng:-69.948, d:"Centro Olímpico Juan Pablo Duarte" },
+  { k:"malecón center", lat:18.4646, lng:-69.8982, d:"Malecón Center, Santo Domingo" },
+  { k:"renaissance mall", lat:18.4701, lng:-69.9361, d:"Renaissance Mall, Churchill" },
+  { k:"esso piantini", lat:18.4741, lng:-69.9298, d:"Estación Esso Piantini" },
+  { k:"shell kennedy", lat:18.481, lng:-69.956, d:"Shell Kennedy" },
+  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
+  { k:"hospital dr. darío contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
+  { k:"dario contreras", lat:18.486, lng:-69.952, d:"Hospital Dr. Darío Contreras" },
+  { k:"plaza de la salud", lat:18.4611, lng:-69.943, d:"Plaza de la Salud" },
+  { k:"clínica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
+  { k:"clinica abreu", lat:18.4742, lng:-69.9286, d:"Clínica Abreu, Av. Independencia" },
+  { k:"hospital universitario madre y maestra", lat:19.459, lng:-70.6878, d:"HUMM Santiago" },
+  { k:"humm", lat:19.459, lng:-70.6878, d:"Hospital Universitario Madre y Maestra" },
+  { k:"hospital general dr. vinicio calventi", lat:18.515, lng:-69.956, d:"Hospital General Calventi" },
+  { k:"hospital louis e. aybar", lat:18.476, lng:-69.899, d:"Hospital Louis E. Aybar" },
+  { k:"clínica corominas", lat:18.5151, lng:-69.958, d:"Clínica Corominas" },
+  { k:"clínica unión médica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
+  { k:"union medica", lat:18.474, lng:-69.929, d:"Clínica Unión Médica" },
+  { k:"hospital central de las fuerzas armadas", lat:18.464, lng:-69.915, d:"Hospital Central FFAA" },
+  { k:"homs", lat:18.464, lng:-69.915, d:"Hospital HOMS" },
+  { k:"hospital infantil robert reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
+  { k:"reid cabral", lat:18.4701, lng:-69.944, d:"Hospital Robert Reid Cabral" },
+  { k:"hospital hugo mendez", lat:18.564, lng:-69.979, d:"Hospital Hugo Mendez Villa Mella" },
+  { k:"clínica colon", lat:18.4841, lng:-70.0012, d:"Clínica Colón" },
+  { k:"uasd", lat:18.468, lng:-69.903, d:"Universidad Autónoma de Santo Domingo" },
+  { k:"universidad autónoma", lat:18.468, lng:-69.903, d:"UASD, Ciudad Universitaria" },
+  { k:"pucmm santo domingo", lat:18.4741, lng:-69.9276, d:"PUCMM Santo Domingo" },
+  { k:"pucmm santiago", lat:19.4501, lng:-70.6921, d:"PUCMM Santiago" },
+  { k:"intec", lat:18.4722, lng:-69.904, d:"Instituto Tecnológico de Santo Domingo" },
+  { k:"unibe", lat:18.4762, lng:-69.9261, d:"UNIBE, Santo Domingo" },
+  { k:"unapec", lat:18.4762, lng:-69.9261, d:"UNAPEC, Av. Máximo Gómez" },
+  { k:"o&m", lat:18.4811, lng:-69.9562, d:"Universidad O&M" },
+  { k:"utesa", lat:19.4562, lng:-70.6891, d:"UTESA Santiago" },
+  { k:"ufhec", lat:18.4772, lng:-69.9271, d:"UFHEC, Santo Domingo" },
+  { k:"unicaribe", lat:18.481, lng:-69.955, d:"UNICARIBE" },
+  { k:"uord", lat:18.5155, lng:-69.9551, d:"UORD, Villa Mella" },
+  { k:"catedral primada", lat:18.474, lng:-69.8878, d:"Catedral Primada de América, Zona Colonial" },
+  { k:"catedral de santiago", lat:19.4512, lng:-70.6971, d:"Catedral Santiago de los Caballeros" },
+  { k:"iglesia san carlos", lat:18.476, lng:-69.906, d:"Iglesia San Carlos" },
+  { k:"iglesia la altagracia naco", lat:18.4771, lng:-69.921, d:"Iglesia La Altagracia Naco" },
+  { k:"templo adventista herrera", lat:18.482, lng:-70.041, d:"Templo Adventista Herrera" },
+  { k:"iglesia los girasoles", lat:18.562, lng:-70.004, d:"Iglesia Los Girasoles" },
+  { k:"santo cristo de los milagros", lat:18.538, lng:-69.897, d:"Santo Cristo de los Milagros, Los Mameyes" },
+  { k:"texaco kennedy", lat:18.4812, lng:-69.9562, d:"Texaco Kennedy" },
+  { k:"esso kennedy", lat:18.4812, lng:-69.9563, d:"Esso Kennedy" },
+  { k:"shell 27 febrero", lat:18.4761, lng:-69.9253, d:"Shell 27 de Febrero" },
+  { k:"texaco 27 febrero", lat:18.4762, lng:-69.9252, d:"Texaco 27 de Febrero" },
+  { k:"esso independencia", lat:18.462, lng:-69.945, d:"Esso Av. Independencia" },
+  { k:"texaco independencia", lat:18.4619, lng:-69.9451, d:"Texaco Av. Independencia" },
+  { k:"shell luperon", lat:18.476, lng:-69.9221, d:"Shell Av. Luperón" },
+  { k:"esso duarte", lat:18.4862, lng:-70.0005, d:"Esso Av. Duarte" },
+  { k:"texaco herrera", lat:18.482, lng:-70.042, d:"Texaco Herrera" },
+  { k:"shell villa mella", lat:18.5611, lng:-69.9772, d:"Shell Villa Mella" },
+  { k:"texaco san isidro", lat:18.503, lng:-69.8672, d:"Texaco San Isidro" },
+  { k:"renaissance jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
+  { k:"jaragua", lat:18.4641, lng:-69.9018, d:"Hotel Renaissance Jaragua" },
+  { k:"intercontinental", lat:18.4748, lng:-69.9287, d:"Hotel Intercontinental V Centenario" },
+  { k:"v centenario", lat:18.4748, lng:-69.9287, d:"Hotel V Centenario" },
+  { k:"hilton santo domingo", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
+  { k:"hotel hilton", lat:18.4648, lng:-69.8984, d:"Hilton Santo Domingo" },
+  { k:"iberostar colonial", lat:18.474, lng:-69.8878, d:"Iberostar Colonial" },
+  { k:"hotel europa", lat:18.4742, lng:-69.8879, d:"Hotel Europa, Zona Colonial" },
+  { k:"hotel nicolás de ovando", lat:18.4741, lng:-69.888, d:"Hotel Nicolás de Ovando, Zona Colonial" },
+  { k:"holiday inn", lat:18.4762, lng:-69.9261, d:"Holiday Inn Express Santo Domingo" },
+  { k:"parque colon", lat:18.4741, lng:-69.8879, d:"Parque Colón, Zona Colonial" },
+  { k:"parque independencia", lat:18.472, lng:-69.8999, d:"Parque de la Independencia" },
+  { k:"el conde", lat:18.474, lng:-69.8879, d:"El Conde, Zona Colonial" },
+  { k:"zona colonial", lat:18.4741, lng:-69.8879, d:"Zona Colonial, Santo Domingo" },
+  { k:"malecon", lat:18.464, lng:-69.9001, d:"Malecón, Av. George Washington" },
+  { k:"george washington", lat:18.464, lng:-69.9, d:"Av. George Washington, Malecón" },
+  { k:"parque mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
+  { k:"mirador sur", lat:18.457, lng:-69.955, d:"Parque Mirador Sur" },
+  { k:"parque mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
+  { k:"mirador norte", lat:18.5052, lng:-69.9771, d:"Parque Mirador Norte" },
+  { k:"parque independencia", lat:18.472, lng:-69.9001, d:"Parque de la Independencia" },
+  { k:"plaza de la cultura", lat:18.4722, lng:-69.9068, d:"Plaza de la Cultura" },
+  { k:"faro a colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
+  { k:"faro colon", lat:18.474, lng:-69.875, d:"Faro a Colón" },
+  { k:"av winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"av. winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"avenida winston churchill", lat:18.4698, lng:-69.9337, d:"Av. Winston Churchill" },
+  { k:"av 27 febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"av. 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"avenida 27 de febrero", lat:18.4761, lng:-69.9251, d:"Av. 27 de Febrero" },
+  { k:"av kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"av. john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"avenida john f kennedy", lat:18.4812, lng:-69.9562, d:"Av. John F. Kennedy" },
+  { k:"av independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
+  { k:"av. independencia", lat:18.462, lng:-69.9451, d:"Av. Independencia" },
+  { k:"av duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
+  { k:"av. duarte", lat:18.4862, lng:-70.0005, d:"Av. Duarte" },
+  { k:"av luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
+  { k:"av. luperon", lat:18.476, lng:-69.9221, d:"Av. Luperón" },
+  { k:"av máximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
+  { k:"av. maximo gomez", lat:18.4762, lng:-69.9261, d:"Av. Máximo Gómez" },
+  { k:"av bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
+  { k:"av. bolivar", lat:18.47, lng:-69.918, d:"Av. Bolívar" },
+  { k:"av tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
+  { k:"av. tiradentes", lat:18.478, lng:-69.92, d:"Av. Tiradentes" },
+  { k:"av ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
+  { k:"av. ortega y gasset", lat:18.4762, lng:-69.9261, d:"Av. Ortega y Gasset" },
+  { k:"av republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
+  { k:"av. republica de colombia", lat:18.515, lng:-70.011, d:"Av. República de Colombia" },
+  { k:"av gregorio luperon", lat:18.4762, lng:-69.9221, d:"Av. Gregorio Luperón" },
+  { k:"autopista duarte", lat:19.1521, lng:-70.3421, d:"Autopista Duarte (punto medio)" },
+  { k:"autopista 30 de mayo", lat:18.5101, lng:-69.9401, d:"Autopista 30 de Mayo" },
+  { k:"autopista las americas", lat:18.496, lng:-69.85, d:"Autopista Las Américas" },
+  { k:"piantini", lat:18.4741, lng:-69.9298, d:"Piantini, Santo Domingo" },
+  { k:"naco", lat:18.4771, lng:-69.921, d:"Naco, Santo Domingo" },
+  { k:"evaristo morales", lat:18.478, lng:-69.9192, d:"Evaristo Morales, Santo Domingo" },
+  { k:"bella vista", lat:18.4601, lng:-69.9371, d:"Bella Vista, Santo Domingo" },
+  { k:"serralles", lat:18.465, lng:-69.9351, d:"Serrallés, Santo Domingo" },
+  { k:"gazcue", lat:18.47, lng:-69.91, d:"Gazcue, Santo Domingo" },
+  { k:"los prados", lat:18.501, lng:-69.9751, d:"Los Prados, Santo Domingo Norte" },
+  { k:"los girasoles", lat:18.562, lng:-70.0041, d:"Los Girasoles, Santo Domingo Norte" },
+  { k:"la zurza", lat:18.4911, lng:-69.9312, d:"La Zurza, Santo Domingo" },
+  { k:"villa consuelo", lat:18.4901, lng:-69.912, d:"Villa Consuelo, Santo Domingo" },
+  { k:"ciudad nueva", lat:18.475, lng:-69.8991, d:"Ciudad Nueva, Santo Domingo" },
+  { k:"san carlos", lat:18.4761, lng:-69.906, d:"San Carlos, Santo Domingo" },
+  { k:"la fe", lat:18.501, lng:-69.9481, d:"La Fe, Santo Domingo Norte" },
+  { k:"la victoria", lat:18.525, lng:-69.949, d:"La Victoria, Santo Domingo Norte" },
+  { k:"villa mella", lat:18.5611, lng:-69.9771, d:"Villa Mella, Santo Domingo Norte" },
+  { k:"sabana perdida", lat:18.578, lng:-69.9421, d:"Sabana Perdida, Santo Domingo Norte" },
+  { k:"guaricanos", lat:18.59, lng:-70.004, d:"Guaricanos, Santo Domingo Norte" },
+  { k:"los alcarrizos", lat:18.52, lng:-70.056, d:"Los Alcarrizos" },
+  { k:"herrera", lat:18.4822, lng:-70.0412, d:"Herrera, Santo Domingo Oeste" },
+  { k:"manoguayabo", lat:18.5101, lng:-70.0821, d:"Manoguayabo" },
+  { k:"cipae", lat:18.53, lng:-70.021, d:"CIPAE, Santo Domingo Oeste" },
+  { k:"los mina", lat:18.4941, lng:-69.8632, d:"Los Mina, Santo Domingo Este" },
+  { k:"san isidro", lat:18.503, lng:-69.8672, d:"San Isidro, Santo Domingo Este" },
+  { k:"sabana larga", lat:18.518, lng:-69.8311, d:"Sabana Larga" },
+  { k:"boca chica", lat:18.4571, lng:-69.6012, d:"Boca Chica" },
+  { k:"cacicazgos", lat:18.4601, lng:-69.9021, d:"Los Cacicazgos, Santo Domingo" },
+  { k:"la esperilla", lat:18.4718, lng:-69.9235, d:"La Esperilla, Piantini" },
+  { k:"los rios", lat:18.5012, lng:-69.9251, d:"Los Ríos, Santo Domingo" },
+  { k:"brisas del este", lat:18.504, lng:-69.8421, d:"Brisas del Este" },
+  { k:"alma rosa", lat:18.5122, lng:-69.851, d:"Alma Rosa" },
+  { k:"cancino", lat:18.529, lng:-69.872, d:"Cancino, Santo Domingo Este" },
+  { k:"sabana abajo", lat:19.3921, lng:-70.7281, d:"Sabana Abajo, Santiago" },
+  { k:"ensanche isabelita", lat:18.484, lng:-69.957, d:"Ensanche Isabelita" },
+  { k:"ensanche naco", lat:18.4771, lng:-69.921, d:"Ensanche Naco" },
+  { k:"ensanche luperon", lat:18.4762, lng:-69.9221, d:"Ensanche Luperón" },
+  { k:"ensanche paraiso", lat:18.464, lng:-69.927, d:"Ensanche Paraíso" },
+  { k:"ensanche la fe", lat:18.501, lng:-69.9481, d:"Ensanche La Fe" },
+  { k:"arroyo hondo", lat:18.52, lng:-70.01, d:"Arroyo Hondo, Santo Domingo" },
+  { k:"los jardines", lat:18.5141, lng:-70.0012, d:"Los Jardines, Santo Domingo Norte" },
+  { k:"colinas del norte", lat:18.5851, lng:-70.0121, d:"Colinas del Norte" },
+  { k:"palma real", lat:18.5551, lng:-69.9781, d:"Palma Real, Santo Domingo Norte" },
+  { k:"los frailes", lat:18.5701, lng:-69.9801, d:"Los Frailes" },
+  { k:"las américas", lat:18.496, lng:-69.85, d:"Las Américas" },
+  { k:"simon bolivar", lat:18.47, lng:-69.9182, d:"Sector Simón Bolívar" },
+  { k:"urbanizacion fernandez", lat:18.4771, lng:-69.9253, d:"Urbanización Fernández" },
+  { k:"residencial loma linda", lat:18.478, lng:-69.932, d:"Residencial Loma Linda" },
+  { k:"residencial tropical", lat:18.51, lng:-70.002, d:"Residencial Tropical" },
+  { k:"residencial los robles", lat:18.476, lng:-70.004, d:"Residencial Los Robles" },
+  { k:"monumento santiago", lat:19.4512, lng:-70.6971, d:"Monumento a los Héroes, Santiago" },
+  { k:"liceo secundario", lat:19.451, lng:-70.697, d:"Liceo Secundario, Santiago" },
+  { k:"av. 27 de febrero santiago", lat:19.4521, lng:-70.69, d:"Av. 27 de Febrero, Santiago" },
+  { k:"estadio cibao", lat:19.4581, lng:-70.6921, d:"Estadio Cibao, Santiago" },
+  { k:"supermercado pola santiago", lat:19.451, lng:-70.6962, d:"Supermercado Pola Santiago" },
+  { k:"bravo santiago", lat:19.4501, lng:-70.6981, d:"Bravo Santiago" },
+  { k:"la vega", lat:19.221, lng:-70.529, d:"La Vega" },
+  { k:"moca", lat:19.391, lng:-70.521, d:"Moca" },
+  { k:"bonao", lat:18.9411, lng:-70.4071, d:"Bonao" },
+  { k:"san francisco de macoris", lat:19.3, lng:-70.251, d:"San Francisco de Macorís" },
+  { k:"la romana", lat:18.4271, lng:-68.972, d:"La Romana" },
+  { k:"san pedro de macoris", lat:18.454, lng:-69.302, d:"San Pedro de Macorís" },
+  { k:"higuey", lat:18.616, lng:-68.707, d:"Higüey" },
+  { k:"punta cana aeropuerto", lat:18.567, lng:-68.363, d:"Aeropuerto Internacional Punta Cana" },
+  { k:"aeropuerto las americas", lat:18.429, lng:-69.6681, d:"Aeropuerto Internacional Las Américas" },
+  { k:"aeropuerto cibao", lat:19.406, lng:-70.6047, d:"Aeropuerto Internacional Cibao" },
+  { k:"puerto sans souci", lat:18.4741, lng:-69.87, d:"Puerto Sans-Souci, Santo Domingo" },
+  { k:"puerto de haina", lat:18.422, lng:-70.0221, d:"Puerto de Haina" },
+  { k:"haina", lat:18.422, lng:-70.0221, d:"Haina" },
+  { k:"san cristobal", lat:18.4171, lng:-70.1071, d:"San Cristóbal" },
+  { k:"azua", lat:18.454, lng:-70.735, d:"Azua" },
+  { k:"barahona", lat:18.2071, lng:-71.1021, d:"Barahona" },
+  { k:"puerto plata", lat:19.794, lng:-70.688, d:"Puerto Plata" },
+  { k:"palacio nacional", lat:18.4741, lng:-69.9, d:"Palacio Nacional, Santo Domingo" },
+  { k:"palacio de justicia", lat:18.4702, lng:-69.9321, d:"Palacio de Justicia, Ciudad Nueva" },
+  { k:"junta central electoral", lat:18.4742, lng:-69.9271, d:"Junta Central Electoral" },
+  { k:"policia nacional", lat:18.4721, lng:-69.898, d:"Policía Nacional, Oz. de Santa Bárbara" },
+  { k:"dgii hq", lat:18.4762, lng:-69.921, d:"Dirección General de Impuestos Internos" },
+  { k:"dgii", lat:18.4762, lng:-69.921, d:"DGII, Santo Domingo" },
+  { k:"digesett", lat:18.476, lng:-69.9, d:"DIGESETT" },
+  { k:"casas reales", lat:18.4741, lng:-69.888, d:"Casas Reales, Zona Colonial" },
+  { k:"alcazar de colon", lat:18.4741, lng:-69.8881, d:"Alcázar de Colón" },
+  { k:"estadio olimpico felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
+  { k:"estadio felix sanchez", lat:18.4812, lng:-69.9021, d:"Estadio Olímpico Félix Sánchez" },
+  { k:"estadio quisqueya", lat:18.4812, lng:-69.9021, d:"Estadio Quisqueya" },
+  { k:"aeropuerto herrera", lat:18.492, lng:-70.004, d:"Aeropuerto Herrera" },
+  { k:"cementerio cristo redentor", lat:18.477, lng:-69.9001, d:"Cementerio Cristo Redentor" },
+  { k:"jardin botanico", lat:18.499, lng:-69.9881, d:"Jardín Botánico Nacional" },
+  { k:"zoo nacional", lat:18.4892, lng:-69.9721, d:"Zoo Nacional" },
+  { k:"colegio dominicano de robotica", lat:18.476, lng:-69.925, d:"Colegio Dominicano de Robótica" },
+  { k:"saint george school", lat:18.4751, lng:-69.9281, d:"Saint George School" },
+  { k:"carlos olivares", lat:18.477, lng:-69.921, d:"Colegio Carlos Olivares" },
+  { k:"loyola", lat:18.477, lng:-69.923, d:"Centro Loyola" },
+  { k:"mundo feliz", lat:18.4762, lng:-69.9261, d:"Colegio Mundo Feliz" },
+  { k:"colegio adventista", lat:18.481, lng:-69.9561, d:"Colegio Adventista" },
+  { k:"nueva senda", lat:18.515, lng:-70.0, d:"Colegio Nueva Senda" },
+  { k:"colegio peter pan", lat:18.476, lng:-69.927, d:"Colegio Peter Pan" },
+  { k:"la salle", lat:18.477, lng:-69.9225, d:"Colegio La Salle" },
+  { k:"san judas tadeo", lat:18.48, lng:-69.958, d:"Colegio San Judas Tadeo" },
+  { k:"torre empresarial", lat:18.4762, lng:-69.9261, d:"Torre Empresarial, Av. Tiradentes" },
+  { k:"world trade center", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
+  { k:"wtc santo domingo", lat:18.4762, lng:-69.9261, d:"World Trade Center Santo Domingo" },
+  { k:"torre los prados", lat:18.501, lng:-69.9751, d:"Torre Los Prados" },
+  { k:"centro de los heroes", lat:18.4701, lng:-69.9361, d:"Centro de los Héroes" },
+  { k:"correos nacionales", lat:18.4741, lng:-69.888, d:"Correos Nacionales, Zona Colonial" },
+  { k:"palacio bellas artes", lat:18.4722, lng:-69.9068, d:"Palacio de Bellas Artes" },
+  { k:"teatro nacional", lat:18.4722, lng:-69.9068, d:"Teatro Nacional Eduardo Brito" },
+  { k:"palacio de los deportes", lat:18.4812, lng:-69.9021, d:"Palacio de los Deportes" },
+];
+
+// Normaliza texto para búsqueda fuzzy
+const normLandmark = (s) =>
+  (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // quitar tildes
+    .replace(/[^a-z0-9\s]/g, " ")                        // solo alfanumerico
+    .replace(/\s+/g, " ").trim();
+
+// Lookup instantáneo en la base de landmarks
+// Retorna { ok, lat, lng, display, confidence } o null si no hay match
+const lookupLandmark = (raw) => {
+  const q = normLandmark(raw);
+  if (!q || q.length < 4) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const lm of RD_LANDMARKS) {
+    const k = normLandmark(lm.k);
+    // Exact match
+    if (q === k || q.includes(k) || k.includes(q)) {
+      const score = k.length; // longer key = more specific = better
+      if (score > bestScore) { bestScore = score; best = lm; }
+      continue;
+    }
+    // Word overlap score
+    const qWords = q.split(" ");
+    const kWords = k.split(" ");
+    const common = qWords.filter(w => w.length > 2 && kWords.includes(w));
+    if (common.length >= 2 || (common.length === 1 && kWords.length <= 2)) {
+      const score = common.length * 10 + k.length;
+      if (score > bestScore) { bestScore = score; best = lm; }
+    }
+  }
+
+  if (!best) return null;
+  return {
+    ok: true, lat: best.lat, lng: best.lng,
+    display: best.d,
+    confidence: 97,
+    types: ["landmark"],
+    allResults: [],
+    source: "landmark_db",
+  };
+};
+
+
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
 // --- GEOCODER (Google Maps Geocoding API) -------------------------------------
 const geocodeWithGoogle = async (rawAddress) => {
+  // ── FASE 1: Lookup instantáneo en base de landmarks RD ──────────────────
+  // 0ms, sin internet, sin cuota de Google. Confianza 97.
+  const lmHit = lookupLandmark(rawAddress);
+  if (lmHit) return lmHit;
+
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
   const queries = buildQueryVariants(rawAddress);
@@ -5901,7 +6243,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\d{1,4}/g);
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
@@ -6588,6 +6930,7 @@ const CircuitEngine = () => {
               stop.confidence = r.confidence; stop.allResults = r.allResults;
               stop.status = r.confidence >= 70 ? "ok" : "warning";
               stop.issue  = r.confidence < 70 ? "Confianza baja - verifica" : null;
+              if (r.source === "landmark_db") stop.source = "landmark_db";
             } else {
               stop.status = "error"; stop.issue = "No encontrada";
             }
