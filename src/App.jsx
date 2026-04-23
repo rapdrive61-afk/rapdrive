@@ -2257,9 +2257,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [driverNotif, setDriverNotif] = useState(null); // banner notificación de ruta asignada
   // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
   const [pendingRoutes, setPendingRoutes] = useState(() => {
-    const fromWin = (window.__rdPendingRoutes||{})[myKey];
-    const fromLS  = LS.getPending(myKey);
-    return fromWin || fromLS || [];
+    // Cola persistente: cargar todas las rutas pero solo mostrar las "pending"
+    const fullQueue = (window.__rdPendingRoutes||{})[myKey] || LS.getPending(myKey) || [];
+    return fullQueue.filter(r => !r.queueStatus || r.queueStatus === "pending");
   });
   // Historial de rutas completadas (guardado localmente)
   const [routeHistory, setRouteHistory] = useState(() => {
@@ -2472,9 +2472,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         arr = Object.values(queue);
       }
       if (!Array.isArray(arr)) return;
-      setPendingRoutes([...arr]);
+      // Cola persistente: nunca se borra de Firebase.
+      // Solo mostramos las que tienen queueStatus "pending" (o sin estado = legacy).
+      const visible = arr.filter(r => !r.queueStatus || r.queueStatus === "pending");
+      setPendingRoutes(visible);
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = arr;
+      window.__rdPendingRoutes[myKey] = arr; // guardamos array COMPLETO en memoria
     };
 
     // 1) Leer desde Firebase al montar (para rutas nuevas del admin)
@@ -2753,7 +2756,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     ]).finally(() => {
       writingRef.current = false;
     });
-    // Check if route is now fully complete → save to history
+    // Check if route is now fully complete → save to history + marcar en cola como completada
     const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
     if (allDone) {
       const histEntry = {
@@ -2762,10 +2765,26 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         histId: `H-${Date.now()}`,
       };
       setRouteHistory(prev => {
-        const next = [histEntry, ...prev].slice(0, 50); // keep last 50
-        try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e){}
+        const next = [histEntry, ...prev].slice(0, 50);
         return next;
       });
+      // Cola persistente: marcar la ruta activa como "completed" en Firebase
+      // sin borrarla, para conservar el historial completo de la cola.
+      const fullQueue = window.__rdPendingRoutes?.[myKey] || [];
+      if (fullQueue.length > 0) {
+        const completedAt = new Date().toISOString();
+        const updatedFullQueue = fullQueue.map(r => {
+          if (r.queueStatus === "active" && (
+            updated.routeId ? r.routeId === updated.routeId : r.sentAt === updated.sentAt
+          )) {
+            return { ...r, queueStatus: "completed", completedAt };
+          }
+          return r;
+        });
+        if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
+        window.__rdPendingRoutes[myKey] = updatedFullQueue;
+        LS.setPending(myKey, updatedFullQueue); // persiste en Firebase sin borrar
+      }
     }
   };
 
@@ -2890,8 +2909,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#1e2d3d transparent}
         *::-webkit-scrollbar{width:2px}*::-webkit-scrollbar-thumb{background:#1e2d3d;border-radius:2px}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes segActive{0%,100%{opacity:1;box-shadow:0 0 8px rgba(59,130,246,0.7)}50%{opacity:0.5;box-shadow:0 0 3px rgba(59,130,246,0.3)}}
-        @keyframes scannerLine{0%{background-position:-40% 0}100%{background-position:140% 0}}
         @keyframes slideInRow{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -3299,232 +3316,43 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             </div>
           </div>
 
-          {/* ── ROUTE HERO — barra segmentada + stats ── */}
-          {myRoute && (() => {
-            const total     = stops.length;
-            const doneCnt   = delivered.length;
-            const probCnt   = problems.length;
-            const pendCnt   = pending.length;
-            // Parada actual = primer stop que no está done ni problema
-            const curStop   = stops.find(s => s.driverStatus !== "delivered" && s.driverStatus !== "problema");
-            const curIdx    = curStop ? stops.indexOf(curStop) : -1;
-
-            return (
-              <div style={{ padding:"10px 14px 0", flexShrink:0 }}>
-
-                {/* ── Card hero ── */}
-                <div style={{
-                  background:"linear-gradient(135deg,rgba(12,28,56,0.95),rgba(8,18,36,0.98))",
-                  border:"1px solid rgba(59,130,246,0.18)",
-                  borderRadius:18,
-                  padding:"14px 15px 13px",
-                  backdropFilter:"blur(14px)",
-                  WebkitBackdropFilter:"blur(14px)",
-                  boxShadow:"0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
-                  position:"relative",
-                  overflow:"hidden",
-                }}>
-
-                  {/* Glow top-right decorativo */}
-                  <div style={{ position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.1) 0%,transparent 70%)",pointerEvents:"none" }}/>
-
-                  {/* ── Fila superior: nombre ruta + ETA ── */}
-                  <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:11 }}>
-                    <div style={{ flex:1,minWidth:0 }}>
-                      {/* Label */}
-                      <div style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.55)",letterSpacing:"2px",textTransform:"uppercase",marginBottom:4 }}>
-                        RUTA ACTIVA
-                      </div>
-                      {/* Nombre */}
-                      <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5 }}>
-                        {myRoute.routeName || "Ruta del día"}
-                      </div>
-                      {/* Meta chips */}
-                      <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
-                        {estFinish() && (
-                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            {estFinish()}
-                          </span>
-                        )}
-                        {routeKm > 0 && (
-                          <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                            {routeKm} km
-                          </span>
-                        )}
-                        <span style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Mono',monospace" }}>
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                          {total} paradas
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Porcentaje estilo HUD */}
-                    <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",flexShrink:0,marginLeft:12 }}>
-                      <div style={{ display:"flex",alignItems:"baseline",gap:1 }}>
-                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:28,fontWeight:600,color:"#60a5fa",lineHeight:1,letterSpacing:"-2px" }}>
-                          {pct}
-                        </span>
-                        <span style={{ fontFamily:"'DM Mono',monospace",fontSize:12,color:"rgba(59,130,246,0.45)" }}>%</span>
-                      </div>
-                      <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(255,255,255,0.2)",letterSpacing:"1px",textTransform:"uppercase",marginTop:1 }}>
-                        completado
+          {/* ── Route name block ── */}
+          {myRoute && (
+            <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
+              <div style={{ background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"13px 15px",backdropFilter:"blur(10px)" }}>
+                <div style={{ display:"flex",alignItems:"center",gap:11,marginBottom:9 }}>
+                  <div style={{ width:42,height:42,borderRadius:13,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 20px rgba(59,130,246,0.15)" }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                      <circle cx="5" cy="18" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
+                      <circle cx="19" cy="6" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
+                      <path d="M7.5 18h6a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h4.5" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15 }}>{myRoute.routeName||"Ruta del día"}</div>
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:3,flexWrap:"wrap" }}>
+                      {estFinish()&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Finaliza {estFinish()}
+                      </span>}
+                      {routeKm>0&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        {routeKm} km
+                      </span>}
+                      <span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
+                        {stops.filter(s=>s.stopNum).length} paradas
                       </span>
                     </div>
                   </div>
-
-                  {/* ── BARRA SEGMENTADA ── */}
-                  <div style={{ marginBottom:11 }}>
-                    {/* Segmentos — uno por parada */}
-                    <div style={{ display:"flex",gap:2,marginBottom:4,height:5 }}>
-                      {stops.map((s, idx) => {
-                        const isDone = s.driverStatus === "delivered";
-                        const isProb = s.driverStatus === "problema";
-                        const isAct  = idx === curIdx;
-                        return (
-                          <div key={s.id || idx} style={{
-                            flex:1,
-                            borderRadius:2,
-                            background: isDone ? "#10b981"
-                                      : isProb ? "#ef4444"
-                                      : isAct  ? "#3b82f6"
-                                      : "rgba(255,255,255,0.07)",
-                            boxShadow: isDone ? "0 0 5px rgba(16,185,129,0.35)"
-                                     : isProb ? "0 0 5px rgba(239,68,68,0.35)"
-                                     : isAct  ? "0 0 8px rgba(59,130,246,0.7)"
-                                     : "none",
-                            transition:"background .4s, box-shadow .4s",
-                            animation: isAct ? "segActive 1.8s ease-in-out infinite" : "none",
-                          }}/>
-                        );
-                      })}
-                    </div>
-                    {/* Sub-línea scanner */}
-                    <div style={{ position:"relative",height:2,background:"rgba(255,255,255,0.03)",borderRadius:2,overflow:"hidden" }}>
-                      <div style={{ position:"absolute",top:0,left:0,right:0,bottom:0,background:"linear-gradient(90deg,transparent 0%,rgba(59,130,246,0.5) 50%,transparent 100%)",backgroundSize:"40% 100%",animation:"scannerLine 2s linear infinite" }}/>
-                    </div>
-                  </div>
-
-                  {/* ── STATS ROW — 4 números en tiempo real ── */}
-                  <div style={{ display:"flex",gap:0 }}>
-                    {[
-                      { val:doneCnt,  label:"Entregados", color:"#10b981", dimColor:"rgba(16,185,129,0.12)",  borderColor:"rgba(16,185,129,0.2)"  },
-                      { val:pendCnt,  label:"Pendientes", color:"#3b82f6", dimColor:"rgba(59,130,246,0.12)",  borderColor:"rgba(59,130,246,0.2)"  },
-                      { val:probCnt,  label:"Problemas",  color:"#ef4444", dimColor:"rgba(239,68,68,0.12)",   borderColor:"rgba(239,68,68,0.2)"   },
-                      { val:routeKm,  label:"KM Total",   color:"#94a3b8", dimColor:"rgba(148,163,184,0.08)", borderColor:"rgba(148,163,184,0.12)" },
-                    ].map((st, i, arr) => (
-                      <div key={st.label} style={{
-                        flex:1,
-                        textAlign:"center",
-                        padding:"8px 4px",
-                        borderRadius:10,
-                        background: st.val > 0 ? st.dimColor : "transparent",
-                        border:`1px solid ${st.val > 0 ? st.borderColor : "transparent"}`,
-                        marginRight: i < arr.length - 1 ? 6 : 0,
-                        transition:"all .3s",
-                      }}>
-                        <div style={{
-                          fontFamily:"'DM Mono',monospace",
-                          fontSize: st.val > 99 ? 18 : 22,
-                          fontWeight:600,
-                          color: st.val > 0 ? st.color : "rgba(255,255,255,0.15)",
-                          lineHeight:1,
-                          marginBottom:3,
-                          letterSpacing:"-1px",
-                          transition:"color .3s",
-                        }}>
-                          {st.val || 0}
-                        </div>
-                        <div style={{
-                          fontFamily:"'DM Mono',monospace",
-                          fontSize:7,
-                          fontWeight:600,
-                          color:"rgba(255,255,255,0.22)",
-                          letterSpacing:"0.8px",
-                          textTransform:"uppercase",
-                        }}>
-                          {st.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ── PARADA ACTUAL — card dentro del hero ── */}
-                  {curStop && (
-                    <div style={{
-                      marginTop:11,
-                      padding:"11px 12px",
-                      borderRadius:12,
-                      background:"rgba(59,130,246,0.07)",
-                      border:"1px solid rgba(59,130,246,0.2)",
-                      borderLeft:"3px solid #3b82f6",
-                      position:"relative",
-                    }}>
-                      {/* Label */}
-                      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
-                        <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                          <div style={{ width:20,height:20,borderRadius:7,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(59,130,246,0.4)" }}>
-                            <span style={{ fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:800,color:"white",lineHeight:1 }}>{curStop.stopNum||"?"}</span>
-                          </div>
-                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,fontWeight:600,color:"rgba(59,130,246,0.7)",letterSpacing:"1.5px",textTransform:"uppercase" }}>
-                            PARADA ACTUAL
-                          </span>
-                        </div>
-                        {/* Pulsito vivo */}
-                        <div style={{ display:"flex",alignItems:"center",gap:4 }}>
-                          <div style={{ width:5,height:5,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 6px rgba(59,130,246,0.8)",animation:"pulse 1.6s infinite" }}/>
-                          <span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(59,130,246,0.6)",letterSpacing:"0.5px" }}>EN CAMINO</span>
-                        </div>
-                      </div>
-
-                      {/* Cliente + dirección */}
-                      <div style={{ fontSize:14,fontWeight:700,color:"#f8fafc",letterSpacing:"-0.2px",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                        {curStop.client || `Parada ${curStop.stopNum}`}
-                      </div>
-                      <div style={{ fontSize:11,color:"rgba(255,255,255,0.32)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:11 }}>
-                        {curStop.displayAddr || curStop.rawAddr || "Sin dirección"}
-                      </div>
-
-                      {/* Botones de acción directa */}
-                      <div style={{ display:"flex",gap:7 }}>
-                        {/* Waze */}
-                        <a href={`https://waze.com/ul?ll=${curStop.lat},${curStop.lng}&navigate=yes`}
-                           target="_blank" rel="noreferrer"
-                           onClick={e=>e.stopPropagation()}
-                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"linear-gradient(135deg,#1a3360,#1d4ed8)",color:"white",fontSize:11,fontWeight:700,textDecoration:"none",boxShadow:"0 3px 12px rgba(29,78,216,0.35)" }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-                          Waze
-                        </a>
-                        {/* Google Maps */}
-                        <a href={`https://maps.google.com/?q=${curStop.lat},${curStop.lng}`}
-                           target="_blank" rel="noreferrer"
-                           onClick={e=>e.stopPropagation()}
-                           style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"9px 4px",borderRadius:10,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",fontSize:11,fontWeight:700,textDecoration:"none" }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          Maps
-                        </a>
-                        {/* Entregado */}
-                        <button
-                          onClick={e=>{e.stopPropagation();markDelivered(curStop.id);}}
-                          style={{ flex:1.4,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px 4px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",boxShadow:"0 3px 14px rgba(16,185,129,0.38)" }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
-                          Entregado
-                        </button>
-                        {/* Problema */}
-                        <button
-                          onClick={e=>{e.stopPropagation();setShowProb(curStop.id);}}
-                          style={{ width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:10,border:"1px solid rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.08)",color:"#f87171",cursor:"pointer",flexShrink:0 }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
+                  <span style={{ fontSize:14,fontWeight:800,color:"#3b82f6",flexShrink:0,letterSpacing:"-0.5px" }}>{pct}%</span>
+                </div>
+                <div style={{ height:3,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden" }}>
+                  <div style={{ height:"100%",background:"linear-gradient(90deg,#1d4ed8,#60a5fa)",borderRadius:3,width:`${pct}%`,transition:"width .7s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(96,165,250,0.6)" }}/>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           {/* ── Filter chips ── */}
           {myRoute && (
@@ -3792,7 +3620,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           <div style={{ margin:"12px 14px 0",padding:"10px 13px",background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:12,display:"flex",gap:9,alignItems:"flex-start" }}>
             <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>ℹ️</span>
             <div style={{ fontSize:12,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5 }}>
-              Estas rutas fueron enviadas mientras tenías trabajo activo. <strong style={{color:"rgba(255,255,255,0.85)"}}>Termina tu ruta actual</strong> y luego activa la siguiente desde aquí.
+              Estas rutas fueron enviadas mientras tenías trabajo activo. <strong style={{color:"rgba(255,255,255,0.85)"}}>Termina tu ruta actual</strong> y luego activa la siguiente. La cola nunca se borra — todas las rutas quedan guardadas en Firebase.
             </div>
           </div>
 
@@ -3860,13 +3688,21 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     disabled={hasActiveWork && isFirst}
                     onClick={() => {
                       if (hasActiveWork) return;
-                      // Activar esta ruta: sacarla de la cola y hacerla la activa
-                      const newQueue = pendingRoutes.filter((_,i) => i !== idx);
-                      // Actualizar cola
-                      setPendingRoutes(newQueue);
+                      // Cola persistente: NO se borra la ruta. Se marca como "active"
+                      // en el array completo de Firebase, y se filtra de la vista.
+                      const fullQueue = window.__rdPendingRoutes?.[myKey] || pendingRoutes;
+                      const updatedFullQueue = fullQueue.map((r, i) => {
+                        // Buscar por routeId o sentAt para ser robusto
+                        const matches = route.routeId
+                          ? r.routeId === route.routeId
+                          : r.sentAt === route.sentAt;
+                        return matches ? { ...r, queueStatus: "active", activatedAt: new Date().toISOString() } : r;
+                      });
+                      const visibleQueue = updatedFullQueue.filter(r => !r.queueStatus || r.queueStatus === "pending");
+                      setPendingRoutes(visibleQueue);
                       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                      window.__rdPendingRoutes[myKey] = newQueue;
-                      LS.setPending(myKey, newQueue);
+                      window.__rdPendingRoutes[myKey] = updatedFullQueue;
+                      LS.setPending(myKey, updatedFullQueue); // persiste el array COMPLETO
                       // Activar la ruta seleccionada
                       const newStops = (route.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
                       setStops(newStops);
@@ -7349,7 +7185,10 @@ const CircuitEngine = () => {
                         const currentQueue = Array.isArray(fbQueue) ? fbQueue
                           : fbQueue && typeof fbQueue === "object" ? Object.values(fbQueue) : [];
                         if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                        const queue = [...currentQueue, route];
+                        // Cola persistente: la ruta entra con queueStatus "pending"
+                        // y NUNCA se borra de Firebase, solo cambia de status.
+                        const routeWithStatus = { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() };
+                        const queue = [...currentQueue, routeWithStatus];
                         window.__rdPendingRoutes[driverId] = queue;
                         LS.setPending(driverId, queue);
                         // Notificar al mensajero de la nueva ruta en cola
