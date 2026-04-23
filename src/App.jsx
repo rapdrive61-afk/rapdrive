@@ -6704,6 +6704,11 @@ const CircuitEngine = () => {
     }, 80);
   };
 
+  const deleteStop = (stopId) => {
+    setStops(prev => optimizeRoute(prev.filter(s => s.id !== stopId)));
+    if (selectedId === stopId) setSelectedId(null);
+  };
+
   const handleModalSave = (stopId, placeResult, rawText) => {
     setAddrEditStop(null);
     if (placeResult) {
@@ -7349,6 +7354,15 @@ const CircuitEngine = () => {
                               </div>
                             )}
                           </div>
+                          {/* DELETE button — always visible, red on hover */}
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteStop(stop.id); }}
+                            title="Eliminar parada"
+                            style={{ width:28, height:28, borderRadius:7, border:"1px solid rgba(239,68,68,0.2)", background:"rgba(239,68,68,0.06)", color:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, opacity: isSelected ? 1 : 0.45, transition:"opacity .15s, background .15s" }}
+                            onMouseEnter={e => { e.currentTarget.style.background="rgba(239,68,68,0.18)"; e.currentTarget.style.opacity="1"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background="rgba(239,68,68,0.06)"; e.currentTarget.style.opacity=isSelected?"1":"0.45"; }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                          </button>
                         </div>
                       </div>
                     );
