@@ -2257,9 +2257,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [driverNotif, setDriverNotif] = useState(null); // banner notificación de ruta asignada
   // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
   const [pendingRoutes, setPendingRoutes] = useState(() => {
-    // Cola persistente: solo mostrar las que no han sido activadas/completadas
+    // Cola INDESTRUCTIBLE: mostrar todo excepto las completadas
     const fullQueue = (window.__rdPendingRoutes||{})[myKey] || LS.getPending(myKey) || [];
-    return fullQueue.filter(r => !r.queueStatus || r.queueStatus === "pending");
+    return fullQueue.filter(r => r.queueStatus !== "completed");
   });
   // Historial de rutas completadas (guardado localmente)
   const [routeHistory, setRouteHistory] = useState(() => {
@@ -2482,11 +2482,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         arr = Object.values(queue);
       }
       if (!Array.isArray(arr)) return;
-      // Cola persistente: guardar el array COMPLETO en memoria.
-      // La UI solo muestra las entradas con queueStatus "pending" (o legacy sin status).
+      // Cola INDESTRUCTIBLE: guardar el array COMPLETO en memoria y Firebase.
+      // SOLO se ocultan las rutas marcadas "completed" (ya entregadas).
+      // Las rutas "pending" y "active" SIEMPRE se muestran en la UI de cola.
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
       window.__rdPendingRoutes[myKey] = arr;
-      const visible = arr.filter(r => !r.queueStatus || r.queueStatus === "pending");
+      // Mostrar: pending (esperando) + active (en curso pero visible en cola para referencia)
+      // NO mostrar: completed (ya terminadas)
+      const visible = arr.filter(r => r.queueStatus !== "completed");
       setPendingRoutes(visible);
     };
 
@@ -2927,6 +2930,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         @keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideLeft{from{opacity:0;transform:translateX(-100%)}to{opacity:1;transform:translateX(0)}}
         @keyframes countdown{from{width:100%}to{width:0%}}
+        @keyframes shimmer{0%{background-position:200% 50%}100%{background-position:-200% 50%}}
         .rd-stop:hover{background:rgba(255,255,255,0.025)!important}
         .rd-btn:active{transform:scale(.97)!important}
         .rd-menu-item:hover{background:rgba(255,255,255,0.06)!important}
@@ -3299,93 +3303,172 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             touchAction:"none",
           }}>
 
-          {/* ── Drag handle — tap/drag from anywhere on this bar to resize ── */}
+          {/* ── Drag handle ── */}
           <div
-            style={{ flexShrink:0, paddingTop:10, paddingBottom:6, display:"flex", flexDirection:"column", alignItems:"center", gap:8, cursor:"ns-resize", touchAction:"none", userSelect:"none" }}
+            style={{ flexShrink:0, paddingTop:10, paddingBottom:4, display:"flex", flexDirection:"column", alignItems:"center", cursor:"ns-resize", touchAction:"none", userSelect:"none" }}
             onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); handleSheetDragStart(e); }}
-            onTouchStart={handleSheetDragStart}
-          >
+            onTouchStart={handleSheetDragStart}>
             <div style={{ width:36, height:4, borderRadius:4, background:"rgba(255,255,255,0.15)" }}/>
           </div>
 
-          {/* ── Search bar — also draggable ── */}
-          <div
-            style={{ padding:"10px 14px 0",flexShrink:0, touchAction:"none", userSelect:"none" }}
-            onPointerDown={e=>{ e.currentTarget.setPointerCapture(e.pointerId); handleSheetDragStart(e); }}
-            onTouchStart={handleSheetDragStart}
-          >
-            <div style={{ display:"flex",gap:8 }}>
-              <div style={{ flex:1,position:"relative" }}>
-                <svg style={{ position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
-                  style={{ width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:13,padding:"11px 14px 11px 38px",color:"#f1f5f9",fontSize:13,outline:"none",caretColor:"#3b82f6",backdropFilter:"blur(8px)" }}/>
-                {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:15,lineHeight:1 }}>✕</button>}
-              </div>
-              <button className="rd-btn" style={{ width:44,height:44,borderRadius:13,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-              </button>
-            </div>
-          </div>
-
-          {/* ── Route name block ── */}
+          {/* ── RUTA ACTIVA block ── */}
           {myRoute && (
-            <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
-              <div style={{ background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"13px 15px",backdropFilter:"blur(10px)" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:11,marginBottom:9 }}>
-                  <div style={{ width:42,height:42,borderRadius:13,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.25)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 20px rgba(59,130,246,0.15)" }}>
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-                      <circle cx="5" cy="18" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
-                      <circle cx="19" cy="6" r="2.5" stroke="#3b82f6" strokeWidth="1.8"/>
-                      <path d="M7.5 18h6a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h4.5" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontSize:16,fontWeight:800,color:"#f8fafc",letterSpacing:"-0.4px",lineHeight:1.15 }}>{myRoute.routeName||"Ruta del día"}</div>
-                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:3,flexWrap:"wrap" }}>
-                      {estFinish()&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Finaliza {estFinish()}
-                      </span>}
-                      {routeKm>0&&<span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                        {routeKm} km
-                      </span>}
-                      <span style={{ fontSize:10.5,color:"rgba(255,255,255,0.38)",display:"flex",alignItems:"center",gap:3 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
-                        {stops.filter(s=>s.stopNum).length} paradas
-                      </span>
+            <div style={{ padding:"6px 14px 0", flexShrink:0 }}>
+              <div style={{ background:"linear-gradient(135deg,rgba(14,30,60,0.9),rgba(10,20,45,0.9))", border:"1px solid rgba(59,130,246,0.2)", borderRadius:18, padding:"14px 16px", position:"relative", overflow:"hidden" }}>
+                {/* Subtle glow */}
+                <div style={{ position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(59,130,246,0.08)",filter:"blur(24px)",pointerEvents:"none" }}/>
+
+                {/* Header row: label + ETA */}
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:8 }}>
+                  <div style={{ flex:1, minWidth:0, paddingRight:10 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:"rgba(96,165,250,0.7)", letterSpacing:"1.5px", marginBottom:4, textTransform:"uppercase" }}>
+                      RUTA ACTIVA
+                    </div>
+                    <div style={{ fontSize:18, fontWeight:800, color:"#f8fafc", letterSpacing:"-0.5px", lineHeight:1.15, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {myRoute.routeName || "Ruta del día"}
                     </div>
                   </div>
-                  <span style={{ fontSize:14,fontWeight:800,color:"#3b82f6",flexShrink:0,letterSpacing:"-0.5px" }}>{pct}%</span>
+                  {estFinish() && (
+                    <div style={{ background:"rgba(37,99,235,0.25)", border:"1px solid rgba(59,130,246,0.35)", borderRadius:12, padding:"6px 12px", textAlign:"center", flexShrink:0 }}>
+                      <div style={{ fontSize:9, color:"rgba(96,165,250,0.7)", fontWeight:700, letterSpacing:"1px" }}>ETA</div>
+                      <div style={{ fontSize:16, fontWeight:800, color:"#60a5fa", fontFamily:"'DM Mono',monospace", letterSpacing:"-0.5px" }}>{estFinish()}</div>
+                    </div>
+                  )}
                 </div>
-                <div style={{ height:3,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden" }}>
-                  <div style={{ height:"100%",background:"linear-gradient(90deg,#1d4ed8,#60a5fa)",borderRadius:3,width:`${pct}%`,transition:"width .7s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(96,165,250,0.6)" }}/>
+
+                {/* ── Segmented progress bar — un bloque por parada ── */}
+                {stops.length > 0 && (
+                  <div style={{ display:"flex", gap:2, marginBottom:12, height:6 }}>
+                    {stops.filter(s=>s.stopNum!=null).sort((a,b)=>(a.stopNum||0)-(b.stopNum||0)).map((s,i) => {
+                      const col = s.driverStatus==="delivered"?"#10b981":s.driverStatus==="problema"?"#ef4444":s.driverStatus==="en_ruta"?"#3b82f6":"rgba(255,255,255,0.1)";
+                      const glow= s.driverStatus==="delivered"?"0 0 6px rgba(16,185,129,0.6)":s.driverStatus==="en_ruta"?"0 0 6px rgba(59,130,246,0.8)":"none";
+                      return <div key={s.id} style={{ flex:1, height:"100%", borderRadius:3, background:col, boxShadow:glow, transition:"background .3s" }}/>;
+                    })}
+                  </div>
+                )}
+
+                {/* ── Stats row ── */}
+                <div style={{ display:"flex", gap:0 }}>
+                  {[
+                    { val: delivered.length, label:"ENTREGADOS", color:"#10b981" },
+                    { val: pending.length,   label:"PENDIENTES", color:"#3b82f6" },
+                    { val: problems.length,  label:"PROBLEMAS",  color:problems.length>0?"#f59e0b":"rgba(255,255,255,0.2)" },
+                    { val: routeKm>0 ? routeKm : stops.length, label: routeKm>0 ? "KM TOTALES" : "PARADAS", color:"rgba(255,255,255,0.5)" },
+                  ].map(({val,label,color},i,arr) => (
+                    <div key={label} style={{ flex:1, textAlign:"center", borderRight: i<arr.length-1?"1px solid rgba(255,255,255,0.06)":undefined, paddingRight: i<arr.length-1?0:undefined }}>
+                      <div style={{ fontSize:22, fontWeight:800, color, lineHeight:1, fontFamily:"'DM Mono',monospace", letterSpacing:"-1px" }}>{val}</div>
+                      <div style={{ fontSize:8, fontWeight:700, color:"rgba(255,255,255,0.25)", letterSpacing:"0.8px", marginTop:3 }}>{label}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Filter chips ── */}
+          {/* ── PARADA ACTUAL card ── */}
+          {currentStop && (
+            <div style={{ padding:"8px 14px 0", flexShrink:0 }}>
+              <div style={{
+                background:"linear-gradient(135deg,rgba(10,22,50,0.95),rgba(8,18,40,0.95))",
+                border:"1px solid rgba(59,130,246,0.3)",
+                borderRadius:16,
+                overflow:"hidden",
+                boxShadow:"0 4px 20px rgba(59,130,246,0.12)",
+              }}>
+                {/* Accent top bar */}
+                <div style={{ height:2, background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#1d4ed8)", backgroundSize:"200% 100%", animation:"shimmer 2s linear infinite" }}/>
+
+                <div style={{ padding:"12px 14px 14px" }}>
+                  {/* Row 1: stop number + label + status badge */}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                    <div style={{
+                      width:38, height:38, borderRadius:12,
+                      background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      flexShrink:0, boxShadow:"0 4px 14px rgba(59,130,246,0.4)",
+                    }}>
+                      <span style={{ fontSize:15, fontWeight:900, color:"white", fontFamily:"'DM Mono',monospace" }}>{currentStop.stopNum||"?"}</span>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:"rgba(96,165,250,0.6)", letterSpacing:"1.2px", marginBottom:2 }}>PARADA ACTUAL</div>
+                    </div>
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:5, background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.3)", borderRadius:20, padding:"4px 10px", flexShrink:0 }}>
+                      <div style={{ width:5, height:5, borderRadius:"50%", background:"#3b82f6", boxShadow:"0 0 6px #3b82f6", animation:"pulse 1.5s infinite" }}/>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#60a5fa" }}>En camino</span>
+                    </div>
+                  </div>
+
+                  {/* Client name */}
+                  <div style={{ fontSize:18, fontWeight:800, color:"#f8fafc", letterSpacing:"-0.4px", lineHeight:1.2, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {currentStop.client || `Parada ${currentStop.stopNum}`}
+                  </div>
+
+                  {/* Address */}
+                  <div style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.5, marginBottom:12 }}>
+                    {currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}
+                    {currentStop.notes ? <span style={{ color:"rgba(255,255,255,0.25)" }}> · {currentStop.notes}</span> : null}
+                  </div>
+
+                  {/* ── Action buttons ── */}
+                  <div style={{ display:"flex", gap:8 }}>
+                    {/* Waze */}
+                    <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
+                      target="_blank" rel="noreferrer"
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px", borderRadius:12, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 4px 16px rgba(59,130,246,0.35)", transition:"all .12s" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Waze</span>
+                    </a>
+
+                    {/* Entregado */}
+                    <button className="rd-btn" onClick={()=>markDelivered(currentStop.id)}
+                      style={{ flex:2, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px", borderRadius:12, border:"none", background:"linear-gradient(135deg,#059669,#10b981)", cursor:"pointer", boxShadow:"0 4px 16px rgba(16,185,129,0.35)", transition:"all .12s" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Entregado</span>
+                    </button>
+
+                    {/* Problema */}
+                    <button className="rd-btn" onClick={()=>setShowProb(currentStop.id)}
+                      style={{ width:44, height:44, borderRadius:12, border:"1px solid rgba(245,158,11,0.3)", background:"rgba(245,158,11,0.1)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .12s" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PRÓXIMAS PARADAS header + filter chips ── */}
           {myRoute && (
-            <div style={{ padding:"10px 14px 0",flexShrink:0 }}>
-              <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:2 }}>
-                {[
-                  {id:"all",label:"Todas",count:stops.length},
-                  {id:"pending",label:"Pendientes",count:pending.length},
-                  {id:"delivered",label:"Entregadas",count:delivered.length},
-                  {id:"problema",label:"Problemas",count:problems.length},
-                ].map(chip=>(
-                  <button key={chip.id} onClick={()=>setFilterMode(chip.id)} className="rd-btn"
-                    style={{ display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:22,border:`1.5px solid ${filterMode===chip.id?"#2563eb":"rgba(255,255,255,0.1)"}`,background:filterMode===chip.id?"rgba(37,99,235,0.2)":"transparent",color:filterMode===chip.id?"#93c5fd":"rgba(255,255,255,0.45)",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,transition:"all .18s",backdropFilter:"blur(6px)" }}>
-                    {chip.label}
-                    {chip.count>0&&<span style={{ fontSize:11,fontWeight:800,color:filterMode===chip.id?"#60a5fa":"rgba(255,255,255,0.25)",background:filterMode===chip.id?"rgba(59,130,246,0.2)":"rgba(255,255,255,0.06)",borderRadius:8,padding:"1px 6px",minWidth:18,textAlign:"center",display:"inline-block" }}>{chip.count}</span>}
-                  </button>
-                ))}
+            <div style={{ padding:"10px 14px 0", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", letterSpacing:"1.5px" }}>
+                  {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
+                </span>
+                <div style={{ display:"flex", gap:5 }}>
+                  {[
+                    {id:"all",   label:"Todas"},
+                    {id:"pending",label:"Pendientes"},
+                    {id:"problema",label:"Problemas"},
+                  ].map(chip=>(
+                    <button key={chip.id} onClick={()=>setFilterMode(chip.id)} className="rd-btn"
+                      style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${filterMode===chip.id?"#2563eb":"rgba(255,255,255,0.1)"}`, background:filterMode===chip.id?"rgba(37,99,235,0.25)":"transparent", color:filterMode===chip.id?"#93c5fd":"rgba(255,255,255,0.4)", fontSize:10, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Search */}
+              <div style={{ position:"relative" }}>
+                <svg style={{ position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
+                  style={{ width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:11,padding:"9px 12px 9px 32px",color:"#f1f5f9",fontSize:12,outline:"none",caretColor:"#3b82f6" }}/>
+                {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14,lineHeight:1 }}>✕</button>}
               </div>
             </div>
           )}
 
-          {/* ── Stops list — edge-to-edge, scrollable ── */}
+          {/* ── Stops list — scrollable, compact ── */}
           <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:16,marginTop:8,WebkitOverflowScrolling:"touch" }}>
 
             {/* Empty state - no route */}
@@ -3397,164 +3480,68 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               </div>
             )}
 
-            {/* Empty search result */}
             {filteredStops.length===0 && myRoute && (
-              <div style={{ textAlign:"center",padding:"40px 24px" }}>
-                <div style={{ fontSize:32,marginBottom:10,opacity:0.3 }}>🔍</div>
+              <div style={{ textAlign:"center",padding:"32px 24px" }}>
+                <div style={{ fontSize:28,marginBottom:8,opacity:0.3 }}>🔍</div>
                 <div style={{ fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.3)" }}>Sin resultados</div>
               </div>
             )}
 
-            {/* ── Timeline stops — premium edge-to-edge ── */}
+            {/* ── Stop list — compact rows matching screenshot ── */}
             {filteredStops.map((stop,i) => {
               const isDone = stop.driverStatus==="delivered";
               const isProb = stop.driverStatus==="problema";
               const isEnR  = stop.driverStatus==="en_ruta";
               const isCur  = stop===currentStop;
               const isExp  = selStop?.id===stop.id;
-              const isLast = i === filteredStops.length - 1;
 
-              const dotColor = isDone?"#10b981":isProb?"#ef4444":isCur||isEnR?"#3b82f6":"#475569";
-              const dotGlow  = isDone?"rgba(16,185,129,0.55)":isProb?"rgba(239,68,68,0.55)":isCur?"rgba(59,130,246,0.55)":"transparent";
-              const lineColor= isDone?"rgba(16,185,129,0.4)":"rgba(255,255,255,0.06)";
-              const rowBg    = isDone?"rgba(16,185,129,0.07)":isProb?"rgba(239,68,68,0.07)":isCur?"rgba(59,130,246,0.09)":"rgba(255,255,255,0.03)";
-              const leftAccent=isDone?"#10b981":isProb?"#ef4444":isCur?"#3b82f6":"transparent";
-              const divColor = isDone?"rgba(16,185,129,0.15)":isProb?"rgba(239,68,68,0.15)":isCur?"rgba(59,130,246,0.18)":"rgba(255,255,255,0.06)";
-              const statusLabel=isDone?"Entregado":isProb?"Problema":isEnR?"En camino":"Pendiente";
-              const statusColor=isDone?"#10b981":isProb?"#ef4444":isEnR?"#60a5fa":"#f59e0b";
-              const statusBg   =isDone?"rgba(16,185,129,0.13)":isProb?"rgba(239,68,68,0.13)":isEnR?"rgba(59,130,246,0.13)":"rgba(245,158,11,0.13)";
-              const statusBdr  =isDone?"rgba(16,185,129,0.3)":isProb?"rgba(239,68,68,0.3)":isEnR?"rgba(96,165,250,0.3)":"rgba(245,158,11,0.3)";
+              const dotColor = isDone?"#10b981":isProb?"#ef4444":isCur||isEnR?"#3b82f6":"#374151";
+              const statusLabel= isDone?"ENTREGADO":isProb?"PROBLEMA":isEnR?"EN CAMINO":"PENDIENTE";
+              const statusColor= isDone?"#10b981":isProb?"#ef4444":isEnR?"#60a5fa":"rgba(255,255,255,0.35)";
+              const statusBg   = isDone?"rgba(16,185,129,0.1)":isProb?"rgba(239,68,68,0.1)":isEnR?"rgba(59,130,246,0.1)":"transparent";
+
+              // Distancia desde DEPOT (estimada por stopNum)
+              const distKm = stop.stopNum ? (stop.stopNum * 0.6).toFixed(1) : null;
 
               return (
-                <div key={stop.id} style={{ display:"flex", animation:`slideInRow .25s ${Math.min(i,8)*30}ms ease both` }}>
+                <div key={stop.id}
+                  onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
+                  style={{ display:"flex", alignItems:"center", padding:"12px 14px 12px 14px", borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer", transition:"background .1s", background: isCur?"rgba(59,130,246,0.05)":"transparent", animation:`slideInRow .2s ${Math.min(i,8)*25}ms ease both` }}>
 
-                  {/* ── Timeline column ── */}
-                  <div style={{ display:"flex",flexDirection:"column",alignItems:"center",width:56,flexShrink:0,paddingTop:16,paddingLeft:14 }}>
-                    <div style={{
-                      width:38, height:38, borderRadius:"50%",
-                      background: isDone ? "radial-gradient(circle at 35% 35%,#12b886,#059669)"
-                                : isProb ? "radial-gradient(circle at 35% 35%,#f87171,#dc2626)"
-                                : isCur  ? "radial-gradient(circle at 35% 35%,#60a5fa,#2563eb)"
-                                :          "rgba(255,255,255,0.06)",
-                      border:`2px solid ${dotColor}`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      flexShrink:0, zIndex:1,
-                      boxShadow: (isCur||isDone||isProb) ? `0 0 0 4px ${dotGlow.replace("0.55","0.13")}, 0 4px 18px ${dotGlow}` : "none",
-                    }}>
-                      {/* Número SIEMPRE visible — check pequeño debajo si entregado */}
-                      <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}>
-                        <span style={{ fontSize:isDone?11:13, fontWeight:800, color: isDone?"rgba(255,255,255,0.9)":isCur?"white":isProb?"white":"rgba(255,255,255,0.45)", fontFamily:"'DM Mono',monospace", letterSpacing:"-0.5px", lineHeight:1 }}>
-                          {stop.stopNum||"?"}
-                        </span>
-                        {isDone && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" style={{opacity:0.9}}>
-                            <polyline points="20 6 9 17 4 12"/>
-                          </svg>
-                        )}
-                        {isProb && <span style={{ fontSize:10,color:"white",lineHeight:1,fontWeight:800 }}>!</span>}
-                      </div>
-                    </div>
-                    {!isLast && <div style={{ width:2,flex:1,minHeight:14,background:lineColor,marginTop:3,borderRadius:1 }}/>}
+                  {/* Circle number */}
+                  <div style={{
+                    width:34, height:34, borderRadius:"50%", flexShrink:0, marginRight:12,
+                    background: isDone?"rgba(16,185,129,0.15)":isProb?"rgba(245,158,11,0.15)":isCur?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,0.06)",
+                    border:`1.5px solid ${dotColor}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    boxShadow: isCur?"0 0 12px rgba(59,130,246,0.4)":isDone?"0 0 8px rgba(16,185,129,0.2)":"none",
+                  }}>
+                    {isDone
+                      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <span style={{ fontSize:12, fontWeight:800, color: isCur?"white":isProb?"#f59e0b":"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace" }}>{stop.stopNum||"?"}</span>
+                    }
                   </div>
 
-                  {/* ── Row — edge-to-edge right, left accent border ── */}
-                  <div className="rd-stop"
-                    onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                    style={{
-                      flex:1, marginBottom:2,
-                      background:rowBg,
-                      borderTop:`1px solid ${divColor}`,
-                      borderBottom:`1px solid ${divColor}`,
-                      borderRight:"none",
-                      borderLeft:`3px solid ${leftAccent}`,
-                      cursor:"pointer", transition:"background .12s", overflow:"hidden",
-                      paddingLeft:14,
-                    }}>
-
-                    {/* Main info row */}
-                    <div style={{ display:"flex",alignItems:"center",paddingTop:14,paddingBottom:13,paddingRight:14,gap:10 }}>
-                      <div style={{ flex:1,minWidth:0 }}>
-                        <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3 }}>
-                          <span style={{ fontSize:14,fontWeight:700,color:"#f8fafc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,letterSpacing:"-0.2px" }}>
-                            {stop.client||`Parada ${stop.stopNum}`}
-                          </span>
-                          {isCur&&!isDone&&(
-                            <span style={{ fontSize:9,color:"white",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",borderRadius:6,padding:"2px 8px",fontWeight:800,letterSpacing:"0.6px",flexShrink:0,boxShadow:"0 2px 10px rgba(59,130,246,0.45)" }}>ACTUAL</span>
-                          )}
-                        </div>
-                        {/* SP code + teléfono clickeable */}
-                        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap" }}>
-                          {stop.tracking && (
-                            <span style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:"rgba(96,165,250,0.7)",background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:5,padding:"1px 6px",letterSpacing:"0.3px",flexShrink:0 }}>
-                              {stop.tracking}
-                            </span>
-                          )}
-                          {stop.phone && (
-                            <div style={{ display:"flex",gap:4,flexShrink:0 }}>
-                              <a href={`tel:${stop.phone.replace(/\D/g,"")}`}
-                                onClick={e=>e.stopPropagation()}
-                                style={{ display:"flex",alignItems:"center",gap:3,fontSize:10,color:"rgba(255,255,255,0.5)",textDecoration:"none",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,padding:"2px 7px",transition:"all .12s" }}>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                                {stop.phone}
-                              </a>
-                              <a href={`https://wa.me/${stop.phone.replace(/\D/g,"")}`}
-                                target="_blank" rel="noreferrer"
-                                onClick={e=>e.stopPropagation()}
-                                style={{ display:"flex",alignItems:"center",justifyContent:"center",width:22,height:22,background:"rgba(37,211,102,0.08)",border:"1px solid rgba(37,211,102,0.2)",borderRadius:6,flexShrink:0 }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="#22c55e"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ fontSize:11.5,color:"rgba(255,255,255,0.32)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.4 }}>
-                          {stop.displayAddr||stop.rawAddr||"Sin dirección"}
-                        </div>
-                      </div>
-                      <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0 }}>
-                        <div style={{ display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:8,background:statusBg,border:`1px solid ${statusBdr}` }}>
-                          <span style={{ fontSize:10.5,fontWeight:700,color:statusColor,letterSpacing:"0.1px" }}>{statusLabel}</span>
-                        </div>
-                        {isDone&&stop.deliveredAt&&<span style={{ fontSize:10,color:"rgba(255,255,255,0.22)",fontFamily:"'DM Mono',monospace" }}>{stop.deliveredAt}</span>}
-                        {isCur&&!isDone&&estFinish()&&<span style={{ fontSize:10,color:"rgba(255,255,255,0.22)",fontFamily:"'DM Mono',monospace" }}>{estFinish()}</span>}
-                      </div>
-                      <svg style={{ flexShrink:0,opacity:0.22 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                  {/* Content */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color: isDone?"rgba(255,255,255,0.45)":"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", textDecoration:isDone?"line-through":"none", marginBottom:2 }}>
+                      {stop.client||`Parada ${stop.stopNum}`}
                     </div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {stop.displayAddr||stop.rawAddr||"Sin dirección"}
+                    </div>
+                    {isDone && stop.deliveredAt && (
+                      <div style={{ fontSize:10, color:"#10b981", marginTop:2, fontFamily:"'DM Mono',monospace" }}>✓ {stop.deliveredAt}</div>
+                    )}
+                  </div>
 
-                    {/* Expanded */}
-                    {isExp && (
-                      <div style={{ borderTop:`1px solid ${divColor}`,padding:"13px 14px 16px 0",animation:"fadeUp .18s ease" }}>
-                        {stop.notes&&<div style={{ fontSize:12,color:"rgba(255,255,255,0.38)",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"9px 12px",marginBottom:11,lineHeight:1.5 }}>📝 {stop.notes}</div>}
-                        {isProb&&stop.issue&&<div style={{ fontSize:12,color:"rgba(239,68,68,0.75)",background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:10,padding:"9px 12px",marginBottom:11 }}>⚠ {stop.issue}</div>}
-                        {!isDone&&!isProb&&(
-                          <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
-                            <div style={{ display:"flex",gap:8 }}>
-                              {[
-                                {href:`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`,label:"Waze"},
-                                {href:`https://maps.google.com/?q=${stop.lat},${stop.lng}`,label:"Maps"},
-                                {href:`https://wa.me/${stop.phone?.replace(/\D/g,"")}`,label:"WhatsApp"},
-                              ].map(({href,label})=>(
-                                <a key={label} href={href} target="_blank" rel="noreferrer" className="rd-btn"
-                                  style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"10px 4px",borderRadius:11,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",fontSize:12,textDecoration:"none",fontWeight:700,transition:"all .12s" }}>
-                                  {label}
-                                </a>
-                              ))}
-                            </div>
-                            <div style={{ display:"flex",gap:8 }}>
-                              <button className="rd-btn" onClick={e=>{e.stopPropagation();setShowProb(stop.id);}}
-                                style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"13px",borderRadius:12,border:"1px solid rgba(239,68,68,0.22)",background:"rgba(239,68,68,0.07)",color:"#f87171",fontSize:13,fontWeight:700,cursor:"pointer" }}>
-                                ✕ Fallido
-                              </button>
-                              <button className="rd-btn" onClick={e=>{e.stopPropagation();markDelivered(stop.id);}}
-                                style={{ flex:2,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 22px rgba(16,185,129,0.38)" }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
-                                Entregado
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {isDone&&<div style={{ display:"flex",alignItems:"center",gap:9,padding:"10px 12px",borderRadius:11,background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.2)" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg><span style={{ fontSize:12,color:"rgba(16,185,129,0.85)",fontWeight:600 }}>Entregado{stop.deliveredAt?" · "+stop.deliveredAt:""}</span></div>}
-                        {isProb&&<div style={{ display:"flex",alignItems:"center",gap:9,padding:"10px 12px",borderRadius:11,background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.2)" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span style={{ fontSize:12,color:"rgba(239,68,68,0.75)",fontWeight:600 }}>Problema reportado</span></div>}
-                      </div>
+                  {/* Right side: status + distance/time */}
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0, marginLeft:10 }}>
+                    <div style={{ background:statusBg, borderRadius:6, padding:"2px 8px" }}>
+                      <span style={{ fontSize:9.5, fontWeight:700, color:statusColor, letterSpacing:"0.5px" }}>{statusLabel}</span>
+                    </div>
+                    {distKm && !isDone && (
+                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)", fontFamily:"'DM Mono',monospace" }}>{distKm} km</span>
                     )}
                   </div>
                 </div>
@@ -3710,7 +3697,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           ? { ...r, queueStatus: "active", activatedAt: new Date().toISOString() }
                           : r;
                       });
-                      const visibleQueue = updatedFullQueue.filter(r => !r.queueStatus || r.queueStatus === "pending");
+                      const visibleQueue = updatedFullQueue.filter(r => r.queueStatus !== "completed");
                       setPendingRoutes(visibleQueue);
                       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
                       window.__rdPendingRoutes[myKey] = updatedFullQueue;
