@@ -5698,6 +5698,270 @@ const loadSheetJS = () => new Promise((res) => {
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CORRECTOR ORTOGRÁFICO DE SECTORES — SDO Oeste y variantes comunes
+// Convierte errores tipográficos y variantes al nombre canónico
+// Se aplica ANTES de cualquier lookup para máxima cobertura
+// ─────────────────────────────────────────────────────────────────────────────
+const SECTOR_ALIASES = [
+  // Herrera y sub-sectores
+  [/\bcaf[eé]\s*d[eo]\s*her[ée]r[ao]\b/gi,          "El Café de Herrera"],
+  [/\bcaf[eé]\s*her[ée]r[ao]\b/gi,                   "El Café de Herrera"],
+  [/\bel\s*caf[eé]\s*her[ée]r[ao]\b/gi,              "El Café de Herrera"],
+  [/\bensanche\s+altagracia\s+(?:de\s+)?her[ée]r[ao]\b/gi, "El Café de Herrera"],
+  [/\bens\.?\s*altagracia\s+(?:de\s+)?her[ée]r[ao]\b/gi,   "El Café de Herrera"],
+  [/\bher[ée]r[ao]\b(?!\s+(?:de|del|la))/gi,         "Herrera, Santo Domingo Oeste"],
+  [/\bbuenos\s+aires\s+(?:de\s+)?her[ée]r[ao]\b/gi,  "Buenos Aires de Herrera"],
+  [/\blas\s+palmas\s+(?:de\s+)?her[ée]r[ao]\b/gi,    "Las Palmas de Herrera"],
+  [/\bjuan\s+guzm[aá]n\s+(?:de\s+)?her[ée]r[ao]\b/gi,"Juan Guzmán Klang, Herrera"],
+  [/\biv[aá]n\s+guzm[aá]n\b/gi,                      "Iván Guzmán Klang, Herrera"],
+  [/\blas\s+mercedes\s+(?:de\s+)?her[ée]r[ao]\b/gi,  "Las Mercedes, Herrera"],
+  [/\bvilla\s+aura\b/gi,                              "Villa Aura, Herrera"],
+  [/\bolimpo\b/gi,                                    "Olimpo, Herrera"],
+  [/\benriquillo\s+(?:de\s+)?her[ée]r[ao]\b/gi,      "Enriquillo, Herrera"],
+  [/\bpueblo\s+nuevo\s+(?:de\s+)?her[ée]r[ao]\b/gi,  "Pueblo Nuevo, Herrera"],
+  [/\bzona\s+ind(?:ustrial)?\s+(?:de\s+)?her[ée]r[ao]\b/gi, "Zona Industrial Herrera"],
+  // Manoguayabo
+  [/\bmanogua?ya?bo\b/gi,                             "Manoguayabo"],
+  [/\bbuenos\s+aires\s+(?:de\s+)?manoguayabo\b/gi,   "Buenos Aires de Manoguayabo"],
+  [/\bel\s+hoyo\s+(?:de\s+)?manoguayabo\b/gi,        "El Hoyo de Manoguayabo"],
+  [/\bbarrio\s+san\s+miguel\s+(?:de\s+)?manoguayabo\b/gi, "Barrio San Miguel, Manoguayabo"],
+  [/\bla\s+venta\b/gi,                                "La Venta, Manoguayabo"],
+  [/\bel\s+8\s+(?:de\s+)?bayona\b/gi,                "El 8 de Bayona"],
+  // Bayona
+  [/\bbayona\b/gi,                                    "Bayona, Santo Domingo Oeste"],
+  [/\bbuenos\s+aires\s+(?:de\s+)?bayona\b/gi,         "Buenos Aires de Manoguayabo"],
+  // Engombe
+  [/\bengombe\b/gi,                                   "Engombe, Santo Domingo Oeste"],
+  [/\baltos\s+(?:de\s+)?engombe\b/gi,                 "Altos de Engombe"],
+  [/\bcolinas\s+(?:de\s+)?engombe\b/gi,               "Colinas de Engombe"],
+  [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,            "Urbanización Engombe"],
+  [/\bbarrio\s+(?:el\s+)?libertad(?:or)?\b/gi,        "Barrio Libertad, Engombe"],
+  [/\bbarrio\s+progreso\b/gi,                         "Barrio Progreso, Engombe"],
+  // Hato Nuevo
+  [/\bhato\s+nuevo\b/gi,                              "Hato Nuevo, Santo Domingo Oeste"],
+  [/\bcaballona\b/gi,                                 "Caballona, Hato Nuevo"],
+  [/\blecheria\b/gi,                                  "Lechería, Hato Nuevo"],
+  [/\bbatey\s+bienvenido\b/gi,                        "Batey Bienvenido, Hato Nuevo"],
+  [/\bbienvenido\b/gi,                                "Batey Bienvenido, Hato Nuevo"],
+  [/\bbarrio\s+(?:nuevo\s+)?horizonte\b/gi,           "Barrio Nuevo Horizonte, Hato Nuevo"],
+  [/\bbarrio\s+horizonte\b/gi,                        "Barrio Nuevo Horizonte, Hato Nuevo"],
+  [/\bpueblo\s+chico\b/gi,                            "Pueblo Chico, Hato Nuevo"],
+  // Las Caobas
+  [/\blas\s+caobas\b/gi,                              "Las Caobas, Santo Domingo Oeste"],
+  [/\blas\s+caobitas\b/gi,                            "Las Caobitas, Las Caobas"],
+  [/\blas\s+colinas\s+(?:de\s+)?(?:las\s+)?caobas\b/gi, "Las Colinas, Las Caobas"],
+  [/\bel\s+libertador\b/gi,                           "El Libertador, Las Caobas"],
+  [/\bsavica\b/gi,                                    "Savica, Las Caobas"],
+  [/\bbuenos\s+aires\s+(?:de\s+)?(?:las\s+)?caobas\b/gi, "Buenos Aires de Las Caobas"],
+  [/\baltos\s+(?:de\s+)?(?:las\s+)?caobas\b/gi,      "Altos de Las Caobas"],
+  // Residenciales SDO Oeste
+  [/\bres(?:idencial)?\s+carmen\s+renata\b/gi,        "Residencial Carmen Renata, Herrera"],
+  [/\bres(?:idencial)?\s+brisas\s+(?:del\s+)?oeste\b/gi, "Residencial Brisas del Oeste"],
+  [/\bciudad\s+agraria\b/gi,                          "Ciudad Agraria, Santo Domingo Oeste"],
+  [/\bres(?:idencial)?\s+antonia\b/gi,                "Residencial Antonia, Herrera"],
+  [/\bres(?:idencial)?\s+altagracia\b/gi,             "Residencial Altagracia, Herrera"],
+  [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi,      "Urbanización El Café, Herrera"],
+  [/\burb(?:anizaci[oó]n)?\s+las\s+palmas\b/gi,      "Urbanización Las Palmas, Herrera"],
+  [/\bres(?:idencial)?\s+don\s+honorio\b/gi,          "Residencial Don Honorio"],
+  [/\bres(?:idencial)?\s+santo\s+domingo\b/gi,        "Residencial Santo Domingo, Herrera"],
+  [/\boperaciones\s+especiales\b/gi,                  "Operaciones Especiales, Herrera"],
+  [/\burb(?:anizaci[oó]n)?\s+colinas\s+(?:del\s+)?oeste\b/gi, "Urbanización Colinas del Oeste"],
+  // Km Haina
+  [/\bkm\.?\s*12\s+(?:de\s+)?haina\b/gi,             "Km 12 Haina, Santo Domingo Oeste"],
+  [/\bkm\.?\s*(\d{1,2})\s+(?:de\s+)?haina\b/gi,      "Km $1 Haina, Santo Domingo Oeste"],
+  [/\bloma\s+(?:de\s+)?chivo\b/gi,                   "Loma de Chivo, Herrera"],
+  [/\bzona\s+ind(?:ustrial)?\s+(?:de\s+)?herrera\b/gi,"Zona Industrial Herrera"],
+  // Avenidas SDO Oeste
+  [/\bav\.?\s+isabel\s+aguiar\b/gi,                  "Avenida Isabel Aguiar, Santo Domingo Oeste"],
+  [/\bisabel\s+aguiar\b/gi,                           "Avenida Isabel Aguiar, Santo Domingo Oeste"],
+  [/\bav\.?\s+las\s+palmas\b/gi,                     "Avenida Las Palmas, Herrera"],
+  [/\bprol(?:ongaci[oó]n)?\s+27\s+(?:de\s+)?febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
+  [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi,     "Prolongación Independencia, Santo Domingo Oeste"],
+  [/\bautopista\s+duarte\b/gi,                        "Autopista Duarte, Santo Domingo"],
+  // Barrios genéricos SDO Oeste
+  [/\barroyo\s+bonito\b/gi,                           "Arroyo Bonito, Santo Domingo Oeste"],
+  [/\bel\s+30\s+(?:de\s+)?mayo\b/gi,                 "30 de Mayo, Santo Domingo Oeste"],
+  [/\bla\s+isabela\s+(?:de\s+)?herrera\b/gi,         "La Isabela, Santo Domingo Oeste"],
+  [/\bbarrio\s+(?:nuevo|nueva)\b(?!\s+horizonte)/gi,  "Barrio Nuevo, Santo Domingo Oeste"],
+  [/\bbarrio\s+san\s+francisco\b/gi,                  "Barrio San Francisco, Herrera"],
+  [/\bbarrio\s+duarte\s+(?:de\s+)?(?:bayona|her[ée]r[ao]|manoguayabo)?\b/gi, "Barrio Duarte, Santo Domingo Oeste"],
+  [/\bbarrio\s+enriquillo\b/gi,                       "Barrio Enriquillo, Santo Domingo Oeste"],
+];
+
+// Aplica correcciones ortográficas y de alias a una dirección cruda
+const correctSectorSpelling = (raw) => {
+  let s = raw || "";
+  for (const [pat, repl] of SECTOR_ALIASES) {
+    s = s.replace(pat, repl);
+  }
+  return s;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDMARKS SDO OESTE — 120+ puntos con coordenadas verificadas
+// Se suman a la base existente (RD_LANDMARKS)
+// ─────────────────────────────────────────────────────────────────────────────
+const SDO_OESTE_LANDMARKS = [
+  // ── Herrera núcleo ──
+  { k:"herrera",                      lat:18.4822, lng:-70.0412, d:"Herrera, Santo Domingo Oeste" },
+  { k:"el café de herrera",           lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
+  { k:"cafe de herrera",              lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
+  { k:"ensanche altagracia herrera",  lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
+  { k:"buenos aires de herrera",      lat:18.4810, lng:-70.0380, d:"Buenos Aires de Herrera" },
+  { k:"las palmas de herrera",        lat:18.4798, lng:-70.0350, d:"Las Palmas de Herrera" },
+  { k:"zona industrial herrera",      lat:18.4845, lng:-70.0440, d:"Zona Industrial Herrera" },
+  { k:"loma de chivo",                lat:18.4860, lng:-70.0310, d:"Loma de Chivo, Herrera" },
+  { k:"iván guzmán klang",            lat:18.4801, lng:-70.0290, d:"Iván Guzmán Klang, Herrera" },
+  { k:"ivan guzman klang",            lat:18.4801, lng:-70.0290, d:"Iván Guzmán Klang, Herrera" },
+  { k:"juan guzman herrera",          lat:18.4805, lng:-70.0300, d:"Juan Guzmán, Herrera" },
+  { k:"las mercedes herrera",         lat:18.4815, lng:-70.0320, d:"Las Mercedes, Herrera" },
+  { k:"villa aura",                   lat:18.4820, lng:-70.0360, d:"Villa Aura, Herrera" },
+  { k:"olimpo herrera",               lat:18.4825, lng:-70.0395, d:"Olimpo, Herrera" },
+  { k:"enriquillo herrera",           lat:18.4818, lng:-70.0345, d:"Enriquillo, Herrera" },
+  { k:"pueblo nuevo herrera",         lat:18.4832, lng:-70.0368, d:"Pueblo Nuevo, Herrera" },
+  { k:"barrio san francisco herrera", lat:18.4840, lng:-70.0410, d:"Barrio San Francisco, Herrera" },
+  { k:"barrio duarte herrera",        lat:18.4808, lng:-70.0302, d:"Barrio Duarte, Herrera" },
+  { k:"barrio nuevo herrera",         lat:18.4828, lng:-70.0385, d:"Barrio Nuevo, Herrera" },
+  { k:"urbanizacion el cafe",         lat:18.4830, lng:-70.0282, d:"Urbanización El Café, Herrera" },
+  { k:"urbanizacion las palmas herrera",lat:18.4796,lng:-70.0352,d:"Urbanización Las Palmas, Herrera"},
+  { k:"res carmen renata",            lat:18.4835, lng:-70.0395, d:"Residencial Carmen Renata, Herrera" },
+  { k:"res altagracia herrera",       lat:18.4832, lng:-70.0290, d:"Residencial Altagracia, Herrera" },
+  { k:"res antonia herrera",          lat:18.4821, lng:-70.0372, d:"Residencial Antonia, Herrera" },
+  { k:"res santo domingo herrera",    lat:18.4826, lng:-70.0388, d:"Residencial Santo Domingo, Herrera" },
+  { k:"operaciones especiales herrera",lat:18.4842,lng:-70.0425, d:"Operaciones Especiales, Herrera" },
+  { k:"km 12 haina",                  lat:18.4550, lng:-70.0780, d:"Km 12 Haina, Santo Domingo Oeste" },
+  { k:"km 11 haina",                  lat:18.4420, lng:-70.0700, d:"Km 11 Haina" },
+  { k:"km 10 haina",                  lat:18.4350, lng:-70.0620, d:"Km 10 Haina" },
+  { k:"km 9 herrera",                 lat:18.5094, lng:-69.9863, d:"Km 9, Herrera" },
+  { k:"arroyo bonito",                lat:18.4935, lng:-70.0581, d:"Arroyo Bonito, SDO Oeste" },
+  { k:"la isabela herrera",           lat:18.5060, lng:-70.0621, d:"La Isabela, Santo Domingo Oeste" },
+  { k:"30 de mayo herrera",           lat:18.5101, lng:-70.0401, d:"30 de Mayo, SDO Oeste" },
+  // ── Manoguayabo ──
+  { k:"manoguayabo",                  lat:18.5101, lng:-70.0821, d:"Manoguayabo, Santo Domingo Oeste" },
+  { k:"buenos aires de manoguayabo",  lat:18.5120, lng:-70.0840, d:"Buenos Aires de Manoguayabo" },
+  { k:"el hoyo de manoguayabo",       lat:18.5090, lng:-70.0900, d:"El Hoyo de Manoguayabo" },
+  { k:"barrio san miguel manoguayabo",lat:18.5110, lng:-70.0810, d:"Barrio San Miguel, Manoguayabo" },
+  { k:"la venta manoguayabo",         lat:18.5140, lng:-70.0860, d:"La Venta, Manoguayabo" },
+  { k:"barrio duarte bayona",         lat:18.5080, lng:-70.0780, d:"Barrio Duarte, Bayona" },
+  { k:"barrio enriquillo bayona",     lat:18.5070, lng:-70.0760, d:"Barrio Enriquillo, Bayona" },
+  // ── Bayona ──
+  { k:"bayona",                       lat:18.5060, lng:-70.0750, d:"Bayona, Santo Domingo Oeste" },
+  { k:"el 8 de bayona",               lat:18.5055, lng:-70.0740, d:"El 8 de Bayona" },
+  { k:"buenos aires bayona",          lat:18.5065, lng:-70.0760, d:"Buenos Aires de Manoguayabo" },
+  // ── Engombe ──
+  { k:"engombe",                      lat:18.5020, lng:-70.0540, d:"Engombe, Santo Domingo Oeste" },
+  { k:"altos de engombe",             lat:18.5040, lng:-70.0560, d:"Altos de Engombe" },
+  { k:"colinas de engombe",           lat:18.5030, lng:-70.0550, d:"Colinas de Engombe" },
+  { k:"urbanizacion engombe",         lat:18.5022, lng:-70.0542, d:"Urbanización Engombe" },
+  { k:"barrio libertad engombe",      lat:18.5015, lng:-70.0525, d:"Barrio Libertad, Engombe" },
+  { k:"barrio libertador engombe",    lat:18.5012, lng:-70.0520, d:"Barrio El Libertador, Engombe" },
+  { k:"barrio progreso engombe",      lat:18.5025, lng:-70.0548, d:"Barrio Progreso, Engombe" },
+  { k:"barrio progreso ii",           lat:18.5028, lng:-70.0552, d:"Barrio Progreso II, Engombe" },
+  { k:"la urena",                     lat:18.5010, lng:-70.0510, d:"La Ureña, Santo Domingo Oeste" },
+  // ── Hato Nuevo ──
+  { k:"hato nuevo",                   lat:18.4980, lng:-70.1120, d:"Hato Nuevo, Santo Domingo Oeste" },
+  { k:"caballona",                    lat:18.4960, lng:-70.1140, d:"Caballona, Hato Nuevo" },
+  { k:"lecheria hato nuevo",          lat:18.4970, lng:-70.1130, d:"Lechería, Hato Nuevo" },
+  { k:"batey bienvenido",             lat:18.4950, lng:-70.1160, d:"Batey Bienvenido, Hato Nuevo" },
+  { k:"bienvenido hato nuevo",        lat:18.4950, lng:-70.1160, d:"Batey Bienvenido, Hato Nuevo" },
+  { k:"barrio horizonte",             lat:18.4975, lng:-70.1110, d:"Barrio Nuevo Horizonte, Hato Nuevo" },
+  { k:"barrio nuevo horizonte",       lat:18.4975, lng:-70.1110, d:"Barrio Nuevo Horizonte, Hato Nuevo" },
+  { k:"pueblo chico",                 lat:18.4985, lng:-70.1100, d:"Pueblo Chico, Hato Nuevo" },
+  // ── Las Caobas ──
+  { k:"las caobas",                   lat:18.5150, lng:-70.0650, d:"Las Caobas, Santo Domingo Oeste" },
+  { k:"las caobitas",                 lat:18.5140, lng:-70.0640, d:"Las Caobitas, Las Caobas" },
+  { k:"las colinas caobas",           lat:18.5160, lng:-70.0660, d:"Las Colinas, Las Caobas" },
+  { k:"el libertador caobas",         lat:18.5130, lng:-70.0630, d:"El Libertador, Las Caobas" },
+  { k:"savica",                       lat:18.5125, lng:-70.0620, d:"Savica, Las Caobas" },
+  { k:"buenos aires caobas",          lat:18.5145, lng:-70.0645, d:"Buenos Aires de Las Caobas" },
+  { k:"altos de caobas",              lat:18.5165, lng:-70.0665, d:"Altos de Las Caobas" },
+  { k:"urbanizacion caobas",          lat:18.5155, lng:-70.0655, d:"Urbanización Las Caobas" },
+  // ── Residenciales SDO Oeste ──
+  { k:"res brisas del oeste",         lat:18.5080, lng:-70.0600, d:"Residencial Brisas del Oeste" },
+  { k:"brisas del oeste",             lat:18.5080, lng:-70.0600, d:"Residencial Brisas del Oeste" },
+  { k:"ciudad agraria",               lat:18.5200, lng:-70.0560, d:"Ciudad Agraria, Santo Domingo Oeste" },
+  { k:"res don honorio",              lat:18.4820, lng:-70.0120, d:"Residencial Don Honorio" },
+  { k:"colinas del oeste",            lat:18.5230, lng:-70.0580, d:"Urbanización Colinas del Oeste" },
+  { k:"los alcarrizos",               lat:18.5200, lng:-70.0560, d:"Los Alcarrizos, SDO Oeste" },
+  // ── Avenidas SDO Oeste ──
+  { k:"avenida isabel aguiar",        lat:18.4950, lng:-70.0480, d:"Avenida Isabel Aguiar, SDO Oeste" },
+  { k:"isabel aguiar",                lat:18.4950, lng:-70.0480, d:"Avenida Isabel Aguiar, SDO Oeste" },
+  { k:"avenida las palmas herrera",   lat:18.4800, lng:-70.0340, d:"Avenida Las Palmas, Herrera" },
+  { k:"prolongacion 27 febrero",      lat:18.4900, lng:-70.0300, d:"Prolongación 27 de Febrero, SDO Oeste" },
+  { k:"prolongacion independencia",   lat:18.4780, lng:-70.0480, d:"Prolongación Independencia, SDO Oeste" },
+  { k:"autopista duarte herrera",     lat:18.5200, lng:-70.0500, d:"Autopista Duarte, SDO Oeste" },
+  { k:"circunvalacion norte",         lat:18.5400, lng:-70.0120, d:"Circunvalación Norte, SDO" },
+];
+
+// Combinar con RD_LANDMARKS si existe, o crear array nuevo
+const ALL_LANDMARKS = typeof RD_LANDMARKS !== "undefined"
+  ? [...RD_LANDMARKS, ...SDO_OESTE_LANDMARKS]
+  : SDO_OESTE_LANDMARKS;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTOR DE SECTOR — identifica el sector más específico en una dirección
+// larga y lo usa para anclar la búsqueda geográficamente
+// ─────────────────────────────────────────────────────────────────────────────
+const KNOWN_SECTORS_RX = /\b(herrera|manoguayabo|bayona|engombe|hato\s+nuevo|las\s+caobas|caballona|bienvenido|lecheria|savica|la\s+venta|ciudad\s+agraria|los\s+alcarrizos|piantini|naco|gazcue|bella\s+vista|villa\s+mella|guaricanos|arroyo\s+hondo|los\s+girasoles|los\s+prados|los\s+rios|zona\s+colonial|los\s+mina|san\s+isidro|alma\s+rosa|boca\s+chica|san\s+pedro|santiago|la\s+romana)\b/gi;
+
+const extractSectorAnchor = (raw) => {
+  // Corrección ortográfica primero
+  const corrected = correctSectorSpelling(raw);
+  const matches = corrected.match(KNOWN_SECTORS_RX);
+  if (!matches || matches.length === 0) return corrected;
+  // Sector más específico detectado (último en la dirección = más específico)
+  const sector = matches[matches.length - 1];
+  // Si el sector no está ya suficientemente representado al final, añadirlo
+  const endsWithSector = new RegExp(sector.replace(/\s+/g, "\s+") + "\b", "i").test(corrected.split(",").pop() || "");
+  if (!endsWithSector) {
+    return corrected + ", " + sector;
+  }
+  return corrected;
+};
+
+// Lookup en la DB combinada (RD_LANDMARKS + SDO_OESTE_LANDMARKS)
+const normLandmark = (s) =>
+  (s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ").trim();
+
+const lookupLandmark = (raw) => {
+  const corrected = correctSectorSpelling(raw || "");
+  const q = normLandmark(corrected);
+  if (!q || q.length < 3) return null;
+
+  let best = null, bestScore = 0;
+  const db = typeof ALL_LANDMARKS !== "undefined" ? ALL_LANDMARKS : SDO_OESTE_LANDMARKS;
+
+  for (const lm of db) {
+    const k = normLandmark(lm.k);
+    if (q === k || q.includes(k) || k.includes(q)) {
+      const score = k.length;
+      if (score > bestScore) { bestScore = score; best = lm; }
+      continue;
+    }
+    const qW = q.split(" "), kW = k.split(" ");
+    const common = qW.filter(w => w.length > 2 && kW.includes(w));
+    if (common.length >= 2 || (common.length === 1 && kW.length <= 2)) {
+      const score = common.length * 10 + k.length;
+      if (score > bestScore) { bestScore = score; best = lm; }
+    }
+  }
+
+  if (!best || bestScore < 5) return null;
+  return {
+    ok: true, lat: best.lat, lng: best.lng,
+    display: best.d,
+    confidence: 96,
+    types: ["landmark"],
+    allResults: [],
+    source: "landmark_db",
+  };
+};
+
 // --- GEOCODER CACHE (in-memory, evita llamadas repetidas a Google) ------------
 const _geoCache = new Map();
 
@@ -5784,13 +6048,20 @@ const searchWithPlaces = async (rawAddress) => {
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
 const geocodeWithGoogle = async (rawAddress) => {
-  // ── Cache hit ──────────────────────────────────────────────────────────────
-  const cacheKey = rawAddress.trim().toLowerCase();
+  // ── FASE 0: Landmark lookup instantáneo (0ms, sin red) ────────────────────
+  const lmHit = lookupLandmark(rawAddress);
+  if (lmHit) return lmHit;
+
+  // ── FASE 0b: Corrección ortográfica antes de todo ─────────────────────────
+  const correctedAddress = extractSectorAnchor(rawAddress);
+
+  // ── Cache hit (usando dirección corregida) ────────────────────────────────
+  const cacheKey = correctedAddress.trim().toLowerCase();
   if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
 
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress);
+  const queries = buildQueryVariants(correctedAddress);
 
   // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
   for (const q of queries) {
@@ -5893,7 +6164,9 @@ const geocodeWithGoogle = async (rawAddress) => {
 // Build multiple query variants for maximum hit rate
 // Estrategia: de más específico a más general, hasta que Google responda
 const buildQueryVariants = (raw) => {
-  const s = String(raw || "").trim();
+  // Aplicar corrección ortográfica antes de construir variantes
+  const corrected = correctSectorSpelling(String(raw || "").trim());
+  const s = corrected;
   if (!s) return [];
 
   const expanded = expandRDAddress(s);
@@ -5902,19 +6175,25 @@ const buildQueryVariants = (raw) => {
   // --- Detección de contexto geográfico ---
   const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
   const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
-  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
+  const isSDOOeste = /herrera|manoguayabo|bayona|engombe|hato\s*nuevo|las\s*caobas|caballona|haina|los\s*alcarrizos/i.test(s);
 
-  const RD = ", República Dominicana";
-  const SD = ", Santo Domingo" + RD;
-  const DN = ", Distrito Nacional" + RD;
+  const RD   = ", República Dominicana";
+  const SD   = ", Santo Domingo" + RD;
+  const DN   = ", Distrito Nacional" + RD;
+  const SDOW = ", Santo Domingo Oeste" + RD;
 
-  // 1. Versión expandida + ciudad más completa (más precisa primero)
+  // 1. Versión expandida — SDO Oeste primero si se detectó ese contexto
   if (!hasCountry && !hasCity) {
-    variants.add(expanded + SD);
-    variants.add(expanded + DN);
-    variants.add(expanded + ", Santo Domingo Este" + RD);
-    variants.add(expanded + ", Santo Domingo Oeste" + RD);
-    variants.add(expanded + ", Santo Domingo Norte" + RD);
+    if (isSDOOeste) {
+      variants.add(expanded + SDOW);
+      variants.add(expanded + SD);
+    } else {
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + SDOW);
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+    }
   } else if (!hasCountry) {
     variants.add(expanded + RD);
     variants.add(expanded);
@@ -6051,6 +6330,17 @@ const expandRDAddress = (s) => {
     [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
     [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
     [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
+    // SDO Oeste — herrera y zona
+    [/\bher[eé]r[ao]\b/gi,     "Herrera, Santo Domingo Oeste"],
+    [/\bmanogua?ya?bo\b/gi,    "Manoguayabo, Santo Domingo Oeste"],
+    [/\bbayona\b/gi,           "Bayona, Santo Domingo Oeste"],
+    [/\bengombe\b/gi,          "Engombe, Santo Domingo Oeste"],
+    [/\bhato\s+nuevo\b/gi,    "Hato Nuevo, Santo Domingo Oeste"],
+    [/\blas\s+caobas\b/gi,    "Las Caobas, Santo Domingo Oeste"],
+    [/\bcaballona\b/gi,        "Caballona, Hato Nuevo"],
+    [/\blos\s+alcarrizos\b/gi,"Los Alcarrizos, Santo Domingo Oeste"],
+    [/\bisabel\s+aguiar\b/gi, "Avenida Isabel Aguiar"],
+    [/\bciudad\s+agraria\b/gi,"Ciudad Agraria, Santo Domingo Oeste"],
   ];
 
   for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
@@ -6105,7 +6395,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\d{1,4}/g);
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
