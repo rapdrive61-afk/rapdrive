@@ -294,30 +294,66 @@ const PageDashboard = () => {
 
   // Listen to all driver locations from Firebase
   useEffect(() => {
-    // Initial load
-    FB.get("locations").then(data => {
-      if (data && typeof data === "object") {
-        setLiveLocations(data);
-        if (!window.__rdLocations) window.__rdLocations = {};
-        Object.assign(window.__rdLocations, data);
-      }
-    });
-    // Real-time updates via SSE
-    const unsub = FB.listen("locations", (data) => {
-      if (data && typeof data === "object") {
-        setLiveLocations(prev => ({ ...prev, ...data }));
-        if (!window.__rdLocations) window.__rdLocations = {};
-        Object.assign(window.__rdLocations, data);
-      }
-    });
-    // Polling backup every 5s
-    const t = setInterval(() => {
-      FB.get("locations").then(data => {
-        if (data && typeof data === "object") {
-          setLiveLocations(prev => ({ ...prev, ...data }));
+    const STALE_MS = 5 * 60 * 1000; // 5 minutos = posición vieja
+
+    // Filtra ubicaciones: solo muestra las que son recientes (< 5 min) y online
+    const filterLocs = (data) => {
+      if (!data || typeof data !== "object") return {};
+      const now = Date.now();
+      const filtered = {};
+      Object.entries(data).forEach(([id, loc]) => {
+        if (!loc || !loc.lat || !loc.lng) return;
+        const age = now - (loc.ts || 0);
+        const isRecent = age < STALE_MS;
+        const isOnline = loc.online !== false;
+        if (isRecent && isOnline) {
+          filtered[id] = loc;
+        } else {
+          // Limpiar nodo viejo de Firebase para no acumularlo
+          FB.set(`locations/${id}`, null);
+          // Quitar marker del mapa si existe
+          if (driverMarkersRef.current[id]) {
+            driverMarkersRef.current[id].marker?.setMap(null);
+            driverMarkersRef.current[id].circle?.setMap(null);
+            delete driverMarkersRef.current[id];
+          }
         }
       });
-    }, 5000);
+      return filtered;
+    };
+    // Carga inicial — filtrar posiciones viejas inmediatamente
+    FB.get("locations").then(data => {
+      const clean = filterLocs(data);
+      setLiveLocations(clean);
+      if (!window.__rdLocations) window.__rdLocations = {};
+      Object.assign(window.__rdLocations, clean);
+    });
+
+    // SSE en tiempo real
+    const unsub = FB.listen("locations", (data) => {
+      const clean = filterLocs(data);
+      setLiveLocations(prev => {
+        // Quitar del estado los drivers que filterLocs eliminó
+        const next = { ...prev };
+        if (data) Object.keys(data).forEach(id => { if (!clean[id]) delete next[id]; });
+        return { ...next, ...clean };
+      });
+      if (!window.__rdLocations) window.__rdLocations = {};
+      window.__rdLocations = { ...window.__rdLocations, ...clean };
+    });
+
+    // Polling cada 10s — también limpia nodos viejos
+    const t = setInterval(() => {
+      FB.get("locations").then(data => {
+        const clean = filterLocs(data);
+        setLiveLocations(prev => {
+          const next = { ...prev };
+          if (data) Object.keys(data).forEach(id => { if (!clean[id]) delete next[id]; });
+          return { ...next, ...clean };
+        });
+      });
+    }, 10000);
+
     return () => { unsub(); clearInterval(t); };
   }, []);
 
@@ -325,6 +361,15 @@ const PageDashboard = () => {
   useEffect(() => {
     if (!gMapRef.current || !window.google) return;
     const mensajeros = window.__rdMensajeros || DEFAULT_MENSAJEROS;
+
+    // Quitar markers de drivers que ya no están en liveLocations (desconectados/viejos)
+    Object.keys(driverMarkersRef.current).forEach(driverId => {
+      if (!liveLocations[driverId]) {
+        driverMarkersRef.current[driverId]?.marker?.setMap(null);
+        driverMarkersRef.current[driverId]?.circle?.setMap(null);
+        delete driverMarkersRef.current[driverId];
+      }
+    });
 
     Object.entries(liveLocations).forEach(([driverId, loc]) => {
       if (!loc || !loc.lat || !loc.lng) return;
