@@ -378,12 +378,11 @@ const PageDashboard = () => {
           const mins = Math.round((Date.now() - (loc.ts||0)) / 60000);
           const timeAgo = mins === 0 ? "ahora mismo" : mins === 1 ? "hace 1 min" : `hace ${mins} min`;
           infoWindowRef.current.setContent(`
-            <div style="font-family:-apple-system,sans-serif;padding:4px 6px;min-width:160px">
-              <div style="font-weight:800;font-size:13px;margin-bottom:3px">${loc.driverName||driverId}</div>
-              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">🕐 Actualizado ${timeAgo}</div>
-              ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6">📦 ${loc.routeName}</div>` : ""}
-              ${loc.accuracy ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">Precisión: ±${loc.accuracy}m</div>` : ""}
-              <div style="font-size:10px;color:#9ca3af">${loc.lat?.toFixed(5)}, ${loc.lng?.toFixed(5)}</div>
+            <div style="font-family:system-ui,-apple-system,sans-serif;padding:10px 12px;min-width:180px;background:#0a0f1a;border-radius:10px;border:1px solid #1e2d3d;box-shadow:0 8px 24px rgba(0,0,0,0.7)">
+              <div style="font-weight:800;font-size:13px;margin-bottom:5px;color:#f1f5f9;letter-spacing:-0.2px">${loc.driverName||driverId}</div>
+              <div style="font-size:11px;color:#4b5563;margin-bottom:3px">🕐 ${timeAgo}</div>
+              ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6;margin-bottom:2px">📦 ${loc.routeName}</div>` : ""}
+              ${loc.accuracy ? `<div style="font-size:10px;color:#374151">±${loc.accuracy}m precisión</div>` : ""}
             </div>
           `);
           infoWindowRef.current.open({ map: gMapRef.current, anchor: marker });
@@ -495,7 +494,10 @@ const PageDashboard = () => {
           map: gMapRef.current,
           position: { lat, lng },
           animation: window.google.maps.Animation.DROP,
-          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor:"#3b82f6", fillOpacity:1, strokeColor:"white", strokeWeight:2.5 },
+          icon: (() => {
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52"><defs><filter id="ds"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/></filter></defs><path d="M20 1C11.2 1 4 8.2 4 17c0 11.8 16 34 16 34s16-22.2 16-34C36 8.2 28.8 1 20 1z" fill="#3b82f6" filter="url(#ds)" stroke="white" stroke-width="1.5"/><circle cx="20" cy="17" r="9" fill="rgba(0,0,0,0.15)"/><path d="M15 17l3 3.5 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+          return { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg), scaledSize: new window.google.maps.Size(40,52), anchor: new window.google.maps.Point(20,52) };
+        })(),
         });
       }
     } catch(e) {
@@ -723,31 +725,62 @@ const PageRoutes = () => {
       if (ordered.length > 1) {
         const line = new window.google.maps.Polyline({
           map: gMapRef.current,
-          path: [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...ordered.map(s=>({lat:s.lat,lng:s.lng}))],
+          path: [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...ordered.map(s=>({lat:s.lat,lng:s.lng})), { lat: DEPOT.lat, lng: DEPOT.lng }],
           strokeColor: "#3b82f6",
-          strokeOpacity: 0.5,
-          strokeWeight: 2,
+          strokeOpacity: 0.75,
+          strokeWeight: 3,
+          icons: [{
+            icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.5, strokeColor: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 1, strokeWeight: 1 },
+            repeat: "90px", offset: "45px"
+          }],
         });
         markersRef.current.push(line);
       }
 
-      // Drop markers per stop
+      // DEPOT marker — home icon
+      const depotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+        <defs><filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/></filter></defs>
+        <circle cx="22" cy="22" r="20" fill="#1d4ed8" stroke="white" stroke-width="2" filter="url(#ds)"/>
+        <path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/>
+      </svg>`;
+      new window.google.maps.Marker({
+        map: gMapRef.current,
+        position: { lat: DEPOT.lat, lng: DEPOT.lng },
+        title: "Base",
+        zIndex: 999,
+        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
+      });
+
+      // Drop markers per stop — modern teardrop with status
       stops.forEach(stop => {
-        const isDone    = stop.driverStatus === "delivered";
-        const isProb    = stop.driverStatus === "problema";
-        const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-          <circle cx="16" cy="16" r="14" fill="${color}" opacity="${isDone?0.7:1}" stroke="white" stroke-width="2"/>
-          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+        const isDone = stop.driverStatus === "delivered";
+        const isProb = stop.driverStatus === "problema";
+        const isCur  = stop.driverStatus === "en_camino";
+        const col = isDone ? "#10b981" : isProb ? "#ef4444" : isCur ? "#3b82f6" : "#94a3b8";
+        const num = stop.stopNum || "?";
+        const sz  = isCur ? 40 : 32;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${Math.round(sz*1.3)}" viewBox="0 0 40 52">
+          <defs><filter id="s"><feDropShadow dx="0" dy="3" stdDeviation="${isCur?3:2}" flood-color="#000" flood-opacity="${isDone?0.3:0.5}"/></filter></defs>
+          <path d="M20 1C11.2 1 4 8.2 4 17c0 11.8 16 34 16 34s16-22.2 16-34C36 8.2 28.8 1 20 1z"
+            fill="${col}" opacity="${isDone?0.6:1}" filter="url(#s)"
+            stroke="${isCur?"white":"rgba(0,0,0,0.15)"}" stroke-width="${isCur?1.5:0.5}"/>
+          <circle cx="20" cy="17" r="9" fill="rgba(0,0,0,0.15)"/>
+          ${isDone
+            ? `<path d="M14 17l4 4 8-8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
+            : isProb
+              ? `<text x="20" y="22" text-anchor="middle" font-size="13" font-weight="900" fill="white" font-family="system-ui">!</text>`
+              : `<text x="20" y="22" text-anchor="middle" font-size="${num>9?9:11}" font-weight="800" fill="white" font-family="system-ui,Arial">${num}</text>`
+          }
         </svg>`;
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
           position: { lat: stop.lat, lng: stop.lng },
           title: `#${stop.stopNum} ${stop.client||""}`,
+          zIndex: isCur ? 100 : isDone ? 1 : 10,
           icon: {
             url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-            scaledSize: new window.google.maps.Size(32, 32),
-            anchor: new window.google.maps.Point(16, 16),
+            scaledSize: new window.google.maps.Size(sz, Math.round(sz*1.3)),
+            anchor: new window.google.maps.Point(sz/2, Math.round(sz*1.3)),
           },
         });
         markersRef.current.push(marker);
@@ -5698,194 +5731,6 @@ const loadSheetJS = () => new Promise((res) => {
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CORRECTOR ORTOGRÁFICO DE SECTORES — SDO Oeste y variantes comunes
-// ─────────────────────────────────────────────────────────────────────────────
-const SECTOR_ALIASES = [
-  [/\bcaf[eé]\s*d[eo]\s*her[eé]r[ao]\b/gi,          "El Café de Herrera"],
-  [/\bcaf[eé]\s*her[eé]r[ao]\b/gi,                   "El Café de Herrera"],
-  [/\bel\s*caf[eé]\s*her[eé]r[ao]\b/gi,              "El Café de Herrera"],
-  [/\bensanche\s+altagracia\s+(?:de\s+)?her[eé]r[ao]\b/gi, "El Café de Herrera"],
-  [/\bens\.?\s*altagracia\s+(?:de\s+)?her[eé]r[ao]\b/gi,   "El Café de Herrera"],
-  [/\bher[eé]r[ao]\b(?!\s+(?:de|del|la))/gi,         "Herrera, Santo Domingo Oeste"],
-  [/\bbuenos\s+aires\s+(?:de\s+)?her[eé]r[ao]\b/gi,  "Buenos Aires de Herrera"],
-  [/\blas\s+palmas\s+(?:de\s+)?her[eé]r[ao]\b/gi,    "Las Palmas de Herrera"],
-  [/\bjuan\s+guzm[aá]n\s+(?:de\s+)?her[eé]r[ao]\b/gi,"Juan Guzmán Klang, Herrera"],
-  [/\biv[aá]n\s+guzm[aá]n\b/gi,                      "Iván Guzmán Klang, Herrera"],
-  [/\blas\s+mercedes\s+(?:de\s+)?her[eé]r[ao]\b/gi,  "Las Mercedes, Herrera"],
-  [/\bvilla\s+aura\b/gi,                              "Villa Aura, Herrera"],
-  [/\bolimpo\b/gi,                                    "Olimpo, Herrera"],
-  [/\benriquillo\s+(?:de\s+)?her[eé]r[ao]\b/gi,      "Enriquillo, Herrera"],
-  [/\bpueblo\s+nuevo\s+(?:de\s+)?her[eé]r[ao]\b/gi,  "Pueblo Nuevo, Herrera"],
-  [/\bzona\s+ind(?:ustrial)?\s+(?:de\s+)?her[eé]r[ao]\b/gi, "Zona Industrial Herrera"],
-  [/\bmanogua?ya?bo\b/gi,                             "Manoguayabo"],
-  [/\bbuenos\s+aires\s+(?:de\s+)?manoguayabo\b/gi,   "Buenos Aires de Manoguayabo"],
-  [/\bel\s+hoyo\s+(?:de\s+)?manoguayabo\b/gi,        "El Hoyo de Manoguayabo"],
-  [/\bla\s+venta\b/gi,                                "La Venta, Manoguayabo"],
-  [/\bel\s+8\s+(?:de\s+)?bayona\b/gi,                "El 8 de Bayona"],
-  [/\bbayona\b/gi,                                    "Bayona, Santo Domingo Oeste"],
-  [/\bengombe\b/gi,                                   "Engombe, Santo Domingo Oeste"],
-  [/\baltos\s+(?:de\s+)?engombe\b/gi,                 "Altos de Engombe"],
-  [/\bcolinas\s+(?:de\s+)?engombe\b/gi,               "Colinas de Engombe"],
-  [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,            "Urbanización Engombe"],
-  [/\bbarrio\s+(?:el\s+)?libertad(?:or)?\b/gi,        "Barrio Libertad, Engombe"],
-  [/\bbarrio\s+progreso\b/gi,                         "Barrio Progreso, Engombe"],
-  [/\bhato\s+nuevo\b/gi,                              "Hato Nuevo, Santo Domingo Oeste"],
-  [/\bcaballona\b/gi,                                 "Caballona, Hato Nuevo"],
-  [/\blecheria\b/gi,                                  "Lechería, Hato Nuevo"],
-  [/\bbatey\s+bienvenido\b/gi,                        "Batey Bienvenido, Hato Nuevo"],
-  [/\bbienvenido\b/gi,                                "Batey Bienvenido, Hato Nuevo"],
-  [/\bbarrio\s+(?:nuevo\s+)?horizonte\b/gi,           "Barrio Nuevo Horizonte, Hato Nuevo"],
-  [/\bpueblo\s+chico\b/gi,                            "Pueblo Chico, Hato Nuevo"],
-  [/\blas\s+caobas\b/gi,                              "Las Caobas, Santo Domingo Oeste"],
-  [/\blas\s+caobitas\b/gi,                            "Las Caobitas, Las Caobas"],
-  [/\bel\s+libertador\b/gi,                           "El Libertador, Las Caobas"],
-  [/\bsavica\b/gi,                                    "Savica, Las Caobas"],
-  [/\baltos\s+(?:de\s+)?(?:las\s+)?caobas\b/gi,      "Altos de Las Caobas"],
-  [/\bres(?:idencial)?\s+carmen\s+renata\b/gi,        "Residencial Carmen Renata, Herrera"],
-  [/\bres(?:idencial)?\s+brisas\s+(?:del\s+)?oeste\b/gi, "Residencial Brisas del Oeste"],
-  [/\bciudad\s+agraria\b/gi,                          "Ciudad Agraria, Santo Domingo Oeste"],
-  [/\bres(?:idencial)?\s+altagracia\b/gi,             "Residencial Altagracia, Herrera"],
-  [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi,      "Urbanización El Café, Herrera"],
-  [/\bres(?:idencial)?\s+don\s+honorio\b/gi,          "Residencial Don Honorio"],
-  [/\bkm\.?\s*(\d{1,2})\s+(?:de\s+)?haina\b/gi,      "Km $1 Haina, Santo Domingo Oeste"],
-  [/\bloma\s+(?:de\s+)?chivo\b/gi,                   "Loma de Chivo, Herrera"],
-  [/\bisabel\s+aguiar\b/gi,                           "Avenida Isabel Aguiar, Santo Domingo Oeste"],
-  [/\bprol(?:ongaci[oó]n)?\s+27\s+(?:de\s+)?febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
-  [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi,     "Prolongación Independencia, Santo Domingo Oeste"],
-  [/\barroyo\s+bonito\b/gi,                           "Arroyo Bonito, Santo Domingo Oeste"],
-  [/\bbarrio\s+(?:nuevo|nueva)\b(?!\s+horizonte)/gi,  "Barrio Nuevo, Santo Domingo Oeste"],
-  [/\bbarrio\s+san\s+francisco\b/gi,                  "Barrio San Francisco, Herrera"],
-  [/\bbarrio\s+enriquillo\b/gi,                       "Barrio Enriquillo, Santo Domingo Oeste"],
-  [/\blos\s+alcarrizos\b/gi,                          "Los Alcarrizos, Santo Domingo Oeste"],
-];
-
-const correctSectorSpelling = (raw) => {
-  let s = raw || "";
-  for (const [pat, repl] of SECTOR_ALIASES) s = s.replace(pat, repl);
-  return s;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LANDMARKS SDO OESTE — 86 puntos con coordenadas verificadas
-// ─────────────────────────────────────────────────────────────────────────────
-const SDO_OESTE_LANDMARKS = [
-  { k:"herrera",                      lat:18.4822, lng:-70.0412, d:"Herrera, Santo Domingo Oeste" },
-  { k:"el cafe de herrera",           lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
-  { k:"cafe de herrera",              lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
-  { k:"ensanche altagracia herrera",  lat:18.4830, lng:-70.0280, d:"El Café de Herrera, Herrera" },
-  { k:"buenos aires de herrera",      lat:18.4810, lng:-70.0380, d:"Buenos Aires de Herrera" },
-  { k:"las palmas de herrera",        lat:18.4798, lng:-70.0350, d:"Las Palmas de Herrera" },
-  { k:"zona industrial herrera",      lat:18.4845, lng:-70.0440, d:"Zona Industrial Herrera" },
-  { k:"loma de chivo",                lat:18.4860, lng:-70.0310, d:"Loma de Chivo, Herrera" },
-  { k:"ivan guzman klang",            lat:18.4801, lng:-70.0290, d:"Iván Guzmán Klang, Herrera" },
-  { k:"juan guzman herrera",          lat:18.4805, lng:-70.0300, d:"Juan Guzmán, Herrera" },
-  { k:"las mercedes herrera",         lat:18.4815, lng:-70.0320, d:"Las Mercedes, Herrera" },
-  { k:"villa aura",                   lat:18.4820, lng:-70.0360, d:"Villa Aura, Herrera" },
-  { k:"olimpo herrera",               lat:18.4825, lng:-70.0395, d:"Olimpo, Herrera" },
-  { k:"enriquillo herrera",           lat:18.4818, lng:-70.0345, d:"Enriquillo, Herrera" },
-  { k:"pueblo nuevo herrera",         lat:18.4832, lng:-70.0368, d:"Pueblo Nuevo, Herrera" },
-  { k:"barrio san francisco herrera", lat:18.4840, lng:-70.0410, d:"Barrio San Francisco, Herrera" },
-  { k:"barrio nuevo herrera",         lat:18.4828, lng:-70.0385, d:"Barrio Nuevo, Herrera" },
-  { k:"urbanizacion el cafe",         lat:18.4830, lng:-70.0282, d:"Urbanización El Café, Herrera" },
-  { k:"res carmen renata",            lat:18.4835, lng:-70.0395, d:"Residencial Carmen Renata, Herrera" },
-  { k:"res altagracia herrera",       lat:18.4832, lng:-70.0290, d:"Residencial Altagracia, Herrera" },
-  { k:"res santo domingo herrera",    lat:18.4826, lng:-70.0388, d:"Residencial Santo Domingo, Herrera" },
-  { k:"operaciones especiales",       lat:18.4842, lng:-70.0425, d:"Operaciones Especiales, Herrera" },
-  { k:"km 12 haina",                  lat:18.4550, lng:-70.0780, d:"Km 12 Haina, Santo Domingo Oeste" },
-  { k:"km 11 haina",                  lat:18.4420, lng:-70.0700, d:"Km 11 Haina" },
-  { k:"km 10 haina",                  lat:18.4350, lng:-70.0620, d:"Km 10 Haina" },
-  { k:"arroyo bonito",                lat:18.4935, lng:-70.0581, d:"Arroyo Bonito, SDO Oeste" },
-  { k:"loma de chivo herrera",        lat:18.4860, lng:-70.0310, d:"Loma de Chivo, Herrera" },
-  { k:"manoguayabo",                  lat:18.5101, lng:-70.0821, d:"Manoguayabo, Santo Domingo Oeste" },
-  { k:"buenos aires de manoguayabo",  lat:18.5120, lng:-70.0840, d:"Buenos Aires de Manoguayabo" },
-  { k:"el hoyo de manoguayabo",       lat:18.5090, lng:-70.0900, d:"El Hoyo de Manoguayabo" },
-  { k:"barrio san miguel manoguayabo",lat:18.5110, lng:-70.0810, d:"Barrio San Miguel, Manoguayabo" },
-  { k:"la venta manoguayabo",         lat:18.5140, lng:-70.0860, d:"La Venta, Manoguayabo" },
-  { k:"bayona",                       lat:18.5060, lng:-70.0750, d:"Bayona, Santo Domingo Oeste" },
-  { k:"el 8 de bayona",               lat:18.5055, lng:-70.0740, d:"El 8 de Bayona" },
-  { k:"barrio duarte bayona",         lat:18.5080, lng:-70.0780, d:"Barrio Duarte, Bayona" },
-  { k:"barrio enriquillo bayona",     lat:18.5070, lng:-70.0760, d:"Barrio Enriquillo, Bayona" },
-  { k:"engombe",                      lat:18.5020, lng:-70.0540, d:"Engombe, Santo Domingo Oeste" },
-  { k:"altos de engombe",             lat:18.5040, lng:-70.0560, d:"Altos de Engombe" },
-  { k:"colinas de engombe",           lat:18.5030, lng:-70.0550, d:"Colinas de Engombe" },
-  { k:"urbanizacion engombe",         lat:18.5022, lng:-70.0542, d:"Urbanización Engombe" },
-  { k:"barrio libertad engombe",      lat:18.5015, lng:-70.0525, d:"Barrio Libertad, Engombe" },
-  { k:"barrio libertador engombe",    lat:18.5012, lng:-70.0520, d:"Barrio El Libertador, Engombe" },
-  { k:"barrio progreso engombe",      lat:18.5025, lng:-70.0548, d:"Barrio Progreso, Engombe" },
-  { k:"hato nuevo",                   lat:18.4980, lng:-70.1120, d:"Hato Nuevo, Santo Domingo Oeste" },
-  { k:"caballona",                    lat:18.4960, lng:-70.1140, d:"Caballona, Hato Nuevo" },
-  { k:"lecheria hato nuevo",          lat:18.4970, lng:-70.1130, d:"Lechería, Hato Nuevo" },
-  { k:"batey bienvenido",             lat:18.4950, lng:-70.1160, d:"Batey Bienvenido, Hato Nuevo" },
-  { k:"bienvenido hato nuevo",        lat:18.4950, lng:-70.1160, d:"Batey Bienvenido, Hato Nuevo" },
-  { k:"barrio horizonte",             lat:18.4975, lng:-70.1110, d:"Barrio Nuevo Horizonte, Hato Nuevo" },
-  { k:"barrio nuevo horizonte",       lat:18.4975, lng:-70.1110, d:"Barrio Nuevo Horizonte, Hato Nuevo" },
-  { k:"pueblo chico",                 lat:18.4985, lng:-70.1100, d:"Pueblo Chico, Hato Nuevo" },
-  { k:"las caobas",                   lat:18.5150, lng:-70.0650, d:"Las Caobas, Santo Domingo Oeste" },
-  { k:"las caobitas",                 lat:18.5140, lng:-70.0640, d:"Las Caobitas, Las Caobas" },
-  { k:"las colinas caobas",           lat:18.5160, lng:-70.0660, d:"Las Colinas, Las Caobas" },
-  { k:"el libertador caobas",         lat:18.5130, lng:-70.0630, d:"El Libertador, Las Caobas" },
-  { k:"savica",                       lat:18.5125, lng:-70.0620, d:"Savica, Las Caobas" },
-  { k:"buenos aires caobas",          lat:18.5145, lng:-70.0645, d:"Buenos Aires de Las Caobas" },
-  { k:"altos de caobas",              lat:18.5165, lng:-70.0665, d:"Altos de Las Caobas" },
-  { k:"urbanizacion caobas",          lat:18.5155, lng:-70.0655, d:"Urbanización Las Caobas" },
-  { k:"res brisas del oeste",         lat:18.5080, lng:-70.0600, d:"Residencial Brisas del Oeste" },
-  { k:"brisas del oeste",             lat:18.5080, lng:-70.0600, d:"Residencial Brisas del Oeste" },
-  { k:"ciudad agraria",               lat:18.5200, lng:-70.0560, d:"Ciudad Agraria, Santo Domingo Oeste" },
-  { k:"res don honorio",              lat:18.4820, lng:-70.0120, d:"Residencial Don Honorio" },
-  { k:"colinas del oeste",            lat:18.5230, lng:-70.0580, d:"Urbanización Colinas del Oeste" },
-  { k:"los alcarrizos",               lat:18.5200, lng:-70.0560, d:"Los Alcarrizos, SDO Oeste" },
-  { k:"avenida isabel aguiar",        lat:18.4950, lng:-70.0480, d:"Avenida Isabel Aguiar, SDO Oeste" },
-  { k:"isabel aguiar",                lat:18.4950, lng:-70.0480, d:"Avenida Isabel Aguiar, SDO Oeste" },
-  { k:"prolongacion 27 febrero",      lat:18.4900, lng:-70.0300, d:"Prolongación 27 de Febrero, SDO Oeste" },
-  { k:"prolongacion independencia",   lat:18.4780, lng:-70.0480, d:"Prolongación Independencia, SDO Oeste" },
-  { k:"autopista duarte herrera",     lat:18.5200, lng:-70.0500, d:"Autopista Duarte, SDO Oeste" },
-];
-
-// Normaliza texto para búsqueda
-const normLandmark = (s) =>
-  (s || "").toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ").trim();
-
-// Lookup en DB de landmarks (SDO Oeste + cualquier base existente)
-const lookupLandmark = (raw) => {
-  const corrected = correctSectorSpelling(raw || "");
-  const q = normLandmark(corrected);
-  if (!q || q.length < 3) return null;
-  let best = null, bestScore = 0;
-  const db = SDO_OESTE_LANDMARKS;
-  for (const lm of db) {
-    const k = normLandmark(lm.k);
-    if (q === k || q.includes(k) || k.includes(q)) {
-      const score = k.length;
-      if (score > bestScore) { bestScore = score; best = lm; }
-      continue;
-    }
-    const qW = q.split(" "), kW = k.split(" ");
-    const common = qW.filter(w => w.length > 2 && kW.includes(w));
-    if (common.length >= 2 || (common.length === 1 && kW.length <= 2)) {
-      const score = common.length * 10 + k.length;
-      if (score > bestScore) { bestScore = score; best = lm; }
-    }
-  }
-  if (!best || bestScore < 5) return null;
-  return { ok:true, lat:best.lat, lng:best.lng, display:best.d, confidence:96, types:["landmark"], allResults:[], source:"landmark_db" };
-};
-
-// Extractor de contexto — ancla la dirección al sector detectado
-const KNOWN_SECTORS_RX = /\b(herrera|manoguayabo|bayona|engombe|hato\s+nuevo|las\s+caobas|caballona|bienvenido|savica|la\s+venta|ciudad\s+agraria|los\s+alcarrizos|piantini|naco|gazcue|bella\s+vista|villa\s+mella|guaricanos|arroyo\s+hondo|los\s+girasoles|zona\s+colonial|los\s+mina|san\s+isidro|santiago|la\s+romana)\b/gi;
-
-const extractSectorAnchor = (raw) => {
-  const corrected = correctSectorSpelling(raw);
-  const matches = corrected.match(KNOWN_SECTORS_RX);
-  if (!matches || !matches.length) return corrected;
-  const sector = matches[matches.length - 1];
-  const endsWithSector = new RegExp(sector.replace(/\s+/g, "\\s+") + "\\b", "i").test((corrected.split(",").pop() || ""));
-  return endsWithSector ? corrected : corrected + ", " + sector;
-};
-
 // --- GEOCODER CACHE (in-memory, evita llamadas repetidas a Google) ------------
 const _geoCache = new Map();
 
@@ -5972,41 +5817,21 @@ const searchWithPlaces = async (rawAddress) => {
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
 const geocodeWithGoogle = async (rawAddress) => {
-  // ── FASE 0: Landmark lookup instantáneo (0ms, sin red) ────────────────────
-  const lmHit = lookupLandmark(rawAddress);
-  if (lmHit) return lmHit;
-
-  // ── FASE 0b: Corrección ortográfica ───────────────────────────────────────
-  const correctedAddress = extractSectorAnchor(rawAddress);
-
   // ── Cache hit ──────────────────────────────────────────────────────────────
-  const cacheKey = correctedAddress.trim().toLowerCase();
+  const cacheKey = rawAddress.trim().toLowerCase();
   if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
 
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(correctedAddress);
+  const queries = buildQueryVariants(rawAddress);
 
   // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
   for (const q of queries) {
     try {
-      // Retry con backoff si Google devuelve OVER_QUERY_LIMIT
-      let result = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          result = await new Promise((res, rej) =>
-            geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
-              (results, status) => status === "OK" ? res(results) : rej(status))
-          );
-          break; // éxito
-        } catch (status) {
-          if (status === "OVER_QUERY_LIMIT") {
-            await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // 500ms, 1s, 1.5s
-            continue;
-          }
-          throw status; // otro error → propagar
-        }
-      }
+      const result = await new Promise((res, rej) =>
+        geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
+          (results, status) => status === "OK" ? res(results) : rej(status))
+      );
       if (result && result.length > 0) {
         const top = result[0];
         const loc = top.geometry.location;
@@ -6111,25 +5936,18 @@ const buildQueryVariants = (raw) => {
   const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
   const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
   const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
-  const isSDOOeste = /herrera|manoguayabo|bayona|engombe|hato\s*nuevo|las\s*caobas|caballona|haina|los\s*alcarrizos/i.test(s);
 
-  const RD   = ", República Dominicana";
-  const SD   = ", Santo Domingo" + RD;
-  const DN   = ", Distrito Nacional" + RD;
-  const SDOW = ", Santo Domingo Oeste" + RD;
+  const RD = ", República Dominicana";
+  const SD = ", Santo Domingo" + RD;
+  const DN = ", Distrito Nacional" + RD;
 
-  // 1. Versión expandida — SDO Oeste primero si aplica
+  // 1. Versión expandida + ciudad más completa (más precisa primero)
   if (!hasCountry && !hasCity) {
-    if (isSDOOeste) {
-      variants.add(expanded + SDOW);
-      variants.add(expanded + SD);
-    } else {
-      variants.add(expanded + SD);
-      variants.add(expanded + DN);
-      variants.add(expanded + ", Santo Domingo Este" + RD);
-      variants.add(expanded + SDOW);
-      variants.add(expanded + ", Santo Domingo Norte" + RD);
-    }
+    variants.add(expanded + SD);
+    variants.add(expanded + DN);
+    variants.add(expanded + ", Santo Domingo Este" + RD);
+    variants.add(expanded + ", Santo Domingo Oeste" + RD);
+    variants.add(expanded + ", Santo Domingo Norte" + RD);
   } else if (!hasCountry) {
     variants.add(expanded + RD);
     variants.add(expanded);
@@ -6402,7 +6220,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  const numInOrig = (original || "").match(/\d{1,4}/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
@@ -7179,19 +6997,17 @@ const CircuitEngine = () => {
             }
           }
         }
-      } catch (err) {
-        stop.status = "error";
-        stop.issue = err?.message ? `Error: ${err.message.slice(0,80)}` : "Error de red";
-        console.error("Geocoding error for:", enrichedRaw, err);
+      } catch {
+        stop.status = "error"; stop.issue = "Error de red";
       }
 
       results.push(stop);
       const pct = Math.round(((i + 1) / rawRows.length) * 100);
       setGeoProgress(pct);
 
-      // Yield al browser + delay anti rate-limit de Google
-      // 150ms entre llamadas = max ~6/seg, dentro del límite de Google
-      await new Promise(r => setTimeout(r, stop.status === "error" ? 50 : 150));
+      // Yield al browser en CADA parada para que el progreso se vea siempre
+      // Pequeño delay para no saturar la API de Google (rate limit)
+      await new Promise(r => setTimeout(r, stop.status === "error" ? 80 : 30));
     }
 
     geocodingRef.current = false;
