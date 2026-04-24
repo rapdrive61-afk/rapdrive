@@ -3505,45 +3505,115 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
               return (
                 <div key={stop.id}
-                  onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                  style={{ display:"flex", alignItems:"center", padding:"12px 14px 12px 14px", borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer", transition:"background .1s", background: isCur?"rgba(59,130,246,0.05)":"transparent", animation:`slideInRow .2s ${Math.min(i,8)*25}ms ease both` }}>
+                  style={{ borderBottom:"1px solid rgba(255,255,255,0.04)", background: isExp?"rgba(59,130,246,0.06)": isCur?"rgba(59,130,246,0.04)":"transparent", transition:"background .15s", animation:`slideInRow .2s ${Math.min(i,8)*25}ms ease both`, borderLeft: isExp?`3px solid ${dotColor}`:"3px solid transparent" }}>
 
-                  {/* Circle number */}
-                  <div style={{
-                    width:34, height:34, borderRadius:"50%", flexShrink:0, marginRight:12,
-                    background: isDone?"rgba(16,185,129,0.15)":isProb?"rgba(245,158,11,0.15)":isCur?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,0.06)",
-                    border:`1.5px solid ${dotColor}`,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    boxShadow: isCur?"0 0 12px rgba(59,130,246,0.4)":isDone?"0 0 8px rgba(16,185,129,0.2)":"none",
-                  }}>
-                    {isDone
-                      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      : <span style={{ fontSize:12, fontWeight:800, color: isCur?"white":isProb?"#f59e0b":"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace" }}>{stop.stopNum||"?"}</span>
-                    }
+                  {/* ── ROW principal (siempre visible) ── */}
+                  <div onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
+                    style={{ display:"flex", alignItems:"center", padding:"12px 14px", cursor:"pointer" }}>
+
+                    {/* Circle number */}
+                    <div style={{
+                      width:34, height:34, borderRadius:"50%", flexShrink:0, marginRight:12,
+                      background: isDone?"rgba(16,185,129,0.15)":isProb?"rgba(239,68,68,0.15)":isExp?"rgba(59,130,246,0.2)":isCur?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,0.06)",
+                      border:`1.5px solid ${isExp?"#3b82f6":dotColor}`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      boxShadow: isExp||isCur?"0 0 12px rgba(59,130,246,0.4)":isDone?"0 0 8px rgba(16,185,129,0.2)":"none",
+                    }}>
+                      {isDone
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        : <span style={{ fontSize:12, fontWeight:800, color: isExp||isCur?"white":isProb?"#f59e0b":"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace" }}>{stop.stopNum||"?"}</span>
+                      }
+                    </div>
+
+                    {/* Content */}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color: isDone?"rgba(255,255,255,0.45)":"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", textDecoration:isDone?"line-through":"none", marginBottom:2 }}>
+                        {stop.client||`Parada ${stop.stopNum}`}
+                      </div>
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {stop.displayAddr||stop.rawAddr||"Sin dirección"}
+                      </div>
+                      {isDone && stop.deliveredAt && (
+                        <div style={{ fontSize:10, color:"#10b981", marginTop:2, fontFamily:"'DM Mono',monospace" }}>✓ {stop.deliveredAt}</div>
+                      )}
+                    </div>
+
+                    {/* Right side: status + chevron */}
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0, marginLeft:10 }}>
+                      <div style={{ background:statusBg, borderRadius:6, padding:"2px 8px" }}>
+                        <span style={{ fontSize:9.5, fontWeight:700, color:statusColor, letterSpacing:"0.5px" }}>{statusLabel}</span>
+                      </div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" style={{ transform: isExp?"rotate(180deg)":"rotate(0deg)", transition:"transform .2s" }}><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
                   </div>
 
-                  {/* Content */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color: isDone?"rgba(255,255,255,0.45)":"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", textDecoration:isDone?"line-through":"none", marginBottom:2 }}>
-                      {stop.client||`Parada ${stop.stopNum}`}
-                    </div>
-                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {stop.displayAddr||stop.rawAddr||"Sin dirección"}
-                    </div>
-                    {isDone && stop.deliveredAt && (
-                      <div style={{ fontSize:10, color:"#10b981", marginTop:2, fontFamily:"'DM Mono',monospace" }}>✓ {stop.deliveredAt}</div>
-                    )}
-                  </div>
+                  {/* ── PANEL EXPANDIDO ── */}
+                  {isExp && (
+                    <div style={{ margin:"0 12px 14px", borderRadius:14, background:"rgba(6,12,22,0.95)", border:`1px solid ${dotColor}28`, overflow:"hidden", animation:"ceUp .18s ease" }}>
+                      {/* Barra de acento */}
+                      <div style={{ height:2, background:`linear-gradient(90deg,${dotColor},${dotColor}22)` }}/>
+                      <div style={{ padding:"12px 14px" }}>
 
-                  {/* Right side: status + distance/time */}
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0, marginLeft:10 }}>
-                    <div style={{ background:statusBg, borderRadius:6, padding:"2px 8px" }}>
-                      <span style={{ fontSize:9.5, fontWeight:700, color:statusColor, letterSpacing:"0.5px" }}>{statusLabel}</span>
+                        {/* SP Code */}
+                        {stop.tracking && (
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                            <div style={{ fontSize:9, fontWeight:800, color:"rgba(255,255,255,0.3)", letterSpacing:"1.2px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:5, padding:"2px 6px" }}>SP</div>
+                            <span style={{ fontSize:13, fontFamily:"'DM Mono',monospace", color:"#60a5fa", letterSpacing:"0.5px", fontWeight:600 }}>{stop.tracking}</span>
+                            <button
+                              onClick={e=>{e.stopPropagation();navigator.clipboard?.writeText(stop.tracking).catch(()=>{});}}
+                              style={{ marginLeft:"auto", padding:"3px 8px", borderRadius:6, border:"1px solid rgba(96,165,250,0.2)", background:"rgba(59,130,246,0.07)", color:"rgba(96,165,250,0.7)", fontSize:10, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
+                              Copiar
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Phone clickable */}
+                        {stop.phone && (
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
+                              style={{ fontSize:14, color:"#f1f5f9", fontFamily:"'DM Mono',monospace", letterSpacing:"0.3px", textDecoration:"none", fontWeight:600 }}>
+                              {stop.phone}
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Address */}
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:7, marginBottom:12 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", lineHeight:1.45 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</span>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div style={{ display:"flex", gap:7 }}>
+                          {/* WhatsApp */}
+                          {stop.phone && (
+                            <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}}
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(37,211,102,0.3)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.558 4.122 1.528 5.853L0 24l6.293-1.507A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.848 0-3.587-.504-5.083-1.382l-.363-.218-3.737.895.945-3.629-.237-.375A9.965 9.965 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+                              WhatsApp
+                            </button>
+                          )}
+                          {/* Llamar */}
+                          {stop.phone && (
+                            <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none" }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                              Llamar
+                            </a>
+                          )}
+                          {/* Waze */}
+                          {stop.lat && stop.lng && (
+                            <a href={`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(59,130,246,0.25)", background:"rgba(59,130,246,0.08)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none" }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                              Waze
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    {distKm && !isDone && (
-                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)", fontFamily:"'DM Mono',monospace" }}>{distKm} km</span>
-                    )}
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -7136,115 +7206,167 @@ const CircuitEngine = () => {
                   <input value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="Ej: ADONIS ABRIL 20" style={{ ...inp }} />
                 </div>
 
-                {/* COLUMN MAPPING */}
+                {/* COLUMN MAPPING — Visual Card Style */}
                 <div>
-                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:10,display:"flex",alignItems:"center",gap:6 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-                    MAPEAR COLUMNAS
+                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+                      ASIGNACIÓN DE COLUMNAS
+                    </div>
+                    <span style={{ fontSize:9,color:Object.values(mapping).filter(Boolean).length>0?"#10b981":"#374151",fontWeight:700 }}>
+                      {Object.values(mapping).filter(Boolean).length}/{headers.length} mapeadas
+                    </span>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {[
-                      { f:"address",   l:"Dirección",            req:true,  icon:"📍" },
-                      { f:"address2",  l:"Dirección 2 / Ref.",   req:false, icon:"🏠" },
-                      { f:"client",    l:"Cliente / Nombre",     req:false, icon:"👤" },
-                      { f:"phone",     l:"Teléfono",             req:false, icon:"📞" },
-                      { f:"tracking",  l:"Código / Tracking",    req:false, icon:"🏷" },
-                      { f:"sector",    l:"Sector / Barrio",      req:false, icon:"🗺" },
-                      { f:"ciudad",    l:"Ciudad",               req:false, icon:"🏙" },
-                      { f:"provincia", l:"Provincia",            req:false, icon:"🌎" },
-                      { f:"cp",        l:"Código Postal",        req:false, icon:"📮" },
-                      { f:"notes",     l:"Referencia / Notas",   req:false, icon:"📝" },
-                    ].map(({ f, l, req, icon }) => (
-                      <div key={f} style={{ background: mapping[f] ? "rgba(16,185,129,0.04)" : "rgba(255,255,255,0.02)", border:`1px solid ${mapping[f] ? "rgba(16,185,129,0.18)" : req ? "rgba(59,130,246,0.2)" : "#0d1420"}`, borderRadius:9, padding:"8px 10px", transition:"border .2s" }}>
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
-                          <label style={{ fontSize:10,color: req ? "#60a5fa" : "#4b5563",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px",display:"flex",alignItems:"center",gap:5 }}>
-                            <span>{icon}</span>{l.toUpperCase()}{req && <span style={{ color:"#ef4444",marginLeft:2 }}>*</span>}
-                          </label>
-                          {mapping[f] && <span style={{ fontSize:9,color:"#10b981",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>✓ OK</span>}
-                        </div>
-                        <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))}
-                          style={{ ...sel, padding:"6px 10px", fontSize:11, border:`1px solid ${mapping[f] ? "rgba(16,185,129,0.25)" : "#1e2d3d"}` }}>
-                          <option value="">— Sin asignar —</option>
-                          {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Mapping status summary */}
-                <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid #0d1420", borderRadius:10, padding:"10px 12px" }}>
-                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>RESUMEN</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+                  {/* Columnas detectadas — chips scrollables */}
+                  <div style={{ background:"#080e16",border:"1px solid #0d1420",borderRadius:10,padding:"10px",marginBottom:10 }}>
+                    <div style={{ fontSize:9,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:7 }}>COLUMNAS EN TU ARCHIVO</div>
+                    <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
+                      {headers.map(h => {
+                        const isMapped = Object.values(mapping).includes(h);
+                        const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
+                        const icons = { address:"📍",address2:"🏠",client:"👤",phone:"📞",tracking:"🏷",sector:"🗺",ciudad:"🏙",provincia:"🌎",cp:"📮",notes:"📝" };
+                        return (
+                          <div key={h} style={{
+                            display:"inline-flex",alignItems:"center",gap:4,
+                            background: isMapped ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.04)",
+                            border: `1px solid ${isMapped ? "rgba(16,185,129,0.3)" : "#1a2d40"}`,
+                            borderRadius:20, padding:"3px 9px", fontSize:10.5,
+                            color: isMapped ? "#10b981" : "#4b5563",
+                            fontFamily:"'Inter',sans-serif", fontWeight:600,
+                            transition:"all .15s",
+                          }}>
+                            {isMapped && <span style={{ fontSize:10 }}>{icons[fieldKey]||"✓"}</span>}
+                            {h}
+                            {isMapped && <span style={{ fontSize:8,opacity:0.7 }}>✓</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cards de mapeo — diseño compacto con color */}
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                     {[
-                      ["Dirección",   mapping.address   ? "✓" : "—", mapping.address   ? "#10b981" : "#ef4444"],
-                      ["Dir. 2",      mapping.address2  ? "✓" : "—", mapping.address2  ? "#10b981" : "#374151"],
-                      ["Cliente",     mapping.client    ? "✓" : "—", mapping.client    ? "#10b981" : "#374151"],
-                      ["Teléfono",    mapping.phone     ? "✓" : "—", mapping.phone     ? "#10b981" : "#374151"],
-                      ["Tracking",    mapping.tracking  ? "✓" : "—", mapping.tracking  ? "#10b981" : "#374151"],
-                      ["Sector",      mapping.sector    ? "✓" : "—", mapping.sector    ? "#10b981" : "#374151"],
-                      ["Ciudad",      mapping.ciudad    ? "✓" : "—", mapping.ciudad    ? "#10b981" : "#374151"],
-                      ["Provincia",   mapping.provincia ? "✓" : "—", mapping.provincia ? "#10b981" : "#374151"],
-                      ["C.P.",        mapping.cp        ? "✓" : "—", mapping.cp        ? "#10b981" : "#374151"],
-                    ].map(([l,v,c]) => (
-                      <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:10, padding:"2px 0" }}>
-                        <span style={{ color:"#374151",fontFamily:"'Inter',sans-serif" }}>{l}</span>
-                        <span style={{ color:c, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>{v}</span>
-                      </div>
-                    ))}
+                      { f:"address",   l:"Dirección",          req:true,  icon:"📍", color:"#3b82f6", desc:"Principal campo de entrega" },
+                      { f:"client",    l:"Cliente",            req:false, icon:"👤", color:"#8b5cf6", desc:"Nombre del destinatario" },
+                      { f:"phone",     l:"Teléfono",           req:false, icon:"📞", color:"#10b981", desc:"Para llamar y WhatsApp" },
+                      { f:"tracking",  l:"Código SP",          req:false, icon:"🏷", color:"#f59e0b", desc:"Guía, tracking o referencia" },
+                      { f:"address2",  l:"Dirección 2",        req:false, icon:"🏠", color:"#64748b", desc:"Apt, piso, referencia extra" },
+                      { f:"sector",    l:"Sector",             req:false, icon:"🗺", color:"#64748b", desc:"Sector o barrio" },
+                      { f:"notes",     l:"Notas",              req:false, icon:"📝", color:"#64748b", desc:"Instrucciones especiales" },
+                      { f:"ciudad",    l:"Ciudad",             req:false, icon:"🏙", color:"#64748b", desc:"Municipio / localidad" },
+                      { f:"provincia", l:"Provincia",          req:false, icon:"🌎", color:"#64748b", desc:"Provincia o estado" },
+                      { f:"cp",        l:"Cód. Postal",        req:false, icon:"📮", color:"#64748b", desc:"ZIP o código postal" },
+                    ].map(({ f, l, req, icon, color, desc }) => {
+                      const mapped = !!mapping[f];
+                      return (
+                        <div key={f} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:10, background: mapped ? `${color}08` : "rgba(255,255,255,0.02)", border:`1px solid ${mapped ? color+"30" : req ? "rgba(59,130,246,0.2)" : "#0d1420"}`, transition:"all .15s" }}>
+                          {/* Icon */}
+                          <div style={{ width:30, height:30, borderRadius:8, background: mapped ? `${color}15` : "rgba(255,255,255,0.04)", border:`1px solid ${mapped ? color+"25" : "#1a2d40"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>
+                            {mapped ? <span style={{ fontSize:12 }}>✓</span> : icon}
+                          </div>
+                          {/* Label + desc */}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:10.5, fontWeight:700, color: mapped ? color : req ? "#60a5fa" : "#4b5563", fontFamily:"'Syne',sans-serif", letterSpacing:"0.3px", display:"flex", alignItems:"center", gap:4 }}>
+                              {l}{req && <span style={{ fontSize:9,color:"#ef4444" }}>*</span>}
+                            </div>
+                            <div style={{ fontSize:9.5, color:"#2d4a60", marginTop:0.5, fontFamily:"'Inter',sans-serif" }}>{desc}</div>
+                          </div>
+                          {/* Select */}
+                          <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))}
+                            style={{ background:"#060b10", border:`1px solid ${mapped ? color+"35" : "#1a2d40"}`, borderRadius:7, padding:"5px 8px", color: mapped ? "#e2e8f0" : "#4b5563", fontSize:10.5, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", maxWidth:110, flexShrink:0, transition:"border .15s" }}>
+                            <option value="">— —</option>
+                            {headers.map(h => <option key={h} value={h}>{h.length > 14 ? h.slice(0,14)+"…" : h}</option>)}
+                          </select>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
               </div>
             </div>
 
-            {/* RIGHT: Preview table */}
+            {/* RIGHT: Preview table — más visual */}
             <div style={{ flex:1, overflow:"auto", padding:"20px", background:"#060b10" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-                <div style={{ fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px" }}>
-                  PREVISUALIZACIÓN · {Math.min(rawRows.length, 10)} DE {rawRows.length} FILAS
+                <div>
+                  <div style={{ fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px" }}>
+                    PREVISUALIZACIÓN DE DATOS
+                  </div>
+                  <div style={{ fontSize:10,color:"#2d4a60",marginTop:2 }}>
+                    {rawRows.length} filas · {headers.length} columnas · mostrando primeras {Math.min(rawRows.length,10)}
+                  </div>
                 </div>
-                <div style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif" }}>
-                  Columnas mapeadas: <span style={{ color:"#10b981",fontWeight:700 }}>{Object.values(mapping).filter(Boolean).length}</span> / {headers.length}
+                <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:20,padding:"4px 10px" }}>
+                    <div style={{ width:6,height:6,borderRadius:"50%",background:"#10b981" }}/>
+                    <span style={{ fontSize:10,color:"#10b981",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{Object.values(mapping).filter(Boolean).length} mapeadas</span>
+                  </div>
+                  {!mapping.address && (
+                    <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:20,padding:"4px 10px" }}>
+                      <div style={{ width:6,height:6,borderRadius:"50%",background:"#ef4444" }}/>
+                      <span style={{ fontSize:10,color:"#ef4444",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>Falta dirección *</span>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Tabla con scroll horizontal para ver todas las columnas */}
               <div style={{ borderRadius:14, border:"1px solid #0d1420", overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,0.4)" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                  <thead>
-                    <tr style={{ background:"#080e16", borderBottom:"1px solid #131f30" }}>
-                      {headers.slice(0, 6).map(h => {
-                        const isMapped = Object.values(mapping).includes(h);
-                        const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
-                        const icons = { address:"📍", client:"👤", phone:"📞", tracking:"🏷", sector:"🗺", ciudad:"🏙", notes:"📝" };
-                        return (
-                          <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9.5, color: isMapped ? "#60a5fa" : "#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.8px", whiteSpace:"nowrap", borderRight:"1px solid #0d1420" }}>
-                            {isMapped && <span style={{ marginRight:4 }}>{icons[fieldKey]||""}</span>}
-                            {h}
-                            {isMapped && <span style={{ marginLeft:6, color:"#10b981", fontSize:9 }}>✓</span>}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawRows.slice(0, 10).map((row, i) => (
-                      <tr key={i} className="rh" style={{ borderBottom:"1px solid #080e16", transition:"background .1s", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                        {headers.slice(0, 6).map(h => {
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
+                    <thead>
+                      <tr style={{ background:"#080e16", borderBottom:"1px solid #131f30" }}>
+                        <th style={{ padding:"9px 12px", textAlign:"center", fontSize:9, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.8px", borderRight:"1px solid #0d1420", width:36, whiteSpace:"nowrap" }}>#</th>
+                        {headers.map(h => {
                           const isMapped = Object.values(mapping).includes(h);
+                          const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
+                          const icons = { address:"📍",address2:"🏠",client:"👤",phone:"📞",tracking:"🏷",sector:"🗺",ciudad:"🏙",notes:"📝",provincia:"🌎",cp:"📮" };
+                          const colors = { address:"#3b82f6",client:"#8b5cf6",phone:"#10b981",tracking:"#f59e0b" };
+                          const col = colors[fieldKey] || "#10b981";
                           return (
-                            <td key={h} style={{ padding:"9px 14px", fontSize:11.5, color: isMapped ? "#e2e8f0" : "#374151", maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderRight:"1px solid #0a0f18" }}>
-                              {String(row[h] || "")}
-                            </td>
+                            <th key={h} style={{ padding:"9px 14px", textAlign:"left", fontSize:9.5, color: isMapped ? col : "#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.6px", whiteSpace:"nowrap", borderRight:"1px solid #0d1420", background: isMapped ? `${col}08` : "transparent" }}>
+                              <div style={{ display:"flex",alignItems:"center",gap:5 }}>
+                                {isMapped && <span style={{ fontSize:11 }}>{icons[fieldKey]||"✓"}</span>}
+                                {h}
+                                {isMapped && (
+                                  <span style={{ background:`${col}20`,border:`1px solid ${col}30`,borderRadius:4,padding:"1px 5px",fontSize:8,color:col,fontWeight:800 }}>
+                                    {fieldKey==="address"?"DIRECCIÓN":fieldKey==="client"?"CLIENTE":fieldKey==="phone"?"TEL":fieldKey==="tracking"?"SP":fieldKey?.toUpperCase()||"✓"}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
                           );
                         })}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rawRows.slice(0, 10).map((row, i) => (
+                        <tr key={i} style={{ borderBottom:"1px solid #080e16", transition:"background .1s", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                          <td style={{ padding:"9px 12px", textAlign:"center", fontSize:10, color:"#1e3550", fontFamily:"'DM Mono',monospace", borderRight:"1px solid #0a0f18", width:36 }}>{i+1}</td>
+                          {headers.map(h => {
+                            const isMapped = Object.values(mapping).includes(h);
+                            const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
+                            const colors = { address:"#e2e8f0",client:"#c4b5fd",phone:"#6ee7b7",tracking:"#fcd34d" };
+                            const col = isMapped ? (colors[fieldKey]||"#e2e8f0") : "#374151";
+                            const val = String(row[h] || "");
+                            return (
+                              <td key={h} style={{ padding:"9px 14px", fontSize:11.5, color: col, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderRight:"1px solid #0a0f18", fontWeight: isMapped ? 500 : 400 }}>
+                                {val || <span style={{ color:"#1e3550",fontStyle:"italic",fontSize:10 }}>vacío</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               {rawRows.length > 10 && (
                 <div style={{ textAlign:"center", marginTop:10, fontSize:11, color:"#2d4a60", fontFamily:"'Inter',sans-serif" }}>
-                  + {rawRows.length - 10} filas más no mostradas
+                  + {rawRows.length - 10} filas más · {rawRows.length} total
                 </div>
               )}
             </div>
