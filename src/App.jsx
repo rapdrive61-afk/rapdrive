@@ -2981,19 +2981,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           </div>
         </div>
 
-        {/* Notificaciones */}
-        <button className="rd-btn" style={{ position:"relative",width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          {(chatLog.filter(m=>m.from==="admin").length+pendingRoutes.length) > 0 && (
-            <div style={{ position:"absolute",top:6,right:6,width:8,height:8,borderRadius:"50%",background:"#3b82f6",border:"1.5px solid #080f18" }}/>
-          )}
-        </button>
-
-        {/* Reloj */}
-        <div style={{ padding:"6px 10px",borderRadius:9,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"'DM Mono',monospace",fontWeight:500,letterSpacing:"0.5px",flexShrink:0 }}>
-          {time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}
-        </div>
-
         {/* Expandir mapa */}
         <button onClick={()=>{ setSheetSnap(s=>s==="peek"?"half":s==="half"?"full":"peek"); setSheetH(null); }} className="rd-btn"
           style={{ width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
@@ -3005,8 +2992,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         </button>
       </div>
 
-      {/* ══ MAP SECTION — solo visible en tab ruta ══ */}
-      <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "route" ? "block" : "none" }}>
+      {/* ══ MAP SECTION — solo en tab mapa ══ */}
+      <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
         <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
 
         {/* map controls bottom-right */}
@@ -3136,114 +3123,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           </div>
         )}
 
-        {/* ══ DRAWER LATERAL ══ */}
-        {menuOpen && (
-          <div onClick={()=>setMenuOpen(false)}
-            style={{ position:"fixed",inset:0,zIndex:9000,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)" }}>
-            <div onClick={e=>e.stopPropagation()}
-              style={{ position:"absolute",top:0,left:0,width:288,height:"100%",background:"#0a0a0a",borderRight:"1px solid rgba(255,255,255,0.07)",animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column",overflow:"hidden" }}>
 
-              {/* ── Perfil ── */}
-              <div style={{ padding:"56px 24px 24px",background:"linear-gradient(180deg,#141414 0%,#0a0a0a 100%)",borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
-                {/* Avatar */}
-                <div style={{ width:64,height:64,borderRadius:20,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-1px",marginBottom:16,boxShadow:"0 8px 24px rgba(59,130,246,0.3)" }}>
-                  {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
-                </div>
-                {/* Nombre */}
-                <div style={{ fontSize:17,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-0.3px",lineHeight:1.2,marginBottom:4 }}>
-                  {(driver.name||"Mensajero").toUpperCase()}
-                </div>
-                {/* Email */}
-                <div style={{ fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Mono',monospace",marginBottom:12 }}>
-                  {driver.email||driver.phone||"mensajero@rapdrive.do"}
-                </div>
-                {/* Status pill */}
-                <div style={{ display:"inline-flex",alignItems:"center",gap:7,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:20,padding:"5px 12px" }}>
-                  <div style={{ width:7,height:7,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 8px #22c55e",animation:"pulse 2s infinite" }}/>
-                  <span style={{ fontSize:11,color:"#22c55e",fontFamily:"'DM Sans',sans-serif",fontWeight:700,letterSpacing:"0.5px" }}>EN LÍNEA</span>
-                </div>
-              </div>
-
-              {/* Resumen rápido */}
-              {stops.length > 0 && (
-                <div style={{ padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"flex",gap:10 }}>
-                  {[
-                    { val: pending.length,   label:"Pendientes", color:"#f59e0b" },
-                    { val: delivered.length, label:"Entregadas",  color:"#22c55e" },
-                    { val: problems.length,  label:"Problemas",   color:"#ef4444" },
-                  ].map(({val,label,color}) => (
-                    <div key={label} style={{ flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"10px 8px",textAlign:"center" }}>
-                      <div style={{ fontSize:18,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color,lineHeight:1 }}>{val}</div>
-                      <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",marginTop:4,fontWeight:600 }}>{label.toUpperCase()}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Items ── */}
-              <div style={{ flex:1,overflowY:"auto",padding:"10px 14px" }}>
-                {[
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-                    label:"Mi ruta de hoy", badge:stops.filter(s=>s.stopNum).length, badgeColor:"#3b82f6",
-                    active: tab==="route",
-                    action:()=>{setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="20 6 9 17 4 12"/></svg>,
-                    label:"Entregas completadas", badge:delivered.length, badgeColor:"#22c55e",
-                    active: false,
-                    action:()=>{setFilterMode("delivered");setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-                    label:"Problemas reportados", badge:problems.length, badgeColor:"#ef4444",
-                    active: false,
-                    action:()=>{setFilterMode("problema");setTab("route");setMenuOpen(false);} },
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
-                    label:"Chat con admin", badge:chatLog.filter(m=>m.from==="admin"&&!m.read).length, badgeColor:"#3b82f6",
-                    active: tab==="chat",
-                    action:()=>{setTab("chat");setMenuOpen(false);} },
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-                    label:"Rutas pendientes", badge:pendingRoutes.length, badgeColor:"#f59e0b",
-                    active: tab==="pending",
-                    action:()=>{setTab("pending");setMenuOpen(false);} },
-                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
-                    label:"Mi historial", badge:0, badgeColor:"#8b5cf6",
-                    active: tab==="history",
-                    action:()=>{setTab("history");setMenuOpen(false);} },
-                ].map((item,i) => (
-                  <button key={i} onClick={item.action} className="rd-menu-item"
-                    style={{ display:"flex",alignItems:"center",gap:13,padding:"13px 12px",borderRadius:13,border:"none",background:item.active?"rgba(59,130,246,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",transition:"background .12s",animation:`fadeUp .18s ${i*25}ms ease both`,marginBottom:2,borderLeft:item.active?"2.5px solid #3b82f6":"2.5px solid transparent" }}>
-                    {/* Icon */}
-                    <div style={{ width:40,height:40,borderRadius:12,background:item.active?"rgba(59,130,246,0.15)":"rgba(255,255,255,0.05)",border:`1px solid ${item.active?"rgba(59,130,246,0.3)":"rgba(255,255,255,0.07)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:item.active?"#60a5fa":"rgba(255,255,255,0.45)",transition:"all .15s" }}>
-                      {item.icon}
-                    </div>
-                    {/* Label */}
-                    <span style={{ flex:1,fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:item.active?700:500,color:item.active?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.7)",letterSpacing:"-0.1px" }}>
-                      {item.label}
-                    </span>
-                    {/* Badge */}
-                    {item.badge>0 && (
-                      <div style={{ minWidth:22,height:22,borderRadius:11,background:item.badgeColor||"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",flexShrink:0 }}>
-                        {item.badge}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* ── App version ── */}
-              <div style={{ padding:"8px 24px",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <span style={{ fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Mono',monospace" }}>RAP DRIVE v2.0</span>
-              </div>
-
-              {/* ── Cerrar sesión ── */}
-              <div style={{ padding:"0 16px 40px",borderTop:"1px solid rgba(255,255,255,0.05)" }}>
-                <button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn"
-                  style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:"14px",borderRadius:13,border:"1px solid rgba(239,68,68,0.15)",background:"rgba(239,68,68,0.06)",color:"rgba(239,68,68,0.7)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,transition:"all .15s",marginTop:12 }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                  Cerrar sesión
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
 
 
@@ -3282,39 +3162,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         )}
       </div>
 
-      {/* ══ BOTTOM SHEET — route panel floats over the map ══ */}
+      {/* ══ ROUTE PANEL — pantalla completa cuando tab=route ══ */}
       {tab === "route" && (
         <div
           ref={sheetRef}
           style={{
-            position:"absolute",
-            bottom:NAV_H,
-            left:0, right:0,
-            height: resolvedSheetH,
-            background:"rgba(7,16,28,0.97)",
-            backdropFilter:"blur(20px)",
-            WebkitBackdropFilter:"blur(20px)",
-            borderRadius:"20px 20px 0 0",
-            boxShadow:"0 -6px 40px rgba(0,0,0,0.55), 0 -1px 0 rgba(255,255,255,0.06)",
-            display:"flex", flexDirection:"column",
+            flex:1,
+            display:"flex",
+            flexDirection:"column",
             overflow:"hidden",
-            transition: sheetDragY !== null ? "none" : "height .28s cubic-bezier(.4,0,.2,1)",
-            zIndex:50,
-            touchAction:"none",
+            background:"#070d18",
           }}>
 
-          {/* ── Drag handle ── */}
-          <div
-            style={{ flexShrink:0, paddingTop:10, paddingBottom:4, display:"flex", flexDirection:"column", alignItems:"center", cursor:"ns-resize", touchAction:"none", userSelect:"none" }}
-            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); handleSheetDragStart(e); }}
-            onTouchStart={handleSheetDragStart}>
-            <div style={{ width:36, height:4, borderRadius:4, background:"rgba(255,255,255,0.15)" }}/>
-          </div>
+
 
           {/* ── RUTA ACTIVA block ── */}
           {myRoute && (
-            <div style={{ padding:"6px 14px 0", flexShrink:0 }}>
-              <div style={{ background:"linear-gradient(135deg,rgba(14,30,60,0.9),rgba(10,20,45,0.9))", border:"1px solid rgba(59,130,246,0.2)", borderRadius:18, padding:"14px 16px", position:"relative", overflow:"hidden" }}>
+            <div style={{ padding:"6px 10px 0", flexShrink:0 }}>
+              <div style={{ background:"linear-gradient(135deg,rgba(14,30,60,0.85),rgba(10,20,45,0.85))", border:"1px solid rgba(59,130,246,0.18)", borderRadius:14, padding:"10px 13px", position:"relative", overflow:"hidden" }}>
                 {/* Subtle glow */}
                 <div style={{ position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(59,130,246,0.08)",filter:"blur(24px)",pointerEvents:"none" }}/>
 
@@ -3404,17 +3269,17 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   </div>
 
                   {/* Address */}
-                  <div style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.5, marginBottom:12 }}>
+                  <div style={{ fontSize:11.5, color:"rgba(255,255,255,0.4)", lineHeight:1.45, marginBottom:10 }}>
                     {currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}
                     {currentStop.notes ? <span style={{ color:"rgba(255,255,255,0.25)" }}> · {currentStop.notes}</span> : null}
                   </div>
 
                   {/* ── Action buttons ── */}
-                  <div style={{ display:"flex", gap:8 }}>
+                  <div style={{ display:"flex", gap:7 }}>
                     {/* Waze */}
                     <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
                       target="_blank" rel="noreferrer"
-                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px", borderRadius:12, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 4px 16px rgba(59,130,246,0.35)", transition:"all .12s" }}>
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:11, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 3px 12px rgba(59,130,246,0.3)", transition:"all .12s" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                       <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Waze</span>
                     </a>
@@ -3439,8 +3304,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
           {/* ── PRÓXIMAS PARADAS header + filter chips ── */}
           {myRoute && (
-            <div style={{ padding:"10px 14px 0", flexShrink:0 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <div style={{ padding:"6px 12px 0", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                 <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", letterSpacing:"1.5px" }}>
                   {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
                 </span>
@@ -3462,14 +3327,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               <div style={{ position:"relative" }}>
                 <svg style={{ position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
-                  style={{ width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:11,padding:"9px 12px 9px 32px",color:"#f1f5f9",fontSize:12,outline:"none",caretColor:"#3b82f6" }}/>
+                  style={{ width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"8px 11px 8px 30px",color:"#f1f5f9",fontSize:12,outline:"none",caretColor:"#3b82f6" }}/>
                 {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14,lineHeight:1 }}>✕</button>}
               </div>
             </div>
           )}
 
           {/* ── Stops list — scrollable, compact ── */}
-          <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:16,marginTop:8,WebkitOverflowScrolling:"touch" }}>
+          <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:8,marginTop:4,WebkitOverflowScrolling:"touch" }}>
 
             {/* Empty state - no route */}
             {!myRoute && (
@@ -3505,15 +3370,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
               return (
                 <div key={stop.id}
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.04)", background: isExp?"rgba(59,130,246,0.06)": isCur?"rgba(59,130,246,0.04)":"transparent", transition:"background .15s", animation:`slideInRow .2s ${Math.min(i,8)*25}ms ease both`, borderLeft: isExp?`3px solid ${dotColor}`:"3px solid transparent" }}>
+                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", background: isExp?"rgba(59,130,246,0.07)": isCur?"rgba(59,130,246,0.04)":"transparent", transition:"background .15s", animation:`slideInRow .2s ${Math.min(i,8)*20}ms ease both`, borderLeft: isExp?`3px solid ${dotColor}`:"3px solid transparent" }}>
 
                   {/* ── ROW principal (siempre visible) ── */}
                   <div onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                    style={{ display:"flex", alignItems:"center", padding:"12px 14px", cursor:"pointer" }}>
+                    style={{ display:"flex", alignItems:"center", padding:"9px 12px", cursor:"pointer" }}>
 
                     {/* Circle number */}
                     <div style={{
-                      width:34, height:34, borderRadius:"50%", flexShrink:0, marginRight:12,
+                      width:28, height:28, borderRadius:"50%", flexShrink:0, marginRight:10,
                       background: isDone?"rgba(16,185,129,0.15)":isProb?"rgba(239,68,68,0.15)":isExp?"rgba(59,130,246,0.2)":isCur?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,0.06)",
                       border:`1.5px solid ${isExp?"#3b82f6":dotColor}`,
                       display:"flex", alignItems:"center", justifyContent:"center",
@@ -3527,10 +3392,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                     {/* Content */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:700, color: isDone?"rgba(255,255,255,0.45)":"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", textDecoration:isDone?"line-through":"none", marginBottom:2 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color: isDone?"rgba(255,255,255,0.35)":"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.1px", textDecoration:isDone?"line-through":"none", marginBottom:1 }}>
                         {stop.client||`Parada ${stop.stopNum}`}
                       </div>
-                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
                       </div>
                       {isDone && stop.deliveredAt && (
@@ -3622,7 +3487,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       )}
 
       {/* ══ CHAT TAB ══ */}
-      {tab === "chat" && (
+      {false && (
         <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#060c14" }}>
           <div style={{ padding:"13px 16px",borderBottom:"1px solid #0d1a26",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
             <div style={{ width:36,height:36,borderRadius:10,background:"#0f1e30",border:"1px solid #1a2d40",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#60a5fa",fontWeight:800 }}>AD</div>
@@ -3851,7 +3716,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   const del = stops.filter(s=>s.driverStatus==="delivered").length;
                   const prob = stops.filter(s=>s.driverStatus==="problema").length;
                   return (
-                    <div style={{ display:"flex", gap:8 }}>
+                    <div style={{ display:"flex", gap:7 }}>
                       <div style={{ fontSize:11, fontWeight:700, color:"#10b981", fontFamily:"'DM Sans',sans-serif" }}>✓ {del}</div>
                       {prob>0 && <div style={{ fontSize:11, fontWeight:700, color:"#ef4444", fontFamily:"'DM Sans',sans-serif" }}>⚠ {prob}</div>}
                     </div>
@@ -3994,14 +3859,123 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         </div>
       )}
 
+        {/* ══ DRAWER LATERAL ══ */}
+        {menuOpen && (
+          <div onClick={()=>setMenuOpen(false)}
+            style={{ position:"fixed",inset:0,zIndex:9000,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)" }}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{ position:"absolute",top:0,left:0,width:288,height:"100%",background:"#0a0a0a",borderRight:"1px solid rgba(255,255,255,0.07)",animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column",overflow:"hidden" }}>
+
+              {/* ── Perfil ── */}
+              <div style={{ padding:"56px 24px 24px",background:"linear-gradient(180deg,#141414 0%,#0a0a0a 100%)",borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+                {/* Avatar */}
+                <div style={{ width:64,height:64,borderRadius:20,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-1px",marginBottom:16,boxShadow:"0 8px 24px rgba(59,130,246,0.3)" }}>
+                  {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+                </div>
+                {/* Nombre */}
+                <div style={{ fontSize:17,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",letterSpacing:"-0.3px",lineHeight:1.2,marginBottom:4 }}>
+                  {(driver.name||"Mensajero").toUpperCase()}
+                </div>
+                {/* Email */}
+                <div style={{ fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Mono',monospace",marginBottom:12 }}>
+                  {driver.email||driver.phone||"mensajero@rapdrive.do"}
+                </div>
+                {/* Status pill */}
+                <div style={{ display:"inline-flex",alignItems:"center",gap:7,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:20,padding:"5px 12px" }}>
+                  <div style={{ width:7,height:7,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 8px #22c55e",animation:"pulse 2s infinite" }}/>
+                  <span style={{ fontSize:11,color:"#22c55e",fontFamily:"'DM Sans',sans-serif",fontWeight:700,letterSpacing:"0.5px" }}>EN LÍNEA</span>
+                </div>
+              </div>
+
+              {/* Resumen rápido */}
+              {stops.length > 0 && (
+                <div style={{ padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"flex",gap:10 }}>
+                  {[
+                    { val: pending.length,   label:"Pendientes", color:"#f59e0b" },
+                    { val: delivered.length, label:"Entregadas",  color:"#22c55e" },
+                    { val: problems.length,  label:"Problemas",   color:"#ef4444" },
+                  ].map(({val,label,color}) => (
+                    <div key={label} style={{ flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"10px 8px",textAlign:"center" }}>
+                      <div style={{ fontSize:18,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color,lineHeight:1 }}>{val}</div>
+                      <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",marginTop:4,fontWeight:600 }}>{label.toUpperCase()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Items ── */}
+              <div style={{ flex:1,overflowY:"auto",padding:"10px 14px" }}>
+                {[
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+                    label:"Mi ruta de hoy", badge:stops.filter(s=>s.stopNum).length, badgeColor:"#3b82f6",
+                    active: tab==="route",
+                    action:()=>{setTab("route");setMenuOpen(false);} },
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="20 6 9 17 4 12"/></svg>,
+                    label:"Entregas completadas", badge:delivered.length, badgeColor:"#22c55e",
+                    active: false,
+                    action:()=>{setFilterMode("delivered");setTab("route");setMenuOpen(false);} },
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                    label:"Problemas reportados", badge:problems.length, badgeColor:"#ef4444",
+                    active: false,
+                    action:()=>{setFilterMode("problema");setTab("route");setMenuOpen(false);} },
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>,
+                    label:"Ver mapa", badge:0, badgeColor:"#3b82f6",
+                    active: tab==="mapa",
+                    action:()=>{setTab("mapa");setMenuOpen(false);} },
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+                    label:"Rutas pendientes", badge:pendingRoutes.length, badgeColor:"#f59e0b",
+                    active: tab==="pending",
+                    action:()=>{setTab("pending");setMenuOpen(false);} },
+                  { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
+                    label:"Mi historial", badge:0, badgeColor:"#8b5cf6",
+                    active: tab==="history",
+                    action:()=>{setTab("history");setMenuOpen(false);} },
+                ].map((item,i) => (
+                  <button key={i} onClick={item.action} className="rd-menu-item"
+                    style={{ display:"flex",alignItems:"center",gap:13,padding:"13px 12px",borderRadius:13,border:"none",background:item.active?"rgba(59,130,246,0.1)":"transparent",cursor:"pointer",width:"100%",textAlign:"left",transition:"background .12s",animation:`fadeUp .18s ${i*25}ms ease both`,marginBottom:2,borderLeft:item.active?"2.5px solid #3b82f6":"2.5px solid transparent" }}>
+                    {/* Icon */}
+                    <div style={{ width:40,height:40,borderRadius:12,background:item.active?"rgba(59,130,246,0.15)":"rgba(255,255,255,0.05)",border:`1px solid ${item.active?"rgba(59,130,246,0.3)":"rgba(255,255,255,0.07)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:item.active?"#60a5fa":"rgba(255,255,255,0.45)",transition:"all .15s" }}>
+                      {item.icon}
+                    </div>
+                    {/* Label */}
+                    <span style={{ flex:1,fontSize:14,fontFamily:"'DM Sans',sans-serif",fontWeight:item.active?700:500,color:item.active?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.7)",letterSpacing:"-0.1px" }}>
+                      {item.label}
+                    </span>
+                    {/* Badge */}
+                    {item.badge>0 && (
+                      <div style={{ minWidth:22,height:22,borderRadius:11,background:item.badgeColor||"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",flexShrink:0 }}>
+                        {item.badge}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── App version ── */}
+              <div style={{ padding:"8px 24px",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <span style={{ fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Mono',monospace" }}>RAP DRIVE v2.0</span>
+              </div>
+
+              {/* ── Cerrar sesión ── */}
+              <div style={{ padding:"0 16px 40px",borderTop:"1px solid rgba(255,255,255,0.05)" }}>
+                <button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn"
+                  style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:"14px",borderRadius:13,border:"1px solid rgba(239,68,68,0.15)",background:"rgba(239,68,68,0.06)",color:"rgba(239,68,68,0.7)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,transition:"all .15s",marginTop:12 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       {/* ══ BOTTOM NAV ══ */}
-      <div style={{ position:"fixed",bottom:0,left:0,right:0,background:"#080f18",borderTop:"1px solid #0d1a26",display:"flex",zIndex:200 }}>
+      <div style={{ flexShrink:0,background:"#060c14",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",zIndex:200,boxShadow:"0 -1px 0 rgba(255,255,255,0.04)" }}>
         {[
           { id:"route", label:"Ruta",
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
-          { id:"chat", label:"Chat",
-            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
-            badge:chatLog.filter(m=>m.from==="admin").length },
+
+          { id:"mapa", label:"Mapa",
+            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
           { id:"pending", label:"En cola",
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
             badge:pendingRoutes.length },
@@ -4009,13 +3983,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
           <button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn"
-            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"11px 0 20px",border:"none",background:"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.3)",cursor:"pointer",position:"relative",transition:"color .15s" }}>
+            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"10px 0 16px",border:"none",background:tab===item.id?"rgba(59,130,246,0.08)":"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.35)",cursor:"pointer",position:"relative",transition:"all .15s" }}>
             {item.badge>0 && tab!==item.id && (
               <div style={{ position:"absolute",top:8,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:"50%",background:"#3b82f6",border:"2px solid #080f18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontWeight:800,padding:"0 3px" }}>{item.badge>9?"9+":item.badge}</div>
             )}
             {item.icon}
-            <span style={{ fontSize:9.5,fontWeight:tab===item.id?700:500 }}>{item.label}</span>
-            {tab===item.id && <div style={{ position:"absolute",bottom:0,left:"20%",right:"20%",height:2,background:"#3b82f6",borderRadius:"2px 2px 0 0" }}/>}
+            <span style={{ fontSize:10,fontWeight:tab===item.id?700:500,letterSpacing:"0.2px" }}>{item.label}</span>
+            {tab===item.id && <div style={{ position:"absolute",top:0,left:"25%",right:"25%",height:2,background:"#3b82f6",borderRadius:"0 0 3px 3px" }}/>}
           </button>
         ))}
       </div>
