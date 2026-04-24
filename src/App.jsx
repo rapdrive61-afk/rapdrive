@@ -5627,11 +5627,101 @@ const loadSheetJS = () => new Promise((res) => {
 // --- DEPOT (base interna, no visible en pantalla) -----------------------------
 const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Distrito 6 – Palma Real", plusCode: "G2F8+7G3" };
 
-// --- GEOCODER (Google Maps Geocoding API) -------------------------------------
+// --- GEOCODER CACHE (in-memory, evita llamadas repetidas a Google) ------------
+const _geoCache = new Map();
+
+// --- RD bounding box para filtrar resultados fuera del país ------------------
+const RD_BOUNDS = {
+  north: 19.93, south: 17.36, east: -68.32, west: -72.01,
+};
+const inRD = (lat, lng) => lat >= RD_BOUNDS.south && lat <= RD_BOUNDS.north && lng >= RD_BOUNDS.west && lng <= RD_BOUNDS.east;
+
+// --- PLACES TEXT SEARCH (fallback #1 cuando Geocoder falla) ------------------
+// Encuentra landmarks, negocios y sectores informales que el Geocoder no resuelve
+const searchWithPlaces = async (rawAddress) => {
+  await loadGoogleMaps();
+  const service = new window.google.maps.places.PlacesService(
+    document.createElement("div")
+  );
+  const rdBounds = new window.google.maps.LatLngBounds(
+    { lat: RD_BOUNDS.south, lng: RD_BOUNDS.west },
+    { lat: RD_BOUNDS.north, lng: RD_BOUNDS.east }
+  );
+
+  // Intentar varias queries: expandida, raw, y simplificada
+  const queries = [
+    expandRDAddress(rawAddress) + ", República Dominicana",
+    rawAddress + ", Santo Domingo, República Dominicana",
+    rawAddress.split(",")[0].trim() + ", Santo Domingo",
+  ];
+
+  for (const query of queries) {
+    try {
+      const results = await new Promise((res, rej) =>
+        service.textSearch({ query, bounds: rdBounds, region: "do" },
+          (r, s) => (s === "OK" || s === "ZERO_RESULTS") ? res(r || []) : rej(s))
+      );
+
+      const valid = (results || []).filter(r => {
+        const loc = r.geometry?.location;
+        if (!loc) return false;
+        const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+        const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+        return inRD(lat, lng);
+      });
+
+      if (valid.length > 0) {
+        const top = valid[0];
+        const loc = top.geometry.location;
+        const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+        const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+        const types = top.types || [];
+
+        // Scoring por tipo de Place
+        let conf = 62;
+        if (types.includes("street_address") || types.includes("premise"))         conf = 88;
+        else if (types.includes("establishment") || types.includes("point_of_interest")) conf = 76;
+        else if (types.includes("neighborhood") || types.includes("sublocality"))  conf = 68;
+        else if (types.includes("locality"))                                        conf = 60;
+
+        // Bonus si el nombre coincide parcialmente
+        const nameLow = (top.name || "").toLowerCase();
+        const rawLow  = rawAddress.toLowerCase();
+        if (rawLow.split(" ").some(w => w.length > 3 && nameLow.includes(w))) conf = Math.min(conf + 6, 94);
+
+        return {
+          ok: true, lat, lng,
+          display: top.formatted_address || top.name,
+          confidence: conf,
+          types,
+          source: "places_text_search",
+          allResults: valid.slice(0, 3).map(r => {
+            const l = r.geometry.location;
+            return {
+              display: r.formatted_address || r.name,
+              lat: typeof l.lat === "function" ? l.lat() : l.lat,
+              lng: typeof l.lng === "function" ? l.lng() : l.lng,
+              confidence: 60,
+            };
+          }),
+        };
+      }
+    } catch { /* try next query */ }
+  }
+  return null;
+};
+
+// --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
 const geocodeWithGoogle = async (rawAddress) => {
+  // ── Cache hit ──────────────────────────────────────────────────────────────
+  const cacheKey = rawAddress.trim().toLowerCase();
+  if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
+
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
   const queries = buildQueryVariants(rawAddress);
+
+  // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
   for (const q of queries) {
     try {
       const result = await new Promise((res, rej) =>
@@ -5641,28 +5731,44 @@ const geocodeWithGoogle = async (rawAddress) => {
       if (result && result.length > 0) {
         const top = result[0];
         const loc = top.geometry.location;
-        const types = top.types || [];
+        const lat = loc.lat(), lng = loc.lng();
+
+        // Descartar resultados fuera de RD
+        if (!inRD(lat, lng)) continue;
+
         const conf = scoreGoogleResult(top, rawAddress);
-        return {
-          ok: true,
-          lat: loc.lat(),
-          lng: loc.lng(),
+        const out = {
+          ok: true, lat, lng,
           display: top.formatted_address,
           confidence: conf,
-          types,
-          allResults: result.slice(0, 3).map(r => ({
-            display: r.formatted_address,
-            lat: r.geometry.location.lat(),
-            lng: r.geometry.location.lng(),
-            confidence: scoreGoogleResult(r, rawAddress),
-          })),
+          types: top.types || [],
+          source: "geocoding_api",
+          allResults: result.slice(0, 3)
+            .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
+            .map(r => ({
+              display: r.formatted_address,
+              lat: r.geometry.location.lat(),
+              lng: r.geometry.location.lng(),
+              confidence: scoreGoogleResult(r, rawAddress),
+            })),
         };
+        _geoCache.set(cacheKey, out);
+        return out;
       }
     } catch { /* try next variant */ }
   }
-  // Fallback: Nominatim (OpenStreetMap) for addresses Google couldn't find
+
+  // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
   try {
-    // Try multiple Nominatim queries: enriched first, then raw, then simplified
+    const placesResult = await searchWithPlaces(rawAddress);
+    if (placesResult) {
+      _geoCache.set(cacheKey, placesResult);
+      return placesResult;
+    }
+  } catch { /* places failed */ }
+
+  // ── CAPA 3: Nominatim (último recurso) ────────────────────────────────────
+  try {
     const nominatimQueries = [
       rawAddress + ", República Dominicana",
       expandRDAddress(rawAddress) + ", República Dominicana",
@@ -5670,46 +5776,47 @@ const geocodeWithGoogle = async (rawAddress) => {
     ];
     for (const nmQuery of nominatimQueries) {
       const encoded = encodeURIComponent(nmQuery);
-      const nm = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`, {
-        headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0 (delivery-routing)" }
-      });
+      const nm = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`,
+        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" } }
+      );
       if (!nm.ok) continue;
       const nmData = await nm.json();
-      if (nmData && nmData.length > 0) {
-        // Filter to RD bounding box
-        const rdResults = nmData.filter(r => {
-          const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
-          return lat >= 17.4 && lat <= 19.9 && lng >= -72.1 && lng <= -68.3;
-        });
-        if (rdResults.length > 0) {
-          const top = rdResults[0];
-          const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-          // Score based on OSM type
-          let conf = 55;
-          if (top.type === "house")             conf = 88;
-          else if (top.type === "building")     conf = 82;
-          else if (top.class === "highway")     conf = 74;
-          else if (top.type === "residential")  conf = 70;
-          else if (top.class === "place")       conf = 62;
-          // Bonus if address includes a number from original
-          const nums = rawAddress.match(/\d{1,4}/g);
-          if (nums && nums.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
-          return {
-            ok: true, lat, lng,
-            display: top.display_name.split(",").slice(0,3).join(",").trim(),
-            confidence: conf,
-            types: [top.type || "nominatim"],
-            allResults: rdResults.slice(0,3).map(r => ({
-              display: r.display_name.split(",").slice(0,3).join(",").trim(),
-              lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-              confidence: 55,
-            })),
-          };
-        }
-      }
+      if (!nmData?.length) continue;
+
+      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
+      if (rdResults.length === 0) continue;
+
+      const top = rdResults[0];
+      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+      let conf = 50;
+      if (top.type === "house")           conf = 85;
+      else if (top.type === "building")   conf = 78;
+      else if (top.class === "highway")   conf = 70;
+      else if (top.type === "residential") conf = 65;
+      else if (top.class === "place")     conf = 57;
+      const nums = rawAddress.match(/\d{1,4}/g);
+      if (nums?.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
+
+      const out = {
+        ok: true, lat, lng,
+        display: top.display_name.split(",").slice(0, 3).join(",").trim(),
+        confidence: conf,
+        types: [top.type || "nominatim"],
+        source: "nominatim",
+        allResults: rdResults.slice(0, 3).map(r => ({
+          display: r.display_name.split(",").slice(0, 3).join(",").trim(),
+          lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+          confidence: 52,
+        })),
+      };
+      _geoCache.set(cacheKey, out);
+      return out;
     }
-  } catch { /* nominatim failed too */ }
-  return { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+  } catch { /* nominatim failed */ }
+
+  const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+  return failed;
 };
 
 // Build multiple query variants for maximum hit rate
@@ -5997,71 +6104,129 @@ const isPlusCode = (s) => {
   return false;
 };
 
-// --- HAVERSINE ----------------------------------------------------------------
+// --- HAVERSINE (fallback local cuando Routes API no disponible) ---------------
 const hav = (a, b) => {
   const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
   const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
-// --- ROUTE OPTIMIZER - NEAREST NEIGHBOR FROM DEPOT ---------------------------
-// Regla de negocio:
-//   1. Parada más cercana al DEPOT → stopNum 1
-//   2. Parada más cercana a la #1 → stopNum 2
-//   3. Parada más cercana a la #2 → stopNum 3 … y así hasta agotar
-//   4. Paradas sin coordenadas → al final con stopNum null
-//   O(n²) – maneja 500+ paradas en milisegundos en el browser.
-//   NUNCA modifica paradas que ya están en ruta activa (driverStatus !== "pending").
+// --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
+// Usa calles reales, sentidos de vía y tráfico de Santo Domingo.
+// Google permite hasta 25 waypoints intermedios por solicitud.
+// Chunking automático si hay más de 25 paradas válidas.
+const optimizeWithRoutesAPI = async (validStops) => {
+  // Máximo 25 waypoints por llamada a la API
+  const CHUNK = 25;
+  if (validStops.length <= 1) return validStops.map((s, i) => ({ ...s, stopNum: i + 1 }));
 
-const optimizeRoute = (stops) => {
+  // Helper: llamada a la Routes API v2 para un chunk
+  const callRoutesAPI = async (chunk) => {
+    const waypoints = chunk.map(s => ({
+      location: { latLng: { latitude: s.lat, longitude: s.lng } },
+    }));
+
+    const body = {
+      origin:      { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      destination: { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      intermediates: waypoints,
+      travelMode: "DRIVE",
+      optimizeWaypointOrder: true,
+      routingPreference: "TRAFFIC_AWARE",
+      languageCode: "es",
+    };
+
+    const resp = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": GMAPS_KEY,
+          "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!resp.ok) throw new Error(`Routes API HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const route = data?.routes?.[0];
+    if (!route?.optimizedIntermediateWaypointIndex) throw new Error("No optimized order returned");
+
+    return {
+      order:    route.optimizedIntermediateWaypointIndex,   // índices reordenados
+      durations: (route.legs || []).slice(1).map(l =>       // segundos por tramo (sin el tramo depot→1)
+        parseInt(l.duration?.replace("s", "") || "0", 10)
+      ),
+      distances: (route.legs || []).slice(1).map(l => Math.round((l.distanceMeters || 0) / 1000 * 10) / 10),
+    };
+  };
+
+  // Si entran ≤25 paradas → una sola llamada
+  if (validStops.length <= CHUNK) {
+    try {
+      const { order, durations, distances } = await callRoutesAPI(validStops);
+      return order.map((origIdx, newPos) => ({
+        ...validStops[origIdx],
+        stopNum:      newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+    } catch (e) {
+      console.warn("Routes API falló, usando Haversine:", e.message);
+      return null; // señal para caer al fallback
+    }
+  }
+
+  // Más de 25: dividir en chunks, optimizar cada uno y concatenar
+  const ordered = [];
+  for (let i = 0; i < validStops.length; i += CHUNK) {
+    const chunk = validStops.slice(i, i + CHUNK);
+    try {
+      const { order, durations, distances } = await callRoutesAPI(chunk);
+      const reordered = order.map((origIdx, newPos) => ({
+        ...chunk[origIdx],
+        stopNum:      ordered.length + newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+      ordered.push(...reordered);
+    } catch {
+      // Chunk fallido → mantener orden Haversine para ese chunk
+      chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
+    }
+  }
+  return ordered;
+};
+
+// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
+const optimizeRouteLocal = (stops) => {
   if (!stops || stops.length === 0) return [];
-
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
   const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
-
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
   if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
-  // ── Fase 1: Nearest Neighbor desde DEPOT ──────────────────
+  // Fase 1: Nearest Neighbor
   let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const rem = [...valid];
-  const tour = [];
+  const rem = [...valid], tour = [];
   while (rem.length > 0) {
     let bi = 0, bd = Infinity;
-    for (let i = 0; i < rem.length; i++) {
-      const d = hav(cur, rem[i]);
-      if (d < bd) { bd = d; bi = i; }
-    }
-    const [next] = rem.splice(bi, 1);
-    tour.push(next);
-    cur = next;
+    for (let i = 0; i < rem.length; i++) { const d = hav(cur, rem[i]); if (d < bd) { bd = d; bi = i; } }
+    const [next] = rem.splice(bi, 1); tour.push(next); cur = next;
   }
 
-  // ── Fase 2: 2-opt para eliminar cruces ────────────────────
-  // Circuito: DEPOT → tour[0] → tour[1] → … → tour[n-1] → DEPOT
-  // El 2-opt clásico evalúa SOLO las 2 aristas que se eliminan y las 2 que se crean.
-  // Invertir el segmento [i+1..j] equivale a eliminar aristas (i→i+1) y (j→j+1)
-  // y crear (i→j) y (i+1→j+1).
-  let improved = true;
-  let iterations = 0;
+  // Fase 2: 2-opt
+  let improved = true, iterations = 0;
   while (improved && iterations < 100) {
-    improved = false;
-    iterations++;
+    improved = false; iterations++;
     for (let i = 0; i < tour.length - 1; i++) {
       for (let j = i + 1; j < tour.length; j++) {
-        // Aristas actuales que se eliminarán:
-        //   A→B = tour[i] → tour[i+1]  (o DEPOT→tour[0] si i===-1, pero i empieza en 0)
-        //   C→D = tour[j] → tour[j+1]  (o tour[j] → DEPOT si j === último)
-        const A = i === 0 ? DEPOT : tour[i - 1];
-        const B = tour[i];
-        const C = tour[j];
-        const D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        // Coste actual: A→B + C→D
-        const costBefore = hav(A, B) + hav(C, D);
-        // Coste nuevo si invertimos [i..j]: A→C + B→D
-        const costAfter  = hav(A, C) + hav(B, D);
-        if (costAfter < costBefore - 0.001) {
-          // Invertir segmento [i..j]
+        const A = i === 0 ? DEPOT : tour[i - 1], B = tour[i];
+        const C = tour[j], D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
+        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
           let l = i, r = j;
           while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
           improved = true;
@@ -6070,36 +6235,24 @@ const optimizeRoute = (stops) => {
     }
   }
 
-  // ── Fase 3: Or-opt — mover paradas individuales al mejor lugar ──
-  // Respeta la regla de circuito: DEPOT es siempre origen y destino.
-  // NO se permite mover una parada si su nueva posición aleja el tour[0]
-  // del DEPOT más de lo que estaba (para preservar el orden cercano-a-base primero).
-  let orImproved = true;
-  let orIter = 0;
+  // Fase 3: Or-opt
+  let orImproved = true, orIter = 0;
   while (orImproved && orIter < 20) {
-    orImproved = false;
-    orIter++;
+    orImproved = false; orIter++;
     for (let i = 0; i < tour.length; i++) {
-      const node = tour[i];
-      const prev = i === 0 ? DEPOT : tour[i - 1];
-      const next = i === tour.length - 1 ? DEPOT : tour[i + 1];
-      // Ganancia de sacar el nodo de su posición actual
+      const node = tour[i], prev = i === 0 ? DEPOT : tour[i - 1], next = i === tour.length - 1 ? DEPOT : tour[i + 1];
       const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
       let bestGain = 0.001, bestJ = -1;
       for (let j = 0; j < tour.length; j++) {
         if (j === i || j === i - 1) continue;
-        const a = tour[j];
-        const b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        const insertCost = hav(a, node) + hav(node, b) - hav(a, b);
-        const gain = removeCost - insertCost;
+        const a = tour[j], b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
+        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
         if (gain > bestGain) { bestGain = gain; bestJ = j; }
       }
       if (bestJ >= 0) {
         const removed = tour.splice(i, 1)[0];
-        const insertAt = bestJ > i ? bestJ : bestJ + 1;
-        tour.splice(insertAt, 0, removed);
-        orImproved = true;
-        break; // reiniciar desde el principio
+        tour.splice(bestJ > i ? bestJ : bestJ + 1, 0, removed);
+        orImproved = true; break;
       }
     }
   }
@@ -6110,9 +6263,47 @@ const optimizeRoute = (stops) => {
   ];
 };
 
+// --- OPTIMIZADOR PRINCIPAL: Routes API → fallback Haversine ------------------
+// Devuelve siempre de forma sincrónica (Haversine) o asíncrona (Routes API).
+// El componente llama optimizeRoute para re-renders inmediatos y
+// optimizeRouteAsync para la optimización final con calles reales.
+const optimizeRoute = (stops) => optimizeRouteLocal(stops);
+
+const optimizeRouteAsync = async (stops, onProgress) => {
+  if (!stops || stops.length === 0) return stops;
+
+  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
+  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
+
+  if (valid.length <= 1) return optimizeRouteLocal(stops);
+
+  onProgress?.("Consultando Routes API de Google…");
+
+  // Intentar Routes API v2
+  const apiResult = await optimizeWithRoutesAPI(valid);
+
+  if (apiResult) {
+    // Renumerar correctamente si venía de chunks
+    const renumbered = apiResult.map((s, i) => ({ ...s, stopNum: i + 1 }));
+    onProgress?.(`Ruta optimizada con calles reales · ${valid.length} paradas`);
+    return [
+      ...renumbered,
+      ...invalid.map(s => ({ ...s, stopNum: null })),
+    ];
+  }
+
+  // Fallback: Haversine
+  onProgress?.("Optimizando con distancia directa…");
+  return optimizeRouteLocal(stops);
+};
+
 const totalKm = (stops) => {
   const v = stops.filter(s => s.lat && s.lng);
   if (!v.length) return 0;
+  // Si hay datos reales de la Routes API, sumarlos
+  if (v[0]?.distKmRoutes !== undefined && v[0]?.distKmRoutes !== null) {
+    return Math.round(v.reduce((acc, s) => acc + (s.distKmRoutes || 0), 0) * 10) / 10;
+  }
   return Math.round((v.reduce((acc, s, i) => acc + hav(i === 0 ? DEPOT : v[i - 1], s), 0) + hav(v[v.length - 1], DEPOT)) * 10) / 10;
 };
 
@@ -6493,6 +6684,7 @@ const CircuitEngine = () => {
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [reoptimizing, setReoptimizing] = useState(false);
+  const [routesOptStatus, setRoutesOptStatus] = useState(""); // mensaje de la Routes API
   const [mapsReady, setMapsReady] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [addrEditStop, setAddrEditStop] = useState(null); // stop being edited in modal
@@ -6633,9 +6825,19 @@ const CircuitEngine = () => {
     }
 
     geocodingRef.current = false;
-    const optimized = optimizeRoute(results);
-    setStops(optimized);
+
+    // ── Optimización local inmediata (Haversine) para mostrar rápido ──────────
+    const localOptimized = optimizeRoute(results);
+    setStops(localOptimized);
     setPhase("review");
+    setRoutesOptStatus("Optimizando con calles reales…");
+
+    // ── Optimización asíncrona con Routes API (en segundo plano) ──────────────
+    optimizeRouteAsync(results, (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
+      setStops(apiOptimized);
+      setRoutesOptStatus("✓ Ruta optimizada con Google Routes API");
+      setTimeout(() => setRoutesOptStatus(""), 4000);
+    }).catch(() => setRoutesOptStatus(""));
   }, [rawRows, mapping]);
 
   // -- EDIT + RE-GEOCODE ------------------------------------------------------
@@ -6695,13 +6897,15 @@ const CircuitEngine = () => {
 
   const reOpt = () => {
     setReoptimizing(true);
-    setTimeout(() => {
-      setStops(prev => {
-        const reordered = optimizeRoute([...prev]);
-        return reordered;
-      });
-      setReoptimizing(false);
-    }, 80);
+    setRoutesOptStatus("Consultando Routes API…");
+    // Optimización local inmediata para feedback visual
+    setStops(prev => optimizeRoute([...prev]));
+    // Optimización con calles reales en segundo plano
+    optimizeRouteAsync([...stops], (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
+      setStops(apiOptimized);
+      setRoutesOptStatus("✓ Re-optimizado con calles reales");
+      setTimeout(() => setRoutesOptStatus(""), 4000);
+    }).catch(() => setRoutesOptStatus("")).finally(() => setReoptimizing(false));
   };
 
   const deleteStop = (stopId) => {
@@ -7141,6 +7345,7 @@ const CircuitEngine = () => {
                   {statsWarn>0&&<div style={{display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,padding:"2px 8px"}}><div style={{width:5,height:5,borderRadius:"50%",background:"#94a3b8"}}/><span style={{fontSize:9.5,color:"#94a3b8",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{statsWarn} Advertencia</span></div>}
                   {statsError>0&&<div style={{display:"flex",alignItems:"center",gap:4,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:6,padding:"2px 8px"}}><div style={{width:5,height:5,borderRadius:"50%",background:"#ef4444"}}/><span style={{fontSize:9.5,color:"#ef4444",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{statsError} Error</span></div>}
                   {reoptimizing && <div style={{ fontSize: 10, color: "#3b82f6", display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, border: "2px solid #3b82f655", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin .8s linear infinite" }} />Re-optimizando...</div>}
+                  {routesOptStatus && !reoptimizing && <div style={{ fontSize: 10, color: routesOptStatus.startsWith("✓") ? "#10b981" : "#f59e0b", display:"flex", alignItems:"center", gap:4 }}>{routesOptStatus.startsWith("✓") ? "✓" : <div style={{ width:8,height:8,border:"2px solid #f59e0b55",borderTopColor:"#f59e0b",borderRadius:"50%",animation:"spin .8s linear infinite" }}/>}{routesOptStatus.replace("✓ ","")}</div>}
                 </div>
               </div>
 
@@ -7324,6 +7529,14 @@ const CircuitEngine = () => {
                                 <span>⚠</span>
                                 <span>{stop.issue}</span>
                                 {stop.status==="error" && <span style={{ color:"#3b82f6", cursor:"pointer" }} onClick={e=>{e.stopPropagation();setAddrEditStop(stop);setSelectedId(stop.id);}}>— corregir</span>}
+                              </div>
+                            )}
+                            {/* ETA from Routes API */}
+                            {stop.etaMin != null && (
+                              <div style={{ fontSize:10, color:"#3b82f6", marginTop:2, display:"flex", alignItems:"center", gap:3, fontFamily:"'Inter',monospace" }}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                {stop.etaMin} min desde parada anterior
+                                {stop.distKmRoutes != null && <span style={{color:"#374151"}}> · {stop.distKmRoutes} km</span>}
                               </div>
                             )}
                             {/* Confidence warning */}
