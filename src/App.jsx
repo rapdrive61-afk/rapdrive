@@ -267,24 +267,28 @@ const PageDashboard = () => {
   const infoWindowRef    = useRef(null);
 
   // Motor SVG icon for each driver
-  const makeDriverSvg = (initials, isOnline) => {
-    const color = isOnline ? "#3b82f6" : "#374151";
-    const glow  = isOnline ? "rgba(59,130,246,0.4)" : "rgba(55,65,81,0.3)";
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
+  const makeDriverSvg = (initials, isOnline, isStale = false) => {
+    const color = isOnline ? (isStale ? "#6366f1" : "#3b82f6") : "#374151";
+    const glow  = isOnline ? (isStale ? "rgba(99,102,241,0.35)" : "rgba(59,130,246,0.45)") : "rgba(55,65,81,0.3)";
+    const pulse = isOnline && !isStale; // solo pulsa si está en tiempo real
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
       <defs>
-        <radialGradient id="dg" cx="40%" cy="35%" r="65%">
-          <stop offset="0%" stop-color="${isOnline?"#93c5fd":"#6b7280"}"/>
+        <radialGradient id="dg${initials}" cx="40%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="${isOnline?(isStale?"#a5b4fc":"#93c5fd"):"#6b7280"}"/>
           <stop offset="100%" stop-color="${color}"/>
         </radialGradient>
-        <filter id="dglow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="${isOnline?3:1.5}" result="b"/>
+        <filter id="dglow${initials}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="${isOnline?3.5:1.5}" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
       </defs>
-      ${isOnline ? `<circle cx="26" cy="26" r="25" fill="${glow}" filter="url(#dglow)"/>` : ""}
-      <circle cx="26" cy="26" r="20" fill="url(#dg)" stroke="white" stroke-width="2.5"/>
-      <text x="26" y="22" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="900" fill="white" font-family="-apple-system,sans-serif">${initials}</text>
-      <text x="26" y="35" text-anchor="middle" font-size="14" font-family="-apple-system,sans-serif">🏍</text>
+      ${pulse ? `<circle cx="28" cy="28" r="27" fill="${glow}" opacity="0.5" filter="url(#dglow${initials})"/>` : ""}
+      ${isStale ? `<circle cx="28" cy="28" r="27" fill="${glow}" opacity="0.3"/>` : ""}
+      <circle cx="28" cy="28" r="21" fill="url(#dg${initials})" stroke="white" stroke-width="2.5" filter="url(#dglow${initials})"/>
+      <text x="28" y="24" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="900" fill="white" font-family="-apple-system,sans-serif">${initials}</text>
+      <text x="28" y="37" text-anchor="middle" font-size="14" font-family="-apple-system,sans-serif">🏍</text>
+      ${isStale ? `<circle cx="42" cy="14" r="6" fill="#6366f1" stroke="white" stroke-width="1.5"/>` : ""}
+      ${!isStale && isOnline ? `<circle cx="42" cy="14" r="6" fill="#22c55e" stroke="white" stroke-width="1.5"/>` : ""}
     </svg>`;
   };
 
@@ -325,28 +329,27 @@ const PageDashboard = () => {
     Object.entries(liveLocations).forEach(([driverId, loc]) => {
       if (!loc || !loc.lat || !loc.lng) return;
       const pos = { lat: loc.lat, lng: loc.lng };
-      const isOnline = loc.online !== false && (Date.now() - (loc.ts||0)) < 120000; // online si actualizó en <2min
+      const isOnline = loc.online !== false && (Date.now() - (loc.ts||0)) < 120000;
+      const isStale  = !!loc.stale || (isOnline && (Date.now() - (loc.ts||0)) > 20000); // stale si >20s sin actualizar
       const mens = mensajeros.find(m => m.id === driverId);
       const initials = mens?.initials || driverId.slice(-2).toUpperCase();
 
       if (driverMarkersRef.current[driverId]) {
-        // Update existing marker position
         const { marker, circle } = driverMarkersRef.current[driverId];
         marker.setPosition(pos);
         if (circle) {
           circle.setCenter(pos);
           circle.setRadius(loc.accuracy || 30);
+          circle.setOptions({ fillColor: isStale?"#6366f1":"#3b82f6", strokeColor: isStale?"#6366f1":"#3b82f6" });
         }
-        // Update icon if online status changed
-        const svg = makeDriverSvg(initials, isOnline);
+        const svg = makeDriverSvg(initials, isOnline, isStale);
         marker.setIcon({
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-          scaledSize: new window.google.maps.Size(52, 52),
-          anchor: new window.google.maps.Point(26, 26),
+          scaledSize: new window.google.maps.Size(56, 56),
+          anchor: new window.google.maps.Point(28, 28),
         });
       } else {
-        // Create new marker
-        const svg = makeDriverSvg(initials, isOnline);
+        const svg = makeDriverSvg(initials, isOnline, isStale);
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
           position: pos,
@@ -354,35 +357,35 @@ const PageDashboard = () => {
           title: loc.driverName || driverId,
           icon: {
             url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-            scaledSize: new window.google.maps.Size(52, 52),
-            anchor: new window.google.maps.Point(26, 26),
+            scaledSize: new window.google.maps.Size(56, 56),
+            anchor: new window.google.maps.Point(28, 28),
           },
         });
-        // Accuracy circle
         const circle = new window.google.maps.Circle({
           map: gMapRef.current,
           center: pos,
           radius: loc.accuracy || 30,
-          fillColor: "#3b82f6",
-          fillOpacity: 0.06,
-          strokeColor: "#3b82f6",
-          strokeOpacity: 0.2,
+          fillColor: isStale?"#6366f1":"#3b82f6",
+          fillOpacity: 0.07,
+          strokeColor: isStale?"#6366f1":"#3b82f6",
+          strokeOpacity: 0.25,
           strokeWeight: 1,
           zIndex: 100,
         });
-        // Click to show info
         marker.addListener("click", () => {
           if (!infoWindowRef.current) {
             infoWindowRef.current = new window.google.maps.InfoWindow();
           }
           const mins = Math.round((Date.now() - (loc.ts||0)) / 60000);
           const timeAgo = mins === 0 ? "ahora mismo" : mins === 1 ? "hace 1 min" : `hace ${mins} min`;
+          const statusDot = isStale ? `<span style="color:#6366f1">● En fondo</span>` : isOnline ? `<span style="color:#22c55e">● En línea</span>` : `<span style="color:#6b7280">● Desconectado</span>`;
           infoWindowRef.current.setContent(`
-            <div style="font-family:-apple-system,sans-serif;padding:4px 6px;min-width:160px">
+            <div style="font-family:-apple-system,sans-serif;padding:4px 6px;min-width:170px">
               <div style="font-weight:800;font-size:13px;margin-bottom:3px">${loc.driverName||driverId}</div>
-              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">🕐 Actualizado ${timeAgo}</div>
+              <div style="font-size:11px;margin-bottom:2px">${statusDot}</div>
+              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">🕐 ${timeAgo}</div>
               ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6">📦 ${loc.routeName}</div>` : ""}
-              ${loc.accuracy ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">Precisión: ±${loc.accuracy}m</div>` : ""}
+              ${loc.accuracy ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">Precisión: ±${loc.accuracy}m${isStale?" · posición cacheada":""}</div>` : ""}
               <div style="font-size:10px;color:#9ca3af">${loc.lat?.toFixed(5)}, ${loc.lng?.toFixed(5)}</div>
             </div>
           `);
@@ -2291,73 +2294,177 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
 
-  // ── UBICACIÓN EN TIEMPO REAL ────────────────────────────────
-  const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied
+  // ── UBICACIÓN EN TIEMPO REAL — BACKGROUND CAPABLE ──────────
+  // Estrategia de 3 capas para que funcione aunque salga de la app:
+  //  1. watchPosition con enableHighAccuracy (primer plano)
+  //  2. Wake Lock API — evita que la pantalla se apague en móvil
+  //  3. visibilitychange — relanza watchPosition al volver a la pestaña
+  //  4. Heartbeat setInterval — re-publica última posición conocida cada 8s
+  //     para que el admin siga viendo el punto aunque el GPS esté en pausa
+  const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied | background
   const [myLocation,     setMyLocation]     = useState(null);   // { lat, lng, accuracy, ts }
-  const watchIdRef = useRef(null);
-  const locationMarkerRef = useRef(null); // marker azul del mensajero en el mapa
-  const locationAccuracyRef = useRef(null); // círculo de precisión
+  const watchIdRef         = useRef(null);
+  const locationMarkerRef  = useRef(null);
+  const locationAccuracyRef= useRef(null);
+  const wakeLockRef        = useRef(null);   // WakeLock sentinel
+  const heartbeatRef       = useRef(null);   // setInterval para heartbeat
+  const lastLocRef         = useRef(null);   // última ubicación conocida
+  const isTrackingRef      = useRef(false);  // evita doble arranque
 
-  // Solicitar y activar tracking de ubicación
-  const startLocationTracking = () => {
-    if (!navigator.geolocation) {
-      setLocationStatus("denied");
-      return;
-    }
-    setLocationStatus("requesting");
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const loc = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy),
-          heading: pos.coords.heading,
-          speed: pos.coords.speed,
-          ts: Date.now(),
-          driverName: driver.name || "Mensajero",
-          driverId: myKey,
-          routeName: myRoute?.routeName || null,
-          online: true,
-        };
-        setMyLocation(loc);
-        setLocationStatus("active");
-        // Publicar en Firebase para que el admin la vea
-        LS.setLocation(myKey, loc);
-      },
-      (err) => {
-        console.warn("Geolocation error:", err.code, err.message);
-        setLocationStatus(err.code === 1 ? "denied" : "error");
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 5000,       // acepta cache de hasta 5s
-        timeout: 15000,          // timeout de 15s
-      }
-    );
+  // ── Adquirir Wake Lock (evita suspensión de pantalla) ──────
+  const acquireWakeLock = async () => {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      wakeLockRef.current.addEventListener("release", () => {
+        // Re-adquirir si fue liberado automáticamente (ej. batería baja)
+        if (isTrackingRef.current) setTimeout(acquireWakeLock, 2000);
+      });
+    } catch(e) { /* Wake Lock no disponible — no crítico */ }
   };
 
-  const stopLocationTracking = () => {
+  // ── Publicar ubicación en Firebase ─────────────────────────
+  const publishLocation = (loc) => {
+    lastLocRef.current = loc;
+    LS.setLocation(myKey, loc);
+  };
+
+  // ── Arrancar watchPosition ──────────────────────────────────
+  const startWatch = () => {
+    if (!navigator.geolocation) { setLocationStatus("denied"); return; }
+    // Limpiar watch anterior si existía
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    // Marcar offline en Firebase
-    LS.setLocation(myKey, { ...myLocation, online: false, ts: Date.now() });
-    setLocationStatus("idle");
-    setMyLocation(null);
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const loc = {
+          lat:       pos.coords.latitude,
+          lng:       pos.coords.longitude,
+          accuracy:  Math.round(pos.coords.accuracy),
+          heading:   pos.coords.heading,
+          speed:     pos.coords.speed,
+          ts:        Date.now(),
+          driverName:driver.name || "Mensajero",
+          driverId:  myKey,
+          routeName: myRoute?.routeName || null,
+          online:    true,
+        };
+        setMyLocation(loc);
+        setLocationStatus("active");
+        publishLocation(loc);
+      },
+      (err) => {
+        console.warn("Geolocation error:", err.code, err.message);
+        if (err.code === 1) {
+          setLocationStatus("denied");
+          isTrackingRef.current = false;
+        } else {
+          // Timeout / red — no matar el tracking, reintentar en 5s
+          setLocationStatus("background");
+          setTimeout(() => { if (isTrackingRef.current) startWatch(); }, 5000);
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge:         3000,   // acepta cache de hasta 3s
+        timeout:            20000,  // timeout de 20s
+      }
+    );
   };
 
-  // Iniciar tracking automáticamente al montar (pide permiso una sola vez)
+  // ── Iniciar todo el sistema de tracking ────────────────────
+  const startLocationTracking = async () => {
+    if (!navigator.geolocation) { setLocationStatus("denied"); return; }
+    if (isTrackingRef.current) return; // ya corriendo
+    isTrackingRef.current = true;
+    setLocationStatus("requesting");
+
+    // 1. Wake Lock
+    await acquireWakeLock();
+
+    // 2. watchPosition
+    startWatch();
+
+    // 3. Heartbeat — cada 8s re-publica la última posición conocida
+    //    Esto mantiene el punto visible en el mapa del admin aunque
+    //    el GPS esté en pausa por backgrounding del navegador
+    heartbeatRef.current = setInterval(() => {
+      if (lastLocRef.current) {
+        publishLocation({
+          ...lastLocRef.current,
+          ts:     Date.now(),
+          online: true,
+          stale:  true, // indica al admin que es posición cacheada
+        });
+      }
+    }, 8000);
+  };
+
+  // ── Detener tracking ────────────────────────────────────────
+  const stopLocationTracking = () => {
+    isTrackingRef.current = false;
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(()=>{});
+      wakeLockRef.current = null;
+    }
+    LS.setLocation(myKey, { ...(lastLocRef.current||{}), online: false, ts: Date.now() });
+    setLocationStatus("idle");
+    setMyLocation(null);
+    lastLocRef.current = null;
+  };
+
+  // ── Montar: arrancar tracking + handlers de background ─────
   useEffect(() => {
     startLocationTracking();
+
+    // visibilitychange: relanzar watchPosition al volver a la pestaña
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && isTrackingRef.current) {
+        // Re-adquirir Wake Lock si fue liberado mientras estaba en background
+        acquireWakeLock();
+        // Relanzar watchPosition (el navegador lo puede haber matado)
+        startWatch();
+        setLocationStatus("active");
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // Re-adquirir Wake Lock si la página recupera foco (ej. vuelve de otra app)
+    const handleFocus = () => {
+      if (isTrackingRef.current) {
+        acquireWakeLock();
+        startWatch();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // Online/offline
+    const handleOnline = () => {
+      if (isTrackingRef.current && lastLocRef.current) {
+        publishLocation({ ...lastLocRef.current, ts: Date.now(), online: true });
+      }
+    };
+    window.addEventListener("online", handleOnline);
+
     return () => {
-      // Al salir, marcar offline
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-      if (myKey) {
-        FB.set(`locations/${myKey}`, { online: false, ts: Date.now(), driverId: myKey });
-      }
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("online", handleOnline);
+      // Marcar offline al desmontar
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (wakeLockRef.current) wakeLockRef.current.release().catch(()=>{});
+      if (myKey) FB.set(`locations/${myKey}`, { online: false, ts: Date.now(), driverId: myKey });
     };
   }, []); // eslint-disable-line
 
@@ -2979,21 +3086,23 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             {driver.name||"Mensajero"}
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:1 }}>
-            <div style={{ width:6,height:6,borderRadius:"50%",
-              background: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151",
-              boxShadow: locationStatus==="active"?"0 0 6px #22c55e":locationStatus==="requesting"?"0 0 6px #f59e0b":"none",
-              animation: locationStatus==="requesting"?"pulse 1s infinite":"none",
+            <div style={{ width:6,height:6,borderRadius:"50%",flexShrink:0,
+              background: locationStatus==="active"?"#22c55e":locationStatus==="background"?"#3b82f6":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151",
+              boxShadow: locationStatus==="active"?"0 0 7px #22c55e":locationStatus==="background"?"0 0 7px #3b82f6":locationStatus==="requesting"?"0 0 7px #f59e0b":"none",
+              animation: locationStatus==="requesting"||locationStatus==="background"?"pulse 1s infinite":"none",
             }}/>
             <span style={{ fontSize:10,fontWeight:600,letterSpacing:"0.2px",
-              color: locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"rgba(255,255,255,0.3)"
+              color: locationStatus==="active"?"#22c55e":locationStatus==="background"?"#60a5fa":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"rgba(255,255,255,0.3)"
             }}>
-              {locationStatus==="active"?"GPS activo":locationStatus==="requesting"?"Obteniendo GPS...":locationStatus==="denied"?"GPS denegado":"En línea"}
+              {locationStatus==="active"?"GPS ACTIVO":locationStatus==="background"?"GPS EN FONDO":locationStatus==="requesting"?"Obteniendo GPS...":locationStatus==="denied"?"GPS denegado":"En línea"}
             </span>
-            {/* Botón tap para activar GPS si fue denegado */}
+            {locationStatus==="active" && myLocation && (
+              <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:"monospace" }}>±{myLocation.accuracy}m</span>
+            )}
             {(locationStatus==="denied"||locationStatus==="idle") && (
               <button onClick={startLocationTracking}
-                style={{ background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:5,padding:"1px 6px",fontSize:9,color:"#60a5fa",cursor:"pointer",fontWeight:700 }}>
-                Activar
+                style={{ background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",border:"none",borderRadius:6,padding:"2px 9px",fontSize:9,color:"white",cursor:"pointer",fontWeight:700,boxShadow:"0 0 10px rgba(59,130,246,0.5)" }}>
+                Activar GPS
               </button>
             )}
           </div>
@@ -6562,7 +6671,7 @@ const optimizeWithRoutesAPI = async (validStops) => {
   return ordered;
 };
 
-// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
+// --- NEAREST NEIGHBOR desde DEPOT — proximidad a base primero (Haversine) ------
 const optimizeRouteLocal = (stops) => {
   if (!stops || stops.length === 0) return [];
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
@@ -6570,52 +6679,21 @@ const optimizeRouteLocal = (stops) => {
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
   if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
-  // Fase 1: Nearest Neighbor
+  // Nearest Neighbor puro desde la base (DEPOT).
+  // El primer paquete siempre es el más cercano a la base,
+  // y desde cada parada se elige siempre la más cercana siguiente.
+  // No se aplica 2-opt ni Or-opt para no alterar la lógica de proximidad a la base.
   let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
   const rem = [...valid], tour = [];
   while (rem.length > 0) {
     let bi = 0, bd = Infinity;
-    for (let i = 0; i < rem.length; i++) { const d = hav(cur, rem[i]); if (d < bd) { bd = d; bi = i; } }
-    const [next] = rem.splice(bi, 1); tour.push(next); cur = next;
-  }
-
-  // Fase 2: 2-opt
-  let improved = true, iterations = 0;
-  while (improved && iterations < 100) {
-    improved = false; iterations++;
-    for (let i = 0; i < tour.length - 1; i++) {
-      for (let j = i + 1; j < tour.length; j++) {
-        const A = i === 0 ? DEPOT : tour[i - 1], B = tour[i];
-        const C = tour[j], D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
-          let l = i, r = j;
-          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
-          improved = true;
-        }
-      }
+    for (let i = 0; i < rem.length; i++) {
+      const d = hav(cur, rem[i]);
+      if (d < bd) { bd = d; bi = i; }
     }
-  }
-
-  // Fase 3: Or-opt
-  let orImproved = true, orIter = 0;
-  while (orImproved && orIter < 20) {
-    orImproved = false; orIter++;
-    for (let i = 0; i < tour.length; i++) {
-      const node = tour[i], prev = i === 0 ? DEPOT : tour[i - 1], next = i === tour.length - 1 ? DEPOT : tour[i + 1];
-      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
-      let bestGain = 0.001, bestJ = -1;
-      for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i - 1) continue;
-        const a = tour[j], b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
-        if (gain > bestGain) { bestGain = gain; bestJ = j; }
-      }
-      if (bestJ >= 0) {
-        const removed = tour.splice(i, 1)[0];
-        tour.splice(bestJ > i ? bestJ : bestJ + 1, 0, removed);
-        orImproved = true; break;
-      }
-    }
+    const [next] = rem.splice(bi, 1);
+    tour.push(next);
+    cur = next;
   }
 
   return [
