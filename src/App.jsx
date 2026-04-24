@@ -2241,6 +2241,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [time,       setTime]       = useState(new Date());
   const [logoutConf, setLogoutConf] = useState(false);
   const [search,     setSearch]     = useState("");
+  const searchInputRef = useRef(null);
+  const listScrollRef  = useRef(null);
+
+  // Cuando el teclado aparece en mobile, scroll al input para que quede visible
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handler = () => {
+      // Si el viewport se achicó (teclado abierto) y search está activo
+      if (document.activeElement === searchInputRef.current) {
+        setTimeout(() => {
+          searchInputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    };
+    vv.addEventListener("resize", handler);
+    return () => vv.removeEventListener("resize", handler);
+  }, []);
   const [selStop,    setSelStop]    = useState(null);
   const [mapExpanded, setMapExpanded] = useState(false);
   // Bottom sheet: "peek" | "half" | "full"
@@ -3304,7 +3322,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
           {/* ── PRÓXIMAS PARADAS header + filter chips ── */}
           {myRoute && (
-            <div style={{ padding:"6px 12px 0", flexShrink:0 }}>
+            <div style={{ padding:"6px 12px 0", flexShrink:0, position:"sticky", top:0, background:"rgba(7,13,24,0.97)", backdropFilter:"blur(12px)", zIndex:10 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                 <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", letterSpacing:"1.5px" }}>
                   {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
@@ -3323,18 +3341,27 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 </div>
               </div>
 
-              {/* Search */}
+              {/* Search — scrollIntoView on focus so keyboard doesn't cover it */}
               <div style={{ position:"relative" }}>
                 <svg style={{ position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar paradas..."
-                  style={{ width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"8px 11px 8px 30px",color:"#f1f5f9",fontSize:12,outline:"none",caretColor:"#3b82f6" }}/>
-                {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14,lineHeight:1 }}>✕</button>}
+                <input
+                  ref={searchInputRef}
+                  value={search}
+                  onChange={e=>setSearch(e.target.value)}
+                  placeholder="Buscar paradas..."
+                  onFocus={()=>{
+                    setTimeout(()=>{
+                      searchInputRef.current?.scrollIntoView({behavior:"smooth",block:"start",inline:"nearest"});
+                    }, 320);
+                  }}
+                  style={{ width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"9px 32px 9px 30px",color:"#f1f5f9",fontSize:13,outline:"none",caretColor:"#3b82f6" }}/>
+                {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:15,lineHeight:1 }}>✕</button>}
               </div>
             </div>
           )}
 
           {/* ── Stops list — scrollable, compact ── */}
-          <div style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:8,marginTop:4,WebkitOverflowScrolling:"touch" }}>
+          <div ref={listScrollRef} style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:8,marginTop:4,WebkitOverflowScrolling:"touch" }}>
 
             {/* Empty state - no route */}
             {!myRoute && (
