@@ -642,6 +642,7 @@ const PageRoutes = () => {
   const [allRouteHistory, setAllRouteHistory] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [filterDriver, setFilterDriver]   = useState("all");
+  const [filterDate,   setFilterDate]     = useState("");
   const [stopSearch,   setStopSearch]     = useState("");
   const mapRef  = useRef(null);
   const gMapRef = useRef(null);
@@ -759,7 +760,11 @@ const PageRoutes = () => {
   }, [selectedRoute]);
 
   const allDrivers = [...new Set(allRouteHistory.map(r => r.driverName).filter(Boolean))];
-  const filtered = filterDriver === "all" ? allRouteHistory : allRouteHistory.filter(r => r.driverName === filterDriver);
+  const filtered = allRouteHistory.filter(r => {
+    const driverOk = filterDriver === "all" || r.driverName === filterDriver;
+    const dateOk = !filterDate || (r.sentAt && r.sentAt.slice(0,10) === filterDate);
+    return driverOk && dateOk;
+  });
 
   const fmtDate = (iso) => {
     if (!iso) return "—";
@@ -779,16 +784,32 @@ const PageRoutes = () => {
     <div style={{ flex:1, display:"flex", overflow:"hidden", background:"#060b10" }}>
 
       {/* LEFT: route list */}
-      <div style={{ width:300, borderRight:"1px solid #0d1420", display:"flex", flexDirection:"column", overflow:"hidden", flexShrink:0 }}>
+      <div style={{ width:380, borderRight:"1px solid #0d1420", display:"flex", flexDirection:"column", overflow:"hidden", flexShrink:0 }}>
         {/* Header */}
-        <div style={{ padding:"16px 14px 12px", borderBottom:"1px solid #0d1420", flexShrink:0 }}>
-          <div style={{ fontSize:10, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1.5px", marginBottom:10 }}>HISTORIAL DE RUTAS</div>
+        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid #0d1420", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <div style={{ fontSize:10, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1.5px" }}>HISTORIAL DE RUTAS</div>
+            <div style={{ fontSize:10, color:"#2d4a60", fontFamily:"'Syne',sans-serif" }}>{filtered.length} ruta{filtered.length!==1?"s":""}</div>
+          </div>
           {/* Driver filter */}
           <select value={filterDriver} onChange={e=>setFilterDriver(e.target.value)}
-            style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px", color:"#94a3b8", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer" }}>
+            style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px", color:"#94a3b8", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", marginBottom:8 }}>
             <option value="all">Todos los mensajeros</option>
             {allDrivers.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
+          {/* Date filter */}
+          <div style={{ position:"relative" }}>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={e=>setFilterDate(e.target.value)}
+              style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px 7px 32px", color: filterDate?"#94a3b8":"#374151", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", colorScheme:"dark" }}
+            />
+            <svg style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            {filterDate && (
+              <button onClick={()=>setFilterDate("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#374151", cursor:"pointer", fontSize:13, lineHeight:1, padding:"0 2px" }}>✕</button>
+            )}
+          </div>
         </div>
 
         {/* List */}
@@ -806,38 +827,54 @@ const PageRoutes = () => {
               <div key={`${route.driverId}-${route.sentAt}-${i}`}
                 onClick={() => { setSelectedRoute(isSel ? null : route); setStopSearch(""); }}
                 style={{
-                  padding:"12px 14px", borderBottom:"1px solid #0a0f18",
+                  padding:"16px 18px 14px",
+                  borderBottom:"1px solid #0d1420",
                   background: isSel ? "#091527" : "transparent",
                   borderLeft: `3px solid ${isSel ? "#3b82f6" : "transparent"}`,
-                  cursor:"pointer", transition:"all .12s",
+                  cursor:"pointer", transition:"background .12s, border-color .12s",
                   animation:`slideIn .3s ${Math.min(i,15)*30}ms ease both`,
                 }}>
+
                 {/* Route name */}
-                <div style={{ fontSize:12, fontFamily:"'Syne',sans-serif", fontWeight:700, color: isSel?"#e2e8f0":"#94a3b8", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:14, fontFamily:"'Syne',sans-serif", fontWeight:800, color: isSel ? "#e2e8f0" : "#94a3b8", marginBottom:7, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px" }}>
                   {route.routeName || "Ruta sin nombre"}
                 </div>
-                {/* Driver + date */}
-                <div style={{ fontSize:10, color:"#374151", marginBottom:8, display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ color:"#2d4a60", fontWeight:600 }}>{route.driverName || "—"}</span>
-                  <span style={{ color:"#1e2d3d" }}>·</span>
-                  <span>{fmtDate(route.sentAt)}</span>
+
+                {/* Mensajero */}
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
+                  <div style={{ width:22, height:22, borderRadius:6, background:"#0d1b2a", border:"1px solid #1e3550", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <span style={{ fontSize:12, color:"#60a5fa", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>{route.driverName || "—"}</span>
                 </div>
+
+                {/* Fecha */}
+                <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:11 }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  <span style={{ fontSize:11, color:"#374151", fontFamily:"'Inter',sans-serif" }}>{fmtDate(route.sentAt)}</span>
+                </div>
+
                 {/* Stats pills */}
-                <div style={{ display:"flex", gap:5 }}>
-                  <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(16,185,129,0.1)", color:"#10b981" }}>
-                    ✓ {stats.delivered}
+                <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                  <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(16,185,129,0.12)", color:"#10b981", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(16,185,129,0.15)" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    {stats.delivered} entregados
                   </div>
                   {stats.problems > 0 && (
-                    <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(239,68,68,0.1)", color:"#ef4444" }}>
-                      ⚠ {stats.problems}
+                    <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(239,68,68,0.12)", color:"#ef4444", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(239,68,68,0.15)" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                      {stats.problems} problema{stats.problems !== 1 ? "s" : ""}
                     </div>
                   )}
                   {stats.pending > 0 && (
-                    <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(245,158,11,0.1)", color:"#f59e0b" }}>
-                      ○ {stats.pending}
+                    <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(245,158,11,0.12)", color:"#f59e0b", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(245,158,11,0.15)" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      {stats.pending} pendientes
                     </div>
                   )}
-                  <div style={{ fontSize:9.5, color:"#2d4a60", marginLeft:"auto" }}>{stats.total} paradas · {route.km||"—"} km</div>
+                  <div style={{ fontSize:11, color:"#2d4a60", marginLeft:"auto", fontFamily:"'Inter',sans-serif", whiteSpace:"nowrap" }}>
+                    {stats.total} paradas{route.km ? ` · ${route.km} km` : ""}
+                  </div>
                 </div>
               </div>
             );
@@ -8730,10 +8767,10 @@ export default function RapDrive() {
   if(typeof window!=="undefined") window.__rdOpenModal=()=>setModalOpen(true);
 
   const navItems=[
-    {id:"dashboard",icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-    {id:"routes",   icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M14 16l4-8M10 16l-4-8"/></svg>},
-    {id:"import",   icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>},
-    {id:"settings", icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>},
+    {id:"dashboard",label:"Dashboard",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>},
+    {id:"routes",   label:"Rutas",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v6a4 4 0 0 0 4 4h6"/><path d="M19 5v8"/></svg>},
+    {id:"import",   label:"Motor",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>},
+    {id:"settings", label:"Config",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>},
   ];
 
   // Show login when not authenticated
@@ -8777,60 +8814,96 @@ export default function RapDrive() {
       `}</style>
 
       {/* SIDEBAR */}
-      <aside style={{width:56,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 0",gap:3,flexShrink:0}}>
-        <div style={{marginBottom:20}}>
-          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 20px #3b82f625"}}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
+      <aside style={{width:88,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"18px 0 14px",flexShrink:0}}>
+        {/* Logo */}
+        <div style={{marginBottom:28,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+          <div style={{width:38,height:38,borderRadius:12,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px #3b82f640"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.5"/></svg>
           </div>
+          <span style={{fontSize:9,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px"}}>RAP DRIVE</span>
         </div>
-        {navItems.map(item=>(
-          <button key={item.id} className="nb" title={PAGE_TITLES[item.id]} onClick={()=>setNav(item.id)} style={{width:38,height:38,borderRadius:10,border:"none",cursor:"pointer",background:nav===item.id?"#0d1420":"transparent",color:nav===item.id?"#3b82f6":"#2d4a60",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",position:"relative"}}>
-            {item.icon}
-            {nav===item.id&&<div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:2,height:16,background:"#3b82f6",borderRadius:"0 2px 2px 0"}}/>}
-          </button>
-        ))}
+
+        {/* Nav items */}
+        <div style={{display:"flex",flexDirection:"column",gap:4,width:"100%",padding:"0 10px"}}>
+          {navItems.map(item=>(
+            <button key={item.id} onClick={()=>setNav(item.id)} style={{width:"100%",padding:"10px 0 9px",borderRadius:12,border:"none",cursor:"pointer",background:nav===item.id?"linear-gradient(135deg,#0d1f35,#0a1828)":"transparent",color:nav===item.id?"#60a5fa":"#374151",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s",position:"relative",boxShadow:nav===item.id?"0 2px 12px rgba(59,130,246,0.12)":"none"}}>
+              {nav===item.id&&<div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:"#3b82f6",borderRadius:"0 3px 3px 0",boxShadow:"0 0 8px #3b82f6"}}/>}
+              <div style={{color:nav===item.id?"#60a5fa":"#374151",transition:"color .2s"}}>{item.icon}</div>
+              <span style={{fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.3px",color:nav===item.id?"#60a5fa":"#374151",lineHeight:1,transition:"color .2s"}}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div style={{flex:1}}/>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"0 0 4px"}}>
-          <div
-            onClick={()=>setLogoutConfirm(true)}
-            title={`${currentUser.name} · ${rc.label}
-Click para cerrar sesión`}
-            style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${rc.color}28,${rc.color}14)`,border:`1.5px solid ${rc.color}38`,display:"flex",alignItems:"center",justifyContent:"center",color:rc.color,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s",flexShrink:0}}
-          >{currentUser.avatar}</div>
-          <div style={{width:6,height:6,borderRadius:"50%",background:rc.color,boxShadow:`0 0 5px ${rc.color}`}}/>
+
+        {/* User avatar */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"0 10px 4px",width:"100%"}}>
+          <div style={{width:"100%",height:1,background:"#0d1420",marginBottom:8}}/>
+          <div onClick={()=>setLogoutConfirm(true)} title={`${currentUser.name} · Cerrar sesión`}
+            style={{width:38,height:38,borderRadius:12,background:`linear-gradient(135deg,${rc.color}22,${rc.color}10)`,border:`1.5px solid ${rc.color}30`,display:"flex",alignItems:"center",justifyContent:"center",color:rc.color,fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,cursor:"pointer",transition:"all .15s"}}>
+            {currentUser.avatar}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 5px #10b981"}}/>
+            <span style={{fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:600}}>Online</span>
+          </div>
         </div>
       </aside>
 
       {/* MAIN */}
       <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
-        <header style={{height:50,borderBottom:"1px solid #0d1420",display:"flex",alignItems:"center",padding:"0 20px",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:"#f1f5f9",letterSpacing:"-0.3px"}}>{PAGE_TITLES[nav]}</span>
-            <span style={{color:"#131f30"}}>·</span>
-            <span style={{color:"#2d4a60",fontSize:12}}>{time.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</span>
+        <header style={{height:52,borderBottom:"1px solid #0c1522",display:"flex",alignItems:"center",padding:"0 24px",justifyContent:"space-between",flexShrink:0,background:"#070c14",position:"relative"}}>
+          {/* subtle bottom glow line */}
+          <div style={{position:"absolute",bottom:0,left:0,right:0,height:"1px",background:"linear-gradient(90deg,transparent 0%,#1e3a5f22 30%,#3b82f618 50%,#1e3a5f22 70%,transparent 100%)"}}/>
+
+          {/* LEFT — page title */}
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div>
+              <div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"2px",textTransform:"uppercase",marginBottom:1}}>Rap Drive</div>
+              <div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.5px",lineHeight:1}}>{PAGE_TITLES[nav]}</div>
+            </div>
+            <div style={{width:1,height:28,background:"#0d1a28",margin:"0 2px"}}/>
             <RoleBadge role={role}/>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:9}}>
-            {/* Cmd+K search trigger */}
-            <button onClick={()=>setSearchOpen(true)} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1019",border:"1px solid #1e2d3d",borderRadius:9,padding:"5px 12px",cursor:"pointer",transition:"all .15s"}}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Inter',sans-serif"}}>Buscar...</span>
-              <div style={{display:"flex",gap:3,marginLeft:4}}>
-                <span style={{background:"#131f30",border:"1px solid #1e2d3d",borderRadius:4,padding:"1px 5px",fontSize:9,color:"#374151",fontFamily:"'Syne',sans-serif",fontWeight:700}}>⌘</span>
-                <span style={{background:"#131f30",border:"1px solid #1e2d3d",borderRadius:4,padding:"1px 5px",fontSize:9,color:"#374151",fontFamily:"'Syne',sans-serif",fontWeight:700}}>K</span>
-              </div>
-            </button>
-            <div style={{display:"flex",alignItems:"center",gap:5,background:"#0a1019",border:"1px solid #131f30",borderRadius:9,padding:"5px 11px"}}>
-              <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 6px #10b981",animation:"pulse 2s infinite"}}/>
-              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px"}}>{time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
+
+          {/* CENTER — date + live status */}
+          <div style={{position:"absolute",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:12,color:"#2d4a60",fontFamily:"'Inter',sans-serif",fontWeight:500,whiteSpace:"nowrap",letterSpacing:"0.1px"}}>
+              {time.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}
+            </span>
+            <div style={{width:1,height:14,background:"#0d1a28"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 8px #10b98199",animation:"pulse 2s infinite"}}/>
+              <span style={{fontSize:12,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px",fontVariantNumeric:"tabular-nums"}}>
+                {time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+              </span>
             </div>
-            <button onClick={()=>{setNotifOpen(o=>!o);setFeedOpen(false);}} style={{width:30,height:30,borderRadius:8,border:`1px solid ${notifOpen?"#1e3550":"#131f30"}`,background:notifOpen?"#0a1828":"#0a1019",color:notifOpen?"#60a5fa":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"all .15s"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              {unreadCount>0&&<div style={{position:"absolute",top:-3,right:-3,width:14,height:14,borderRadius:"50%",background:"#ef4444",border:"2px solid #060b10",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontFamily:"'Syne',sans-serif",fontWeight:800}}>{unreadCount>9?"9+":unreadCount}</div>}
+          </div>
+
+          {/* RIGHT — utilities */}
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+
+            {/* Search */}
+            <button onClick={()=>setSearchOpen(true)} className="fb" style={{display:"flex",alignItems:"center",gap:8,background:"transparent",border:"1px solid #0d1a28",borderRadius:8,padding:"6px 11px",cursor:"pointer",transition:"border-color .2s"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Inter',sans-serif",fontWeight:400}}>Buscar</span>
+              <kbd style={{background:"#0a1322",border:"1px solid #1a2d40",borderRadius:5,padding:"1px 6px",fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px"}}>⌘K</kbd>
             </button>
-            <button onClick={()=>{setFeedOpen(o=>!o);setNotifOpen(false);}} style={{width:30,height:30,borderRadius:8,border:`1px solid ${feedOpen?"#1e3550":"#131f30"}`,background:feedOpen?"#0a1828":"#0a1019",color:feedOpen?"#10b981":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",position:"relative"}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 5px #10b981",animation:"pulse 2s infinite"}}/>
+
+            <div style={{width:1,height:18,background:"#0d1a28",margin:"0 1px"}}/>
+
+            {/* Notifications */}
+            <button onClick={()=>{setNotifOpen(o=>!o);setFeedOpen(false);}} style={{width:34,height:34,borderRadius:8,border:`1px solid ${notifOpen?"#1e3a5f":"#0d1a28"}`,background:notifOpen?"rgba(59,130,246,0.08)":"transparent",color:notifOpen?"#60a5fa":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"all .2s"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              {unreadCount>0&&<div style={{position:"absolute",top:-4,right:-4,minWidth:15,height:15,borderRadius:8,background:"linear-gradient(135deg,#dc2626,#ef4444)",border:"2px solid #070c14",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,padding:"0 3px"}}>{unreadCount>9?"9+":unreadCount}</div>}
             </button>
+
+            {/* Activity feed */}
+            <button onClick={()=>{setFeedOpen(o=>!o);setNotifOpen(false);}} style={{width:34,height:34,borderRadius:8,border:`1px solid ${feedOpen?"#0d3322":"#0d1a28"}`,background:feedOpen?"rgba(16,185,129,0.07)":"transparent",color:feedOpen?"#10b981":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s",position:"relative"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              {feedOpen&&<div style={{position:"absolute",top:6,right:6,width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 6px #10b981",animation:"pulse 2s infinite"}}/>}
+            </button>
+
           </div>
         </header>
 
@@ -8855,11 +8928,7 @@ Click para cerrar sesión`}
       {feedOpen  && <ActivityFeed events={events} onClose={()=>setFeedOpen(false)}/>}
       {modalOpen && <ModalNewDelivery onClose={()=>setModalOpen(false)} onCreated={handleCreated}/>}
 
-      {/* FAB - oculto en import/circuit para no molestar */}
-      {rc.canDeleteDeliveries && nav !== "import" && <button onClick={()=>{setModalOpen(true);setNotifOpen(false);setFeedOpen(false);}} style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",border:"none",borderRadius:28,padding:"11px 22px",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",letterSpacing:"1px",boxShadow:"0 8px 32px #3b82f650, 0 2px 8px rgba(0,0,0,0.4)",zIndex:800,transition:"all .2s"}}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        NUEVA ENTREGA
-      </button>}
+
 
       {/* Toast stack */}
       <div style={{position:"fixed",top:64,right:12,display:"flex",flexDirection:"column",gap:8,zIndex:3000,pointerEvents:"none",alignItems:"flex-end"}}>
