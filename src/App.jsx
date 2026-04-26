@@ -2303,6 +2303,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [chatLog,    setChatLog]    = useState(() => (window.__rdChatStore||{})[myKey]||[]);
   const [showProb,   setShowProb]   = useState(null);
   const [probNote,   setProbNote]   = useState("");
+  // ── Flujo de evidencia con cámara ──────────────────────────────────────────
+  const [evidenceFlow, setEvidenceFlow] = useState(null); // { stopId, mode:"delivered"|"failed", probNote? }
   const [time,       setTime]       = useState(new Date());
   const [logoutConf, setLogoutConf] = useState(false);
   const [search,     setSearch]     = useState("");
@@ -3014,39 +3016,113 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     setChatLog(nl);
   };
 
-  const markDelivered = (stopId) => {
-    let foundNext = false;
-    const updated = stops.map(s => {
-      if (s.id===stopId) return {...s,driverStatus:"delivered",deliveredAt:new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})};
-      if (!foundNext&&s.driverStatus==="pending") { foundNext=true; return {...s,driverStatus:"en_ruta"}; }
-      return s;
-    });
-    setStops(updated); pushUpdate(updated);
-    const stop = stops.find(s=>s.id===stopId);
-    addChatMsg(`✓ Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`);
-    // Notificar al admin via Firebase
-    const notifId = "n"+Date.now()+stopId;
-    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
-      title:`Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`,
-      body:`${myKey} · #${stop?.stopNum} · ${stop?.displayAddr||stop?.rawAddr||""}`,
-      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
-      read: false, isNew: true, createdAt: Date.now() });
-    setSelStop(null);
+  // ── Guardar evidencia en Firebase + enviar al backend para sync con SilpoPack ──
+  const saveEvidenceAndSync = async (stopId, mode, photoDataUrl, note) => {
+    const stop = stops.find(s => s.id === stopId);
+    if (!stop) return;
+    const ts        = Date.now();
+    const timeStr   = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
+    const isDelivered = mode === "delivered";
+
+    // 1. Subir foto a Firebase Storage (base64 en Realtime DB como fallback si no hay Storage)
+    //    En producción reemplazar por Firebase Storage upload
+    const photoKey = `evidence/${myKey}/${ts}_${stopId}`;
+    await FB.set(photoKey, { photo: photoDataUrl, ts, stopId });
+    const evidencePhotoUrl = `firebase:${photoKey}`; // placeholder hasta integrar Storage
+
+    // 2. Obtener GPS actual
+    let gpsLocation = null;
+    try {
+      gpsLocation = await new Promise((res) =>
+        navigator.geolocation.getCurrentPosition(
+          p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+          () => res(null),
+          { timeout: 4000, enableHighAccuracy: true }
+        )
+      );
+    } catch {}
+
+    // 3. Construir payload de sincronización
+    const syncPayload = {
+      packageCode:    stop.tracking || stop.id,
+      status:         isDelivered ? "delivered" : "failed",
+      evidencePhotoUrl,
+      courierId:      myKey,
+      courierName:    users.find(u => u.email === myKey)?.name || myKey,
+      deliveredAt:    isDelivered ? new Date().toISOString() : null,
+      failedAt:       !isDelivered ? new Date().toISOString() : null,
+      failNote:       !isDelivered ? (note || "Sin detalles") : null,
+      gpsLocation,
+      syncStatus:     "pending",
+      createdAt:      ts,
+      stopId,
+    };
+
+    // 4. Guardar en Firebase (nodo deliveryEvents)
+    const evKey = `deliveryEvents/${ts}_${stopId}`;
+    await FB.set(evKey, syncPayload);
+
+    // 5. Enviar al backend para sync con SilpoPack (fire-and-forget con reintento)
+    const trySyncBackend = async (attempt = 1) => {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...syncPayload, firebaseKey: evKey }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // Backend confirma → actualizar syncStatus
+        FB.set(`${evKey}/syncStatus`, "synced");
+      } catch (e) {
+        if (attempt < 3) {
+          setTimeout(() => trySyncBackend(attempt + 1), attempt * 5000);
+        } else {
+          FB.set(`${evKey}/syncStatus`, "failed");
+          FB.set(`${evKey}/errorMessage`, e.message);
+        }
+      }
+    };
+    trySyncBackend();
+
+    // 6. Actualizar estado local de la parada
+    if (isDelivered) {
+      let foundNext = false;
+      const updated = stops.map(s => {
+        if (s.id === stopId) return { ...s, driverStatus:"delivered", deliveredAt:timeStr, evidencePhotoUrl };
+        if (!foundNext && s.driverStatus === "pending") { foundNext = true; return { ...s, driverStatus:"en_ruta" }; }
+        return s;
+      });
+      setStops(updated); pushUpdate(updated);
+      addChatMsg(`✓ Entregado: ${stop.client || "Parada #"+stop.stopNum}`);
+      const notifId = "n"+ts+stopId;
+      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
+        title:`Entregado: ${stop.client||"Parada #"+stop.stopNum}`,
+        body:`${myKey} · #${stop.stopNum} · ${stop.displayAddr||stop.rawAddr||""}`,
+        time:timeStr, read:false, isNew:true, createdAt:ts });
+    } else {
+      const updated = stops.map(s => s.id===stopId
+        ? { ...s, driverStatus:"problema", issue:note||"Sin detalles", issueAt:timeStr, evidencePhotoUrl }
+        : s);
+      setStops(updated); pushUpdate(updated);
+      addChatMsg(`⚠ Problema parada #${stop.stopNum}: ${note||"Sin detalles"}`);
+      const notifId = "n"+ts+stopId;
+      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
+        title:`Problema: ${stop.client||"Parada #"+stop.stopNum}`,
+        body:`${myKey} · ${note||"Sin detalles"} · #${stop.stopNum}`,
+        time:timeStr, read:false, isNew:true, createdAt:ts });
+    }
+    setEvidenceFlow(null); setShowProb(null); setProbNote(""); setSelStop(null);
   };
 
+  // markDelivered ahora abre la cámara primero
+  const markDelivered = (stopId) => {
+    setEvidenceFlow({ stopId, mode: "delivered" });
+  };
+
+  // markProblem ahora abre la cámara primero
   const markProblem = (stopId) => {
-    const updated = stops.map(s=>s.id===stopId?{...s,driverStatus:"problema",issue:probNote||"Sin detalles",issueAt:new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}:s);
-    setStops(updated); pushUpdate(updated);
-    const stop = stops.find(s=>s.id===stopId);
-    addChatMsg(`⚠ Problema parada #${stop?.stopNum}: ${probNote||"Sin detalles"}`);
-    // Notificar al admin via Firebase
-    const notifId = "n"+Date.now()+stopId;
-    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
-      title:`Problema: ${stop?.client||"Parada #"+stop?.stopNum}`,
-      body:`${myKey} · ${probNote||"Sin detalles"} · #${stop?.stopNum}`,
-      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
-      read: false, isNew: true, createdAt: Date.now() });
-    setShowProb(null); setProbNote(""); setSelStop(null);
+    setEvidenceFlow({ stopId, mode: "failed", probNote: probNote || "Sin detalles" });
   };
 
   const sendChat = () => { if (!chatMsg.trim()) return; addChatMsg(chatMsg.trim()); setChatMsg(""); };
@@ -4353,6 +4429,22 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       </div>
 
       {/* -- Reportar problema modal -- */}
+      {/* ── Cámara de evidencia obligatoria ─────────────────────────────── */}
+      {evidenceFlow && (() => {
+        const flowStop = stops.find(s => s.id === evidenceFlow.stopId);
+        if (!flowStop) return null;
+        return (
+          <EvidenceCameraModal
+            stop={flowStop}
+            mode={evidenceFlow.mode}
+            onConfirm={(photoDataUrl) => {
+              saveEvidenceAndSync(evidenceFlow.stopId, evidenceFlow.mode, photoDataUrl, evidenceFlow.probNote);
+            }}
+            onCancel={() => { setEvidenceFlow(null); }}
+          />
+        );
+      })()}
+
       {showProb && (() => {
         const probStop = stops.find(s=>s.id===showProb);
         const REASONS = ["Nadie en casa","Dirección incorrecta","Cliente canceló","Negocio cerrado","Acceso no disponible","Paquete dañado","Otro"];
@@ -6228,6 +6320,203 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
 
 // --- ADDRESS EDIT MODAL --------------------------------------------------------
 // Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EvidenceCameraModal — Cámara obligatoria para evidencia de entrega/fallo
+// ⚠ NO MODIFICAR SIN REVISIÓN — es parte del flujo legal de evidencia
+// ─────────────────────────────────────────────────────────────────────────────
+const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
+  const videoRef    = useRef(null);
+  const canvasRef   = useRef(null);
+  const streamRef   = useRef(null);
+  const [phase,     setPhase]     = useState("preview");   // preview | captured | saving
+  const [photoData, setPhotoData] = useState(null);        // base64 dataURL
+  const [camErr,    setCamErr]    = useState(null);
+  const [flash,     setFlash]     = useState(false);
+  const isDelivered = mode === "delivered";
+  const accentColor = isDelivered ? "#10b981" : "#ef4444";
+  const label       = isDelivered ? "Entregado" : "Fallido";
+
+  // Iniciar cámara al montar
+  useEffect(() => {
+    let active = true;
+    const startCam = async () => {
+      try {
+        // Preferir cámara trasera en móvil (mejor calidad de evidencia)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } catch (e) {
+        setCamErr(e.name === "NotAllowedError"
+          ? "Permiso de cámara denegado. Ve a Ajustes > Navegador > Cámara y actívalo."
+          : "No se pudo acceder a la cámara: " + e.message);
+      }
+    };
+    startCam();
+    return () => {
+      active = false;
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  const takePhoto = () => {
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    setPhotoData(dataUrl);
+    setPhase("captured");
+    setFlash(true);
+    setTimeout(() => setFlash(false), 200);
+    // Parar stream para liberar cámara
+    streamRef.current?.getTracks().forEach(t => t.stop());
+  };
+
+  const retake = () => {
+    setPhotoData(null);
+    setPhase("preview");
+    setCamErr(null);
+    // Re-iniciar cámara
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false,
+    }).then(stream => {
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+    }).catch(e => setCamErr("Error al reiniciar cámara: " + e.message));
+  };
+
+  const confirm = () => {
+    if (!photoData) return;
+    setPhase("saving");
+    onConfirm(photoData);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:10000, background:"#000", display:"flex", flexDirection:"column" }}>
+      <style>{`
+        @keyframes camFlash { from{opacity:1} to{opacity:0} }
+        @keyframes camPop { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
+      `}</style>
+
+      {/* Flash overlay */}
+      {flash && <div style={{ position:"absolute", inset:0, background:"white", zIndex:10001, animation:"camFlash .2s ease forwards", pointerEvents:"none" }}/>}
+
+      {/* Header */}
+      <div style={{ padding:"16px 20px 12px", display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.8)", flexShrink:0 }}>
+        <div style={{ width:36, height:36, borderRadius:10, background:`${accentColor}22`, border:`1.5px solid ${accentColor}55`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          {isDelivered
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:"white", fontFamily:"'Syne',sans-serif" }}>
+            📸 Foto de evidencia — {label}
+          </div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)", marginTop:1 }}>
+            {stop.client} · #{stop.tracking || stop.stopNum}
+          </div>
+        </div>
+        <button onClick={onCancel} style={{ width:30, height:30, borderRadius:8, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+      </div>
+
+      {/* Viewfinder */}
+      <div style={{ flex:1, position:"relative", overflow:"hidden", background:"#111" }}>
+        {/* Error de cámara */}
+        {camErr && (
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:30, textAlign:"center", zIndex:10 }}>
+            <div style={{ fontSize:40, marginBottom:16 }}>📷</div>
+            <div style={{ fontSize:14, color:"#f87171", fontWeight:600, lineHeight:1.5, marginBottom:20 }}>{camErr}</div>
+            <button onClick={onCancel} style={{ padding:"10px 24px", borderRadius:10, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.1)", color:"#f87171", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {/* Video preview */}
+        {phase === "preview" && !camErr && (
+          <video ref={videoRef} autoPlay playsInline muted
+            style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+        )}
+
+        {/* Foto tomada */}
+        {phase === "captured" && photoData && (
+          <img src={photoData} alt="evidencia"
+            style={{ width:"100%", height:"100%", objectFit:"contain", animation:"camPop .2s ease" }}/>
+        )}
+
+        {/* Canvas oculto para captura */}
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+
+        {/* Overlay de guía cuando está en preview */}
+        {phase === "preview" && !camErr && (
+          <>
+            {/* Esquinas de encuadre */}
+            {[["0,0","top:12px;left:12px;border-top-left-radius:6px"],
+              ["90deg","top:12px;right:12px;border-top-right-radius:6px"],
+              ["180deg","bottom:12px;right:12px;border-bottom-right-radius:6px"],
+              ["270deg","bottom:12px;left:12px;border-bottom-left-radius:6px"],
+            ].map(([, pos], i) => (
+              <div key={i} style={{ position:"absolute", width:28, height:28, borderTop:`2.5px solid ${accentColor}`, borderLeft:`2.5px solid ${accentColor}`, opacity:0.8, ...Object.fromEntries(pos.split(";").map(p => { const [k,v]=p.split(":"); return [k.trim().replace(/-([a-z])/g,(_,c)=>c.toUpperCase()),v?.trim()]; }).filter(([k])=>k)) }}/>
+            ))}
+            <div style={{ position:"absolute", bottom:80, left:0, right:0, textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'Syne',sans-serif" }}>
+              Encuadra el paquete o la puerta del cliente
+            </div>
+          </>
+        )}
+
+        {/* Label de estado capturado */}
+        {phase === "captured" && (
+          <div style={{ position:"absolute", top:12, left:12, background:`${accentColor}dd`, color:"white", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>
+            ✓ Foto capturada
+          </div>
+        )}
+      </div>
+
+      {/* Controles */}
+      <div style={{ padding:"20px 24px 28px", background:"rgba(0,0,0,0.9)", flexShrink:0 }}>
+        {phase === "preview" && !camErr && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <button onClick={takePhoto}
+              style={{ width:72, height:72, borderRadius:"50%", border:`4px solid ${accentColor}`, background:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 0 6px ${accentColor}33` }}>
+              <div style={{ width:52, height:52, borderRadius:"50%", background:accentColor }}/>
+            </button>
+          </div>
+        )}
+
+        {phase === "captured" && (
+          <div style={{ display:"flex", gap:12 }}>
+            <button onClick={retake}
+              style={{ flex:1, padding:"14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.7)", fontSize:13, fontWeight:700, fontFamily:"'Syne',sans-serif", cursor:"pointer" }}>
+              🔄 Repetir
+            </button>
+            <button onClick={confirm}
+              style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`, color:"white", fontSize:13, fontWeight:800, fontFamily:"'Syne',sans-serif", cursor:"pointer", boxShadow:`0 4px 20px ${accentColor}55` }}>
+              ✓ Usar esta foto — {label}
+            </button>
+          </div>
+        )}
+
+        {phase === "saving" && (
+          <div style={{ textAlign:"center", color:"rgba(255,255,255,0.6)", fontSize:13 }}>
+            <div style={{ width:24, height:24, border:"2px solid rgba(255,255,255,0.2)", borderTopColor:"white", borderRadius:"50%", animation:"spin .8s linear infinite", margin:"0 auto 8px" }}/>
+            Guardando evidencia…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const inputRef = useRef(null);
   const acRef    = useRef(null);
@@ -7529,6 +7818,10 @@ const AddressIntelligencePanel = ({ onClose }) => {
 // --- PHASE 9: CIRCUIT ENGINE (EMBEDDED) -------------------------------------
 
 // --- CONFIG -------------------------------------------------------------------
+// URL del backend de sincronización con SilpoPack
+// En producción cambiar por la URL real del servidor Node.js
+const BACKEND_URL = "https://silpo-sync-backend-production.up.railway.app";
+
 const GMAPS_KEY = "AIzaSyCH51LeKVUD92nJ3EJwKlN7QDgz1Gad5A4";
 // DEPOT defined globally above (18.523359816124955, -69.98369283305884)
 
