@@ -3503,7 +3503,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               </div>
             )}
 
-            {/* ── Stop list — compact rows matching screenshot ── */}
+            {/* ── Stop list — premium redesign ── */}
             {filteredStops.map((stop,i) => {
               const isDone = stop.driverStatus==="delivered";
               const isProb = stop.driverStatus==="problema";
@@ -3513,99 +3513,155 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
               const dotColor = isDone?"#10b981":isProb?"#ef4444":isCur||isEnR?"#3b82f6":"#374151";
               const statusLabel= isDone?"ENTREGADO":isProb?"PROBLEMA":isEnR?"EN CAMINO":"PENDIENTE";
-              const statusColor= isDone?"#10b981":isProb?"#ef4444":isEnR?"#60a5fa":"rgba(255,255,255,0.35)";
+              const statusColor= isDone?"#10b981":isProb?"#ef4444":isEnR?"#60a5fa":"rgba(255,255,255,0.3)";
               const statusBg   = isDone?"rgba(16,185,129,0.1)":isProb?"rgba(239,68,68,0.1)":isEnR?"rgba(59,130,246,0.1)":"transparent";
 
               // Distancia desde DEPOT (estimada por stopNum)
               const distKm = stop.stopNum ? (stop.stopNum * 0.6).toFixed(1) : null;
 
               return (
-                <div key={stop.id}
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)", background: isExp?"rgba(59,130,246,0.07)": isCur?"rgba(59,130,246,0.04)":"transparent", transition:"background .15s", animation:`slideInRow .2s ${Math.min(i,8)*20}ms ease both`, borderLeft: isExp?`3px solid ${dotColor}`:"3px solid transparent" }}>
+                <div key={stop.id} style={{
+                  margin:"6px 10px",
+                  borderRadius:16,
+                  background: isExp
+                    ? "rgba(30,50,90,0.55)"
+                    : isCur
+                    ? "rgba(20,35,70,0.45)"
+                    : isDone
+                    ? "rgba(10,20,14,0.5)"
+                    : isProb
+                    ? "rgba(30,10,10,0.5)"
+                    : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${
+                    isExp ? "rgba(59,130,246,0.35)"
+                    : isCur ? "rgba(59,130,246,0.2)"
+                    : isDone ? "rgba(16,185,129,0.15)"
+                    : isProb ? "rgba(239,68,68,0.18)"
+                    : "rgba(255,255,255,0.06)"}`,
+                  boxShadow: isCur ? "0 4px 20px rgba(59,130,246,0.12)" : isExp ? "0 6px 24px rgba(0,0,0,0.4)" : "none",
+                  transition:"all .18s cubic-bezier(.4,0,.2,1)",
+                  animation:`slideInRow .22s ${Math.min(i,8)*18}ms ease both`,
+                  overflow:"hidden",
+                }}>
 
-                  {/* ── ROW principal (siempre visible) ── */}
+                  {/* Accent line top — solo parada activa */}
+                  {isCur && !isDone && !isProb && (
+                    <div style={{ height:2, background:"linear-gradient(90deg,#3b82f6,#60a5fa,transparent)", borderRadius:"2px 2px 0 0" }}/>
+                  )}
+
+                  {/* ── ROW principal ── */}
                   <div onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                    style={{ display:"flex", alignItems:"center", padding:"9px 12px", cursor:"pointer" }}>
+                    style={{ display:"flex", alignItems:"center", padding:"11px 13px", cursor:"pointer", gap:12 }}>
 
-                    {/* Circle number */}
+                    {/* Badge número — cuadrado redondeado */}
                     <div style={{
-                      width:28, height:28, borderRadius:"50%", flexShrink:0, marginRight:10,
-                      background: isDone?"rgba(16,185,129,0.15)":isProb?"rgba(239,68,68,0.15)":isExp?"rgba(59,130,246,0.2)":isCur?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,0.06)",
-                      border:`1.5px solid ${isExp?"#3b82f6":dotColor}`,
+                      width:38, height:38, borderRadius:12, flexShrink:0,
+                      background: isDone
+                        ? "rgba(16,185,129,0.14)"
+                        : isProb
+                        ? "rgba(239,68,68,0.14)"
+                        : isCur
+                        ? "linear-gradient(135deg,rgba(29,78,216,0.9),rgba(59,130,246,0.9))"
+                        : "rgba(255,255,255,0.06)",
+                      border:`1.5px solid ${
+                        isDone?"rgba(16,185,129,0.35)"
+                        :isProb?"rgba(239,68,68,0.35)"
+                        :isCur?"rgba(93,161,255,0.6)"
+                        :"rgba(255,255,255,0.1)"}`,
                       display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow: isExp||isCur?"0 0 12px rgba(59,130,246,0.4)":isDone?"0 0 8px rgba(16,185,129,0.2)":"none",
+                      boxShadow: isCur ? "0 2px 12px rgba(59,130,246,0.35)" : isDone ? "0 0 10px rgba(16,185,129,0.15)" : "none",
+                      position:"relative",
                     }}>
-                      {isDone
-                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                        : <span style={{ fontSize:12, fontWeight:800, color: isExp||isCur?"white":isProb?"#f59e0b":"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace" }}>{stop.stopNum||"?"}</span>
-                      }
+                      {isDone ? (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      ) : isProb ? (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      ) : (
+                        <span style={{ fontSize: String(stop.stopNum||"?").length > 2 ? 9 : 12, fontWeight:900, color:isCur?"white":"rgba(255,255,255,0.55)", fontFamily:"'DM Mono',monospace", letterSpacing:"-0.5px" }}>
+                          {stop.stopNum||"?"}
+                        </span>
+                      )}
                     </div>
 
                     {/* Content */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color: isDone?"rgba(255,255,255,0.35)":"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.1px", textDecoration:isDone?"line-through":"none", marginBottom:1 }}>
+                      {/* Nombre cliente */}
+                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.3)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2, textDecoration:isDone?"line-through":"none" }}>
                         {stop.client||`Parada ${stop.stopNum}`}
                       </div>
-                      <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {/* Dirección */}
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.25)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:3, lineHeight:1 }}>
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
                       </div>
+                      {/* Hora entrega */}
                       {isDone && stop.deliveredAt && (
-                        <div style={{ fontSize:10, color:"#10b981", marginTop:2, fontFamily:"'DM Mono',monospace" }}>✓ {stop.deliveredAt}</div>
+                        <div style={{ fontSize:10, color:"#10b981", marginTop:4, fontFamily:"'DM Mono',monospace", display:"flex", alignItems:"center", gap:4 }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                          {stop.deliveredAt}
+                        </div>
                       )}
                     </div>
 
-                    {/* Right side: status + chevron */}
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0, marginLeft:10 }}>
-                      <div style={{ background:statusBg, borderRadius:6, padding:"2px 8px" }}>
-                        <span style={{ fontSize:9.5, fontWeight:700, color:statusColor, letterSpacing:"0.5px" }}>{statusLabel}</span>
+                    {/* Right: status badge + chevron */}
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
+                      <div style={{ background:statusBg, borderRadius:20, padding:"3px 9px", border:`1px solid ${statusColor}30` }}>
+                        <span style={{ fontSize:9, fontWeight:800, color:statusColor, letterSpacing:"0.8px" }}>{statusLabel}</span>
                       </div>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" style={{ transform: isExp?"rotate(180deg)":"rotate(0deg)", transition:"transform .2s" }}><path d="M6 9l6 6 6-6"/></svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2.5"
+                        style={{ transform:isExp?"rotate(180deg)":"rotate(0deg)", transition:"transform .22s cubic-bezier(.4,0,.2,1)" }}>
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
                     </div>
                   </div>
 
                   {/* ── PANEL EXPANDIDO ── */}
                   {isExp && (
-                    <div style={{ margin:"0 12px 14px", borderRadius:14, background:"rgba(6,12,22,0.95)", border:`1px solid ${dotColor}28`, overflow:"hidden", animation:"ceUp .18s ease" }}>
-                      {/* Barra de acento */}
-                      <div style={{ height:2, background:`linear-gradient(90deg,${dotColor},${dotColor}22)` }}/>
-                      <div style={{ padding:"12px 14px" }}>
+                    <div style={{ borderTop:`1px solid ${dotColor}20`, animation:"ceUp .18s ease" }}>
+                      {/* Accent bar */}
+                      <div style={{ height:1, background:`linear-gradient(90deg,${dotColor}55,transparent)` }}/>
+
+                      <div style={{ padding:"14px 13px 13px" }}>
 
                         {/* SP Code */}
                         {stop.tracking && (
-                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                            <div style={{ fontSize:9, fontWeight:800, color:"rgba(255,255,255,0.3)", letterSpacing:"1.2px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:5, padding:"2px 6px" }}>SP</div>
-                            <span style={{ fontSize:13, fontFamily:"'DM Mono',monospace", color:"#60a5fa", letterSpacing:"0.5px", fontWeight:600 }}>{stop.tracking}</span>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.14)", borderRadius:10, padding:"8px 11px" }}>
+                            <span style={{ fontSize:9, fontWeight:800, color:"rgba(96,165,250,0.6)", letterSpacing:"1.5px", flexShrink:0 }}>SP</span>
+                            <span style={{ fontSize:12, fontFamily:"'DM Mono',monospace", color:"#93c5fd", letterSpacing:"0.5px", fontWeight:600, flex:1, overflow:"hidden", textOverflow:"ellipsis" }}>{stop.tracking}</span>
                             <button
                               onClick={e=>{e.stopPropagation();navigator.clipboard?.writeText(stop.tracking).catch(()=>{});}}
-                              style={{ marginLeft:"auto", padding:"3px 8px", borderRadius:6, border:"1px solid rgba(96,165,250,0.2)", background:"rgba(59,130,246,0.07)", color:"rgba(96,165,250,0.7)", fontSize:10, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
+                              style={{ padding:"3px 9px", borderRadius:7, border:"1px solid rgba(96,165,250,0.2)", background:"rgba(59,130,246,0.1)", color:"#60a5fa", fontSize:10, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:700, flexShrink:0 }}>
                               Copiar
                             </button>
                           </div>
                         )}
 
-                        {/* Phone clickable */}
+                        {/* Phone */}
                         {stop.phone && (
-                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                          <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
+                            <div style={{ width:28, height:28, borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            </div>
                             <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
-                              style={{ fontSize:14, color:"#f1f5f9", fontFamily:"'DM Mono',monospace", letterSpacing:"0.3px", textDecoration:"none", fontWeight:600 }}>
+                              style={{ fontSize:14, color:"#f1f5f9", fontFamily:"'DM Mono',monospace", letterSpacing:"0.4px", textDecoration:"none", fontWeight:600 }}>
                               {stop.phone}
                             </a>
                           </div>
                         )}
 
                         {/* Address */}
-                        <div style={{ display:"flex", alignItems:"flex-start", gap:7, marginBottom:12 }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", lineHeight:1.45 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</span>
+                        <div style={{ display:"flex", alignItems:"flex-start", gap:9, marginBottom:14 }}>
+                          <div style={{ width:28, height:28, borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          </div>
+                          <span style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.5, paddingTop:4 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</span>
                         </div>
 
                         {/* Action buttons */}
-                        <div style={{ display:"flex", gap:7 }}>
+                        <div style={{ display:"flex", gap:8 }}>
                           {/* WhatsApp */}
                           {stop.phone && (
                             <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(37,211,102,0.3)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(37,211,102,0.25)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .12s" }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.558 4.122 1.528 5.853L0 24l6.293-1.507A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.848 0-3.587-.504-5.083-1.382l-.363-.218-3.737.895.945-3.629-.237-.375A9.965 9.965 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
                               WhatsApp
                             </button>
@@ -3613,7 +3669,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {/* Llamar */}
                           {stop.phone && (
                             <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.7)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none" }}>
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.65)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                               Llamar
                             </a>
@@ -3621,7 +3677,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {/* Waze */}
                           {stop.lat && stop.lng && (
                             <a href={`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 0", borderRadius:11, border:"1px solid rgba(59,130,246,0.25)", background:"rgba(59,130,246,0.08)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none" }}>
+                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(59,130,246,0.2)", background:"rgba(59,130,246,0.07)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                               Waze
                             </a>
