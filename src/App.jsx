@@ -3054,7 +3054,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
         {/* Avatar con foto de perfil */}
         <div style={{ position:"relative", flexShrink:0 }}>
-          <input ref={photoInputRef} type="file" accept="image/*" capture="user"
+          <input ref={photoInputRef} type="file" accept="image/*"
             onChange={handlePhotoUpload} style={{ display:"none" }}/>
           <div onClick={() => setPhotoMenuOpen(o => !o)} style={{
             width:42, height:42, borderRadius:14, overflow:"hidden", cursor:"pointer",
