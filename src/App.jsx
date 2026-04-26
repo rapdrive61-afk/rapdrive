@@ -6036,7 +6036,7 @@ const ImportModal = ({ onClose, onImported }) => {
   const [optimized, setOptimized] = useState(null);
   const [progress, setProgress] = useState(0);
   const [geoStatus, setGeoStatus] = useState("");
-  const [dragOver, setDragOver] = useState(false);
+  const [geoCount,  setGeoCount]  = useState(0); // geocodificadas en tiempo real
   const [fileName, setFileName] = useState("");
   const [driverName, setDriverName] = useState(DEFAULT_MENSAJEROS[0].id);
   const [routeName, setRouteName]   = useState("Ruta importada");
@@ -6116,11 +6116,13 @@ const ImportModal = ({ onClose, onImported }) => {
 
   const runGeocoding = async () => {
     setStage("geocoding");
+    setGeoCount(0);
     const addressCol = mapping.address;
     if (!addressCol) return;
 
     const total = rawRows.length;
     const result = [];
+    let successCount = 0;
 
     for (let i = 0; i < total; i++) {
       const row = rawRows[i];
@@ -6134,8 +6136,6 @@ const ImportModal = ({ onClose, onImported }) => {
       const notes    = [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · ");
 
       // ── Construir query enriquecida ─────────────────────────────────────────
-      // Combinar dirección + sector + dirección2 + país para dar máximo contexto a Google.
-      // Ejemplo: "Respaldo penetración 15 #5, Engombe, Santo Domingo, República Dominicana"
       const parts = [rawAddr, sector, "Santo Domingo", "República Dominicana"].filter(Boolean);
       const enrichedQuery = parts.join(", ");
 
@@ -6157,7 +6157,6 @@ const ImportModal = ({ onClose, onImported }) => {
         if (!rawAddr) {
           stop.status = "error"; stop.issue = "Dirección vacía";
         } else {
-          // ── Usar el geocodificador real de 4 capas ──────────────────────────
           const r = await geocodeWithGoogle(enrichedQuery);
           if (r.ok) {
             stop.lat        = r.lat;
@@ -6168,6 +6167,10 @@ const ImportModal = ({ onClose, onImported }) => {
             stop.geocoded    = true;
             stop.status      = r.confidence >= 70 ? "ok" : "warning";
             stop.issue       = r.confidence < 70 ? "Confianza baja — verifica en mapa" : null;
+            if (r.confidence >= 70) {
+              successCount++;
+              setGeoCount(successCount); // actualizar contador en tiempo real
+            }
           } else {
             stop.status = "error"; stop.issue = "No encontrada";
           }
@@ -6177,7 +6180,6 @@ const ImportModal = ({ onClose, onImported }) => {
       }
 
       result.push(stop);
-      // Pequeño delay para no saturar rate limit de Google
       await new Promise(r => setTimeout(r, 35));
     }
 
@@ -6380,7 +6382,8 @@ const ImportModal = ({ onClose, onImported }) => {
                 <div style={{height:6,background:"#131f30",borderRadius:6,marginBottom:8,overflow:"hidden"}}>
                   <div style={{height:6,background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa)",borderRadius:6,width:`${progress}%`,transition:"width .3s",backgroundSize:"200% 100%",animation:"shimmer 2s linear infinite"}}/>
                 </div>
-                <div style={{fontSize:12,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{progress}% · {Math.round(rawRows.length*progress/100)} de {rawRows.length} direcciones</div>
+                <div style={{fontSize:12,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{progress}%</div>
+                <div style={{fontSize:11,color:"#10b981",marginTop:4}}>✓ {geoCount} geocodificadas</div>
               </div>
             </div>
           )}
