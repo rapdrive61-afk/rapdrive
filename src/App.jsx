@@ -2273,6 +2273,46 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
   const [driverNotif, setDriverNotif] = useState(null); // banner notificación de ruta asignada
+
+  // ── Foto de perfil ────────────────────────────────────────────────────────
+  const [profilePhoto, setProfilePhoto]   = useState(() => {
+    try { return localStorage.getItem(`rdPhoto_${myKey}`) || null; } catch { return null; }
+  });
+  const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
+  const photoInputRef = useRef(null);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setProfilePhoto(dataUrl);
+      try { localStorage.setItem(`rdPhoto_${myKey}`, dataUrl); } catch {}
+      FB.set(`photos/${myKey}`, { photo: dataUrl, updatedAt: Date.now() });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+    setPhotoMenuOpen(false);
+  };
+
+  const handleRemovePhoto = () => {
+    setProfilePhoto(null);
+    try { localStorage.removeItem(`rdPhoto_${myKey}`); } catch {}
+    FB.set(`photos/${myKey}`, null);
+    setPhotoMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (profilePhoto) return;
+    FB.get(`photos/${myKey}`).then(data => {
+      if (data?.photo) {
+        setProfilePhoto(data.photo);
+        try { localStorage.setItem(`rdPhoto_${myKey}`, data.photo); } catch {}
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
   const [pendingRoutes, setPendingRoutes] = useState(() => {
     // Cola INDESTRUCTIBLE: mostrar todo excepto las completadas
@@ -3012,28 +3052,59 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           </svg>
         </button>
 
-        {/* Avatar con dot GPS */}
+        {/* Avatar con foto de perfil */}
         <div style={{ position:"relative", flexShrink:0 }}>
-          <div style={{ width:42, height:42, borderRadius:14, background:"linear-gradient(135deg,#1e3a6e 0%,#1d4ed8 55%,#3b82f6 100%)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:900, color:"white", letterSpacing:"-0.5px", boxShadow:"0 2px 14px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.2)" }}>
-            {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+          <input ref={photoInputRef} type="file" accept="image/*" capture="user"
+            onChange={handlePhotoUpload} style={{ display:"none" }}/>
+          <div onClick={() => setPhotoMenuOpen(o => !o)} style={{
+            width:42, height:42, borderRadius:14, overflow:"hidden", cursor:"pointer",
+            background:"linear-gradient(135deg,#1e3a6e 0%,#1d4ed8 55%,#3b82f6 100%)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:14, fontWeight:900, color:"white", letterSpacing:"-0.5px",
+            boxShadow:"0 2px 14px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+            position:"relative", flexShrink:0,
+          }}>
+            {profilePhoto
+              ? <img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+              : <>
+                  {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"flex-end", justifyContent:"flex-end", padding:2, pointerEvents:"none" }}>
+                    <div style={{ width:14, height:14, borderRadius:"50%", background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                  </div>
+                </>
+            }
           </div>
-          <div style={{ position:"absolute", bottom:-1, right:-1, width:11, height:11, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151", border:"2px solid #06090f", boxShadow:locationStatus==="active"?"0 0 7px #22c55e60":"none", animation:locationStatus==="requesting"?"pulse 1s infinite":"none" }}/>
+          {/* GPS dot — solo el indicador visual, sin texto */}
+          <div style={{ position:"absolute", bottom:-1, right:-1, width:11, height:11, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#374151", border:"2px solid #06090f", boxShadow:locationStatus==="active"?"0 0 7px #22c55e60":"none", animation:locationStatus==="requesting"?"pulse 1s infinite":"none", zIndex:2 }}/>
+          {/* Mini-menú foto */}
+          {photoMenuOpen && (
+            <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", top:50, left:0, zIndex:500, background:"#0d1a26", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,0.8)", minWidth:170, animation:"popIn .15s ease" }}>
+              <button onClick={()=>{ photoInputRef.current?.click(); }} style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", width:"100%", border:"none", background:"transparent", color:"rgba(255,255,255,0.75)", fontSize:12, fontFamily:"'DM Sans',sans-serif", fontWeight:600, cursor:"pointer", textAlign:"left" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                {profilePhoto ? "Cambiar foto" : "Subir foto"}
+              </button>
+              {profilePhoto && (
+                <button onClick={handleRemovePhoto} style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", width:"100%", border:"none", borderTop:"1px solid rgba(255,255,255,0.06)", background:"transparent", color:"#ef4444", fontSize:12, fontFamily:"'DM Sans',sans-serif", fontWeight:600, cursor:"pointer", textAlign:"left" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                  Eliminar foto
+                </button>
+              )}
+              <button onClick={()=>setPhotoMenuOpen(false)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", width:"100%", border:"none", borderTop:"1px solid rgba(255,255,255,0.06)", background:"transparent", color:"rgba(255,255,255,0.3)", fontSize:11, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", textAlign:"left" }}>
+                Cancelar
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Nombre + GPS status */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:15, fontWeight:800, color:"#f8fafc", letterSpacing:"-0.4px", lineHeight:1.15, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        {/* Nombre centrado — sin GPS, premium */}
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ fontSize:16, fontWeight:800, color:"#ffffff", letterSpacing:"-0.5px", lineHeight:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textShadow:"0 1px 12px rgba(59,130,246,0.35)" }}>
             {(driver.name||"Mensajero").split(" ").slice(0,2).join(" ")}
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:3 }}>
-            {locationStatus==="active"
-              ? <><div style={{ width:5,height:5,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 5px #22c55e" }}/><span style={{ fontSize:10,color:"#22c55e",fontWeight:600 }}>GPS activo</span></>
-              : locationStatus==="requesting"
-              ? <><div style={{ width:5,height:5,borderRadius:"50%",background:"#f59e0b",animation:"pulse 1s infinite" }}/><span style={{ fontSize:10,color:"#f59e0b",fontWeight:600 }}>Obteniendo GPS…</span></>
-              : locationStatus==="denied"
-              ? <><div style={{ width:5,height:5,borderRadius:"50%",background:"#ef4444" }}/><span style={{ fontSize:10,color:"#ef4444",fontWeight:600,marginRight:4 }}>GPS denegado</span>
-                  <button onClick={startLocationTracking} style={{ background:"rgba(59,130,246,0.18)",border:"1px solid rgba(59,130,246,0.35)",borderRadius:4,padding:"1px 6px",fontSize:9,color:"#60a5fa",cursor:"pointer",fontWeight:700 }}>Activar</button></>
-              : <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)",fontWeight:500 }}>En línea</span>}
+          <div style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:600, marginTop:4, letterSpacing:"2px", textTransform:"uppercase", fontFamily:"'DM Mono',monospace" }}>
+            Mensajero
           </div>
         </div>
 
@@ -3961,18 +4032,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   {/* Glow detrás del avatar */}
                   <div style={{ position:"absolute", top:20, left:10, width:120, height:120, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,0.2) 0%,transparent 70%)", pointerEvents:"none" }}/>
 
-                  {/* Avatar grande premium */}
+                  {/* Avatar grande con foto */}
                   <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
                     <div style={{
-                      width:68, height:68, borderRadius:20,
+                      width:72, height:72, borderRadius:22, overflow:"hidden",
                       background:"linear-gradient(135deg,#1e3a6e 0%,#1d4ed8 50%,#3b82f6 100%)",
                       display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:24, fontWeight:900, color:"white", letterSpacing:"-1px",
+                      fontSize:26, fontWeight:900, color:"white", letterSpacing:"-1px",
                       boxShadow:"0 8px 32px rgba(59,130,246,0.45), 0 0 0 1px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.2)",
-                    }}>
-                      {(driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()}
+                      cursor:"pointer", position:"relative",
+                    }} onClick={()=>{ photoInputRef.current?.click(); }}>
+                      {profilePhoto
+                        ? <img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+                        : (driver.avatar||(driver.name||"").slice(0,2)).toUpperCase()
+                      }
+                      <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.3)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:22 }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      </div>
                     </div>
-                    {/* Status ring */}
                     <div style={{ position:"absolute", bottom:-2, right:-2, width:18, height:18, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#374151", border:"3px solid #080b12", boxShadow:locationStatus==="active"?"0 0 10px #22c55e70":"none" }}/>
                   </div>
 
