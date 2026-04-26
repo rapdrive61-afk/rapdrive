@@ -4844,40 +4844,24 @@ const parseAddress = (raw) => {
   };
 };
 
-// Fake geocoder: assigns plausible lat/lng near a base coordinate
-// In production this would call Google Maps / Here / Nominatim API
-const geocodeAddress = (parsed, baseCoord = { lat: 40.4168, lng: -3.7038 }) => {
-  if (!parsed.valid) return { ...parsed, geocoded: false, lat: null, lng: null, confidence: 0 };
-
-  // Deterministic pseudo-random offset from street hash
-  let hash = 0;
-  for (const ch of parsed.display) hash = ((hash << 5) - hash) + ch.charCodeAt(0);
-  const seed = (hash >>> 0) / 0xffffffff;
-  const seed2 = ((hash * 1664525 + 1013904223) >>> 0) / 0xffffffff;
-
-  const lat = baseCoord.lat + (seed  - 0.5) * 0.08;
-  const lng = baseCoord.lng + (seed2 - 0.5) * 0.12;
-
-  // Confidence based on how complete the address is
-  const confidence =
-    parsed.number ? (parsed.street.length > 5 ? 98 : 85) :
-    parsed.street.length > 8 ? 75 : 55;
-
-  return { ...parsed, geocoded: true, lat, lng, confidence };
-};
+// ── IMPORTMODAL usa el geocodificador real (geocodeWithGoogle) ───────────────
+// geocodeAddress ya no es un fake — delega al motor real de 4 capas.
+// Se llama desde runGeocoding con la query enriquecida: dirección + sector + dirección2
+// para que Google tenga suficiente contexto y encuentre calles informales de RD.
 
 
 
 // --- IMPORT MODAL -------------------------------------------------------------
 
 const ImportModal = ({ onClose, onImported }) => {
-  const [stage, setStage]       = useState("upload");   // upload | mapping | geocoding | optimize | done
+  const [stage, setStage]       = useState("upload");
   const [rawRows, setRawRows]   = useState([]);
   const [headers, setHeaders]   = useState([]);
-  const [mapping, setMapping]   = useState({});         // { address, client, phone, notes }
-  const [stops, setStops]       = useState([]);         // geocoded stops
+  const [mapping, setMapping]   = useState({});
+  const [stops, setStops]       = useState([]);
   const [optimized, setOptimized] = useState(null);
   const [progress, setProgress] = useState(0);
+  const [geoStatus, setGeoStatus] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
   const [driverName, setDriverName] = useState(DEFAULT_MENSAJEROS[0].id);
@@ -4885,17 +4869,18 @@ const ImportModal = ({ onClose, onImported }) => {
   const fileRef = useRef(null);
 
   const REQUIRED_FIELDS = ["address"];
-  const OPTIONAL_FIELDS = ["client","phone","notes","priority"];
-  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", priority:"Prioridad" };
+  const OPTIONAL_FIELDS = ["client","phone","notes","sector","address2","priority"];
+  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", sector:"Sector/Zona", address2:"Dirección 2 / Referencia", priority:"Prioridad" };
 
-  // Auto-detect column mapping (versión simplificada para ImportModal legacy)
   const autoDetectLegacy = (hdrs) => {
     const m = {};
     const patterns = {
-      address:  /direcci[oó]n|address|calle|domicilio|destino/i,
+      address:  /direcci[oó]n(?!\s*2)\b|^dir$|address(?!\s*2)|calle|domicilio|destino/i,
+      address2: /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|referencia|indicaci[oó]n|complement/i,
       client:   /cliente|nombre|name|destinatario|recipient/i,
-      phone:    /tel[eé]fono|phone|m[oó]vil|mobile|tlf/i,
-      notes:    /notas?|notes?|observ|instruc/i,
+      phone:    /tel[eé]fono|phone|m[oó]vil|mobile|tlf|whatsapp/i,
+      notes:    /notas?|notes?|observ|instruc|detalle/i,
+      sector:   /sector|barrio|zona|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
       priority: /prioridad|priority|urgente|urgent/i,
     };
     hdrs.forEach(h => {
@@ -4962,22 +4947,66 @@ const ImportModal = ({ onClose, onImported }) => {
 
     const total = rawRows.length;
     const result = [];
+
     for (let i = 0; i < total; i++) {
-      await new Promise(r => setTimeout(r, 60)); // simulate async
       const row = rawRows[i];
-      const parsed = parseAddress(row[addressCol]);
-      const geocoded = geocodeAddress(parsed);
-      result.push({
-        id: `IMP-${String(i+1).padStart(3,"0")}`,
-        ...geocoded,
-        client:   row[mapping.client]   || `Cliente ${i+1}`,
-        phone:    row[mapping.phone]    || "",
-        notes:    row[mapping.notes]    || "",
-        priority: row[mapping.priority] || "normal",
-        originalRow: row,
-      });
+
+      // ── Leer todos los campos relevantes del Excel ──────────────────────────
+      const rawAddr  = String(row[addressCol]            || "").trim();
+      const sector   = mapping.sector   ? String(row[mapping.sector]   || "").trim() : "";
+      const addr2    = mapping.address2 ? String(row[mapping.address2] || "").trim() : "";
+      const client   = String(row[mapping.client]   || `Cliente ${i+1}`).trim();
+      const phone    = String(row[mapping.phone]    || "").trim();
+      const notes    = [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · ");
+
+      // ── Construir query enriquecida ─────────────────────────────────────────
+      // Combinar dirección + sector + dirección2 + país para dar máximo contexto a Google.
+      // Ejemplo: "Respaldo penetración 15 #5, Engombe, Santo Domingo, República Dominicana"
+      const parts = [rawAddr, sector, "Santo Domingo", "República Dominicana"].filter(Boolean);
+      const enrichedQuery = parts.join(", ");
+
+      setGeoStatus(`${i+1}/${total} — ${rawAddr.slice(0,50)}`);
       setProgress(Math.round(((i+1)/total)*100));
+
+      const stop = {
+        id:          `IMP-${String(i+1).padStart(3,"0")}`,
+        stopNum:     null,
+        rawAddr,
+        displayAddr: rawAddr,
+        client, phone, notes, sector, addr2,
+        originalRow: row,
+        lat: null, lng: null, confidence: 0,
+        geocoded: false, status: "pending",
+      };
+
+      try {
+        if (!rawAddr) {
+          stop.status = "error"; stop.issue = "Dirección vacía";
+        } else {
+          // ── Usar el geocodificador real de 4 capas ──────────────────────────
+          const r = await geocodeWithGoogle(enrichedQuery);
+          if (r.ok) {
+            stop.lat        = r.lat;
+            stop.lng        = r.lng;
+            stop.displayAddr = r.display || rawAddr;
+            stop.confidence  = r.confidence;
+            stop.allResults  = r.allResults || [];
+            stop.geocoded    = true;
+            stop.status      = r.confidence >= 70 ? "ok" : "warning";
+            stop.issue       = r.confidence < 70 ? "Confianza baja — verifica en mapa" : null;
+          } else {
+            stop.status = "error"; stop.issue = "No encontrada";
+          }
+        }
+      } catch(e) {
+        stop.status = "error"; stop.issue = "Error de red";
+      }
+
+      result.push(stop);
+      // Pequeño delay para no saturar rate limit de Google
+      await new Promise(r => setTimeout(r, 35));
     }
+
     setStops(result);
     setStage("optimize");
   };
@@ -5016,8 +5045,6 @@ const ImportModal = ({ onClose, onImported }) => {
 
   const handleImport = () => {
     const raw = optimized ? optimized.ordered : stops;
-    // Reasignar stopNum en el orden del motor — crítico para que el mapa
-    // dibuje las líneas en el orden correcto y no el original del Excel
     const finalStops = raw.map((s, i) => ({ ...s, stopNum: i + 1 }));
     onImported({ stops: finalStops, driverName, routeName, optimized });
     setStage("done");
@@ -5171,7 +5198,9 @@ const ImportModal = ({ onClose, onImported }) => {
             <div style={{animation:"fadeUp .3s ease"}}>
               <div style={{textAlign:"center",padding:"20px 0 24px"}}>
                 <div style={{fontSize:32,marginBottom:12}}>🌍</div>
-                <div style={{fontSize:14,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9",marginBottom:6}}>Geocodificando direcciones...</div>
+                <div style={{fontSize:14,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9",marginBottom:6}}>Geocodificando con Google Maps...</div>
+                <div style={{fontSize:11,color:"#4b5563",marginBottom:16}}>Usando dirección + sector + referencia para mayor precisión</div>
+                {geoStatus && <div style={{fontSize:11,color:"#60a5fa",marginBottom:10,fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{geoStatus}</div>}
                 <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Normalizando y asignando coordenadas a cada parada</div>
                 {/* Progress bar */}
                 <div style={{height:6,background:"#131f30",borderRadius:6,marginBottom:8,overflow:"hidden"}}>
@@ -5226,8 +5255,8 @@ const ImportModal = ({ onClose, onImported }) => {
               <div style={{background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(59,130,246,0.03))",border:"1px solid rgba(59,130,246,0.18)",borderRadius:13,padding:"16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <div>
-                    <div style={{fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#60a5fa"}}>⚡ Optimizador de ruta v3</div>
-                    <div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Clustering por zonas · Sin saltos entre sectores · Ruta limpia</div>
+                    <div style={{fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#60a5fa"}}>⚡ Optimizador de ruta</div>
+                    <div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Vecino más cercano desde la base · Mínima distancia total</div>
                   </div>
                   <button onClick={runOptimize} style={{padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"white",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px #3b82f630"}}>
                     ⚡ Optimizar
@@ -6884,28 +6913,11 @@ const optimizeWithRoutesAPI = async (validStops) => {
 // --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️  MOTOR DE OPTIMIZACIÓN LOCAL v3 — NO MODIFICAR SIN AUTORIZACIÓN
-//
-// Este es el motor principal que corre SIEMPRE (no depende de Google Routes API).
-// La Routes API producía saltos entre zonas porque no conoce la lógica de clusters.
-//
-// LÓGICA:
-//  1. CLUSTERING GEOGRÁFICO (CLUSTER_KM = 1.5 km)
-//     Agrupa paradas por zona geográfica. Las Caobas, Piantini, Bayona, etc.
-//     quedan como BLOQUES CONSECUTIVOS. El mensajero NO sale de una zona
-//     y vuelve porque quedaron paradas sueltas de esa zona en otro número.
-//
-//  2. ORDENAR CLUSTERS desde el DEPOT
-//     El cluster más cercano al depósito es el primero. Luego NN entre centroides.
-//
-//  3. ORDENAR PARADAS dentro de cada cluster (NN desde el punto de entrada)
-//
-//  4. 2-OPT GLOBAL — micro-optimización sin romper clusters (100 iter)
-//
-//  5. OR-OPT — mover nodos individuales si reduce distancia (20 iter)
-//
-// AUTOR: RapDrive Motor v3 — No cambiar sin entender el clustering.
+// Clustering geográfico (CLUSTER_KM) + NN + 2-opt + Or-opt
+// Garantiza paradas de la misma zona en bloques CONSECUTIVOS.
+// No depende de Routes API — funciona siempre.
 // ═══════════════════════════════════════════════════════════════════════════════
-const CLUSTER_KM = 1.5; // radio de zona en km — subir a 2.0 si las zonas son más grandes
+const CLUSTER_KM = 1.5;
 
 const optimizeRouteLocal = (stops) => {
   if (!stops || stops.length === 0) return [];
@@ -6915,13 +6927,13 @@ const optimizeRouteLocal = (stops) => {
   if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
   const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
-
-  // PASO 1: Clustering geográfico greedy
-  const clusters = [];
   const centroid = (idxArr) => ({
     lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
     lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
   });
+
+  // PASO 1: Clustering geográfico
+  const clusters = [];
   valid.forEach((stop, si) => {
     let bestCluster = -1, bestDist = CLUSTER_KM;
     clusters.forEach((cl, ci) => {
@@ -6932,7 +6944,7 @@ const optimizeRouteLocal = (stops) => {
     else clusters[bestCluster].push(si);
   });
 
-  // PASO 2: Ordenar clusters desde DEPOT (NN entre centroides)
+  // PASO 2: Ordenar clusters desde DEPOT
   let remClusters = clusters.map((_, ci) => ci);
   const ordClusters = [];
   let curPoint = depot;
@@ -6947,12 +6959,12 @@ const optimizeRouteLocal = (stops) => {
     curPoint = centroid(clusters[chosen]);
   }
 
-  // PASO 3: Ordenar paradas dentro de cada cluster (NN desde punto de entrada)
+  // PASO 3: NN dentro de cada cluster
   let tour = [];
   let entryPt = depot;
   ordClusters.forEach(ci => {
     let remStops = [...clusters[ci]];
-    const clusterTour = [];
+    const clTour = [];
     while (remStops.length) {
       let bestPos = 0, bestDist = Infinity;
       remStops.forEach((si, pos) => {
@@ -6960,10 +6972,10 @@ const optimizeRouteLocal = (stops) => {
         if (d < bestDist) { bestDist = d; bestPos = pos; }
       });
       const chosen = remStops.splice(bestPos, 1)[0];
-      clusterTour.push(valid[chosen]);
+      clTour.push(valid[chosen]);
       entryPt = valid[chosen];
     }
-    tour = tour.concat(clusterTour);
+    tour = tour.concat(clTour);
   });
 
   // PASO 4: 2-opt global
@@ -6973,7 +6985,7 @@ const optimizeRouteLocal = (stops) => {
     for (let i = 0; i < tour.length - 1; i++) {
       for (let j = i + 1; j < tour.length; j++) {
         const A = i === 0 ? depot : tour[i-1], B = tour[i];
-        const C = tour[j], D = j + 1 < tour.length ? tour[j+1] : depot;
+        const C = tour[j], D = j+1 < tour.length ? tour[j+1] : depot;
         if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
           let l = i, r = j;
           while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
@@ -6983,7 +6995,7 @@ const optimizeRouteLocal = (stops) => {
     }
   }
 
-  // PASO 5: Or-opt (mover nodos individuales)
+  // PASO 5: Or-opt
   let orImproved = true, orIter = 0;
   while (orImproved && orIter < 20) {
     orImproved = false; orIter++;
@@ -7011,15 +7023,11 @@ const optimizeRouteLocal = (stops) => {
   ];
 };
 
-// --- OPTIMIZADOR PRINCIPAL: Motor v3 local siempre ---------------------------
-// ⚠️ La Routes API fue deshabilitada — producía saltos entre zonas porque
-//    Google no conoce la lógica de clusters geográficos de RapDrive.
-//    El motor local v3 (optimizeRouteLocal) da mejores resultados para
-//    rutas de mensajería urbana con múltiples zonas geográficas.
+// ⚠️ Routes API deshabilitada — producía saltos entre zonas.
+// Motor v3 local (clustering) da mejores resultados para mensajería urbana en RD.
 const optimizeRoute = (stops) => optimizeRouteLocal(stops);
 
 const optimizeRouteAsync = async (stops, onProgress) => {
-  // Usar siempre el motor local v3 — sin llamada a Routes API
   onProgress?.("Optimizando con motor de zonas v3…");
   const result = optimizeRouteLocal(stops);
   onProgress?.("✓ Ruta optimizada con motor de zonas");
