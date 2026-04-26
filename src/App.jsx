@@ -108,10 +108,10 @@ const LS = {
   },
   getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
   setMens:   (m) => { _memStore.mens = m; FB.set("mens", m); },
-  // Cola de rutas pendientes por mensajero (array ordenado por sentAt)
-  getPending:    (id)  => _memStore.pendingRoutes[id] || [],
-  setPending:    (id, arr) => { _memStore.pendingRoutes[id] = arr; FB.set(`pendingRoutes/${id}`, arr); },
-  getAllPending:  ()    => ({ ..._memStore.pendingRoutes }),
+  // Cola eliminada: estas funciones quedan como no-op por compatibilidad.
+  getPending:    ()  => [],
+  setPending:    () => {},
+  getAllPending:  () => ({}),
   // Ubicaciones en tiempo real de mensajeros
   setLocation: (driverId, loc) => {
     if (!window.__rdLocations) window.__rdLocations = {};
@@ -125,22 +125,9 @@ if (typeof window !== "undefined") {
   window.__rdRouteStore    = LS.getRoutes();
   window.__rdChatStore     = LS.getChats();
   window.__rdMensajeros    = LS.getMens();
-  // Reconstruir pendingRoutes desde localStorage individual de cada mensajero
-  // (evitar que _memStore traiga rutas completadas de Firebase)
-  window.__rdPendingRoutes = (() => {
-    const result = {};
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith("rdQueue_")) {
-          const driverId = k.replace("rdQueue_", "");
-          const q = JSON.parse(localStorage.getItem(k) || "[]");
-          if (Array.isArray(q)) result[driverId] = q;
-        }
-      }
-    } catch(e) {}
-    return result;
-  })();
+  // Cola eliminada: no reconstruir ni leer rdQueue_*.
+  window.__rdPendingRoutes = {};
+
 
   // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
   FB.get("routes").then(data => {
@@ -2380,12 +2367,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Cola de rutas pendientes (enviadas por el admin mientras el mensajero tiene ruta activa)
-  const [pendingRoutes, setPendingRoutes] = useState(() => {
-    // Solo mostrar rutas que genuinamente están esperando ser activadas
-    const fullQueue = (window.__rdPendingRoutes||{})[myKey] || LS.getPending(myKey) || [];
-    return fullQueue.filter(r => r.queueStatus === "pending");
-  });
+  // Cola eliminada: una sola ruta activa por mensajero.
+  const pendingRoutes = [];
+  const setPendingRoutes = () => {};
   // Historial de rutas completadas (guardado localmente)
   const [routeHistory, setRouteHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`rdHistory_${myKey}`) || "[]"); } catch{ return []; }
@@ -2532,94 +2516,32 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const writingRef = useRef(false); // true mientras pushUpdate está escribiendo en Firebase
 
   useEffect(() => {
-    const LS_KEY       = `rdRoute_${myKey}`;
-    const LS_QUEUE_KEY = `rdQueue_${myKey}`;    // cola local — fuente de verdad del mensajero
-    const LS_SEEN_KEY  = `rdSeen_${myKey}`;     // IDs ya procesados
-
-    // ── 1. Cargar IDs ya vistos (rutas procesadas en sesiones anteriores) ────
-    try {
-      const seen = JSON.parse(localStorage.getItem(LS_SEEN_KEY) || "[]");
-      seen.forEach(id => seenRouteIds.current.add(id));
-    } catch(e) {}
-
-    // ── 2. Cargar ruta activa desde localStorage ─────────────────────────────
-    try {
-      const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (saved?.stops && saved?.sentAt) {
-        const savedStops = saved.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
-        const savedAllDone = savedStops.length > 0 && savedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
-        if (savedAllDone) {
-          const completedRoute = { ...saved, stops: savedStops, completedAt: saved.completedAt || new Date().toISOString(), histId: saved.histId || `H-${Date.now()}` };
-          setRouteHistory(prev => {
-            const exists = prev.some(r => (completedRoute.routeId && r.routeId === completedRoute.routeId) || r.sentAt === completedRoute.sentAt);
-            const next = exists ? prev : [completedRoute, ...prev].slice(0, 50);
-            try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e) {}
-            return next;
-          });
-          seenRouteIds.current.add(completedRoute.routeId || completedRoute.sentAt);
-          if (completedRoute.sentAt) seenRouteIds.current.add(completedRoute.sentAt);
-          try { localStorage.removeItem(LS_KEY); } catch(e) {}
-          if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
-          delete _memStore.routes[myKey];
-          FB.set(`routes/${myKey}`, null);
-        } else {
-          lastSentAt.current = saved.sentAt;
-          seenRouteIds.current.add(saved.sentAt);
-          _memStore.routes[myKey] = saved;
-          if (!window.__rdRouteStore) window.__rdRouteStore = {};
-          window.__rdRouteStore[myKey] = saved;
-          setStops(savedStops);
-        }
-      }
-    } catch(e) {}
-
-    // ── 3. Cargar cola desde localStorage (fuente de verdad local de la cola) ─
-    try {
-      const savedQueue = JSON.parse(localStorage.getItem(LS_QUEUE_KEY) || "[]");
-      if (Array.isArray(savedQueue) && savedQueue.length > 0) {
-        if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-        window.__rdPendingRoutes[myKey] = savedQueue;
-        setPendingRoutes(savedQueue.filter(r => r.queueStatus === "pending"));
-      }
-    } catch(e) {}
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    const LS_KEY      = `rdRoute_${myKey}`;
+    const LS_SEEN_KEY = `rdSeen_${myKey}`;
 
     const saveSeenIds = () => {
       try { localStorage.setItem(LS_SEEN_KEY, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
     };
 
-    const saveQueue = (queue) => {
-      if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = queue;
-      try { localStorage.setItem(LS_QUEUE_KEY, JSON.stringify(queue)); } catch(e) {}
-      // NO escribir en Firebase aquí — el admin gestiona pendingRoutes desde su lado
-      // Escribir desde el mensajero causaría loop: saveQueue→Firebase→applyPending→saveQueue
-      setPendingRoutes(queue.filter(r => r.queueStatus === "pending"));
-    };
+    const addToHistoryOnce = (route) => {
+      if (!route?.stops?.length) return;
+      const completedRoute = {
+        ...route,
+        completedAt: route.completedAt || new Date().toISOString(),
+        histId: route.histId || `H-${Date.now()}`,
+      };
 
-    // Marcar ruta en Firebase sin borrarla de golpe.
-    // status="active" cuando el mensajero la abre desde cola.
-    // status="completed" cuando la ruta ya terminó.
-    const markQueueStatusInFirebase = (routeId, sentAt, status = "completed") => {
-      FB.get(`pendingRoutes/${myKey}`).then(fbData => {
-        const arr = Array.isArray(fbData) ? fbData
-          : (fbData && typeof fbData === "object") ? Object.values(fbData) : [];
-        const now = new Date().toISOString();
-        let touched = false;
-        const updated = arr.map(r => {
-          const matches = (routeId && r.routeId === routeId) || (sentAt && r.sentAt === sentAt);
-          if (!matches) return r;
-          touched = true;
-          return {
-            ...r,
-            queueStatus: status,
-            ...(status === "active" ? { activatedAt: now } : {}),
-            ...(status === "completed" ? { completedAt: now } : {}),
-          };
-        });
-        if (touched) FB.set(`pendingRoutes/${myKey}`, updated);
-      }).catch(() => {});
+      setRouteHistory(prev => {
+        const exists = prev.some(r =>
+          (completedRoute.routeId && r.routeId === completedRoute.routeId) ||
+          (completedRoute.sentAt && r.sentAt === completedRoute.sentAt)
+        );
+        const next = exists ? prev : [completedRoute, ...prev].slice(0, 50);
+        try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e) {}
+        return next;
+      });
+
+      if (completedRoute.routeId) FB.set(`routeHistory/${completedRoute.routeId}`, completedRoute);
     };
 
     const clearActiveRouteLocal = (route) => {
@@ -2627,128 +2549,110 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (routeKey) seenRouteIds.current.add(routeKey);
       if (route?.sentAt) seenRouteIds.current.add(route.sentAt);
       saveSeenIds();
+
       lastSentAt.current = null;
       setStops([]);
+      setSelStop(null);
+      setTab("home");
+
       if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
       delete _memStore.routes[myKey];
       onUpdateRoute(myKey, null);
+
       try { localStorage.removeItem(LS_KEY); } catch(e) {}
       FB.set(`routes/${myKey}`, null);
     };
 
-    // ── applyRoute: solo acepta rutas completamente nuevas del admin ─────────
-    const applyRoute = (nr) => {
-      if (!nr?.stops) return;
-      if (writingRef.current) return;
-      const normalizedStops = Array.isArray(nr.stops) ? nr.stops : Object.values(nr.stops);
-      const route = { ...nr, stops: normalizedStops };
+    const activateRoute = (nr) => {
+      if (!nr?.stops || writingRef.current) return;
 
-      // Ignorar si ya fue procesada (activa o en cola o completada antes)
+      const normalizedStops = Array.isArray(nr.stops) ? nr.stops : Object.values(nr.stops);
+      const route = {
+        ...nr,
+        stops: normalizedStops.map((s, i) => ({
+          ...s,
+          stopNum: s.stopNum || i + 1,
+          driverStatus: s.driverStatus || (i === 0 ? "en_ruta" : "pending"),
+        })),
+      };
+
       const routeKey = route.routeId || route.sentAt;
       if (!routeKey) return;
-      if (seenRouteIds.current.has(routeKey)) return;
-      if (route.sentAt && seenRouteIds.current.has(route.sentAt)) return;
 
-      // Es nueva — ¿hay trabajo activo ahora mismo?
-      setStops(currentStops => {
-        const hasActive = currentStops.some(
-          s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
+      // Si ya fue completada anteriormente, no resucitarla.
+      if (seenRouteIds.current.has(routeKey) || (route.sentAt && seenRouteIds.current.has(route.sentAt))) return;
+
+      const allDone = route.stops.length > 0 && route.stops.every(
+        s => s.driverStatus === "delivered" || s.driverStatus === "problema"
+      );
+
+      if (allDone) {
+        addToHistoryOnce(route);
+        clearActiveRouteLocal(route);
+        return;
+      }
+
+      // SIN COLA: cualquier ruta nueva que llegue reemplaza directamente la ruta activa.
+      lastSentAt.current = route.sentAt || routeKey;
+      if (!window.__rdRouteStore) window.__rdRouteStore = {};
+      window.__rdRouteStore[myKey] = route;
+      _memStore.routes[myKey] = route;
+      onUpdateRoute(myKey, route);
+      setStops(route.stops);
+      setTab("home");
+      try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
+    };
+
+    // 1) Cargar rutas ya completadas/vistas.
+    try {
+      const seen = JSON.parse(localStorage.getItem(LS_SEEN_KEY) || "[]");
+      seen.forEach(id => seenRouteIds.current.add(id));
+    } catch(e) {}
+
+    // 2) Cargar ruta local si existe y todavía no está completada.
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+      if (saved?.stops && saved?.sentAt) {
+        const savedStops = saved.stops.map((s, i) => ({
+          ...s,
+          stopNum: s.stopNum || i + 1,
+          driverStatus: s.driverStatus || (i === 0 ? "en_ruta" : "pending"),
+        }));
+        const savedRoute = { ...saved, stops: savedStops };
+        const savedAllDone = savedStops.length > 0 && savedStops.every(
+          s => s.driverStatus === "delivered" || s.driverStatus === "problema"
         );
-
-        if (hasActive) {
-          // Encolar — marcar como vista para no reencolar
-          seenRouteIds.current.add(routeKey);
-          if (route.sentAt) seenRouteIds.current.add(route.sentAt);
-          saveSeenIds();
-
-          const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
-          const alreadyInQueue = currentQueue.some(r =>
-            (r.routeId && r.routeId === route.routeId) || r.sentAt === route.sentAt
-          );
-          if (!alreadyInQueue) {
-            saveQueue([...currentQueue, { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() }]);
-          }
-          return currentStops;
+        if (savedAllDone) {
+          addToHistoryOnce(savedRoute);
+          clearActiveRouteLocal(savedRoute);
+        } else {
+          lastSentAt.current = savedRoute.sentAt;
+          _memStore.routes[myKey] = savedRoute;
+          if (!window.__rdRouteStore) window.__rdRouteStore = {};
+          window.__rdRouteStore[myKey] = savedRoute;
+          setStops(savedStops);
         }
-
-        // Sin trabajo activo — asignar directamente
-        seenRouteIds.current.add(routeKey);
-        if (route.sentAt) seenRouteIds.current.add(route.sentAt);
-        saveSeenIds();
-        lastSentAt.current = route.sentAt;
-        if (!window.__rdRouteStore) window.__rdRouteStore = {};
-        window.__rdRouteStore[myKey] = route;
-        _memStore.routes[myKey] = route;
-        onUpdateRoute(myKey, route);
-        try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
-        return route.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
-      });
-    };
-
-    // applyPending: Firebase envía la cola — solo agregar rutas genuinamente nuevas
-    const applyPending = (queue) => {
-      const arr = Array.isArray(queue) ? queue
-        : (queue && typeof queue === "object") ? Object.values(queue) : [];
-
-      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
-      const currentIds = new Set(currentQueue.map(r => r.routeId || r.sentAt).filter(Boolean));
-
-      const toAdd = arr.filter(r => {
-        const k = r.routeId || r.sentAt;
-        if (!k) return false;
-        if (r.queueStatus === "completed") return false;  // ya completada — nunca reencolar
-        if (seenRouteIds.current.has(k)) return false;   // ya procesada en esta sesión
-        if (r.sentAt && seenRouteIds.current.has(r.sentAt)) return false;
-        if (currentIds.has(k)) return false;             // ya está en la cola local
-        return r.queueStatus === "pending";
-      });
-
-      if (toAdd.length > 0) saveQueue([...currentQueue, ...toAdd]);
-    };
+      }
+    } catch(e) {}
 
     const applyChat = (msgs) => {
       if (Array.isArray(msgs)) setChatLog([...msgs]);
     };
 
-    // ── 4. Firebase listeners ─────────────────────────────────────────────────
-    // NO llamar FB.get("routes/myKey") al montar — ya tenemos localStorage como fuente de verdad.
-    // Solo escuchar cambios NUEVOS del admin. Esto evita que la ruta con progreso parcial
-    // se re-aplique al recargar la página.
-    FB.get(`pendingRoutes/${myKey}`).then(applyPending);
+    FB.get(`routes/${myKey}`).then(activateRoute);
     FB.get(`chats/${myKey}`).then(applyChat);
 
-    const unsubRoute   = FB.listen(`routes/${myKey}`, applyRoute);
-    const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
-    const unsubChat    = FB.listen(`chats/${myKey}`, applyChat);
+    const unsubRoute = FB.listen(`routes/${myKey}`, activateRoute);
+    const unsubChat  = FB.listen(`chats/${myKey}`, applyChat);
 
-    // ── 5. Exponer helpers para admin en mismo navegador ─────────────────────
-    window.__rdSetRoute   = (driverId, route) => { if (driverId === myKey) applyRoute(route); };
-    window.__rdSetPending = (driverId, queue) => { if (driverId === myKey) applyPending(queue); };
-
-    // ── 6. Notificaciones del admin ──────────────────────────────────────────
-
-    // 3) Listener de notificaciones del admin → mensajero (ruta asignada)
-    let lastNotifKeys = new Set();
-    const checkNotifs = async () => {
-      try {
-        const data = await FB.get(`driverNotifs/${myKey}`);
-        if (!data) return;
-        Object.entries(data).forEach(([k, notif]) => {
-          if (lastNotifKeys.has(k) || notif.read) return;
-          lastNotifKeys.add(k);
-          if (notif.type === "route_assigned") {
-            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification(notif.title, { body: notif.body, icon: "/favicon.ico" });
-            }
-            if (typeof window.__rdShowDriverNotif === "function") {
-              window.__rdShowDriverNotif(notif);
-            }
-            FB.set(`driverNotifs/${myKey}/${k}`, { ...notif, read: true });
-          }
-        });
-      } catch(e) {}
+    window.__rdSetRoute = (driverId, route) => {
+      if (driverId === myKey) activateRoute(route);
     };
-    const unsubDriverNotifs = FB.listen(`driverNotifs/${myKey}`, (data) => {
+    window.__rdSetPending = () => {}; // cola eliminada
+
+    // Notificaciones del admin → mensajero.
+    let lastNotifKeys = new Set();
+    const handleNotifs = (data) => {
       if (!data) return;
       Object.entries(data).forEach(([k, notif]) => {
         if (lastNotifKeys.has(k) || notif.read) return;
@@ -2763,18 +2667,22 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           FB.set(`driverNotifs/${myKey}/${k}`, { ...notif, read: true });
         }
       });
-    });
+    };
 
-    // Polling de respaldo cada 8s — solo notifs y pendingRoutes (NO routes para no revertir progreso)
+    const unsubDriverNotifs = FB.listen(`driverNotifs/${myKey}`, handleNotifs);
     const pollInterval = setInterval(() => {
-      if (!writingRef.current) {
-        FB.get(`pendingRoutes/${myKey}`).then(applyPending);
-      }
-      checkNotifs();
+      FB.get(`routes/${myKey}`).then(activateRoute);
+      FB.get(`driverNotifs/${myKey}`).then(handleNotifs);
     }, 8000);
-    checkNotifs();
 
-    return () => { unsubRoute(); unsubChat(); unsubPending(); unsubDriverNotifs(); clearInterval(pollInterval); };
+    FB.get(`driverNotifs/${myKey}`).then(handleNotifs);
+
+    return () => {
+      unsubRoute();
+      unsubChat();
+      unsubDriverNotifs();
+      clearInterval(pollInterval);
+    };
   }, [myKey]); // eslint-disable-line
 
   useEffect(() => { const t=setInterval(()=>setTime(new Date()),1000); return()=>clearInterval(t); },[]);
@@ -3006,51 +2914,70 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const pushUpdate = (updatedStops) => {
     const base = _memStore.routes[myKey] || (window.__rdRouteStore||{})[myKey] || globalRoutes[myKey] || {};
     const updated = { ...base, stops:updatedStops, lastUpdate:Date.now() };
-    // 1) Actualizar memoria local INMEDIATAMENTE (fuente de verdad local)
+
+    const allDone = updatedStops.length > 0 && updatedStops.every(
+      s => s.driverStatus === "delivered" || s.driverStatus === "problema"
+    );
+
+    // 1) Actualizar memoria local INMEDIATAMENTE.
     if (!window.__rdRouteStore) window.__rdRouteStore = {};
     window.__rdRouteStore[myKey] = updated;
     _memStore.routes[myKey] = updated;
     onUpdateRoute(myKey, updated);
-    // 2) Guardar en localStorage (persiste si se recarga antes de que Firebase responda)
+
+    // 2) Guardar progreso local y en Firebase mientras la ruta siga activa.
     try { localStorage.setItem(`rdRoute_${myKey}`, JSON.stringify(updated)); } catch(e) {}
-    // 3) Escribir en Firebase con bloqueo para que applyRoute no revierta
+
     writingRef.current = true;
+
+    if (allDone) {
+      const histEntry = { ...updated, completedAt: new Date().toISOString(), histId: `H-${Date.now()}` };
+
+      setRouteHistory(prev => {
+        const exists = prev.some(r =>
+          (histEntry.routeId && r.routeId === histEntry.routeId) ||
+          (histEntry.sentAt && r.sentAt === histEntry.sentAt)
+        );
+        const next = exists ? prev : [histEntry, ...prev].slice(0, 50);
+        try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e){}
+        return next;
+      });
+
+      if (histEntry.routeId) FB.set(`routeHistory/${histEntry.routeId}`, histEntry);
+
+      // Marcar esta ruta como vista/completada para que no reviva.
+      const routeKey = histEntry.routeId || histEntry.sentAt;
+      if (routeKey) seenRouteIds.current.add(routeKey);
+      if (histEntry.sentAt) seenRouteIds.current.add(histEntry.sentAt);
+      try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
+
+      // SIN COLA: al completarse todas las paradas, borrar ruta activa y dejar pantalla esperando nueva ruta.
+      setStops([]);
+      setSelStop(null);
+      setShowCompletedBanner(true);
+      setTab("home");
+
+      if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
+      delete _memStore.routes[myKey];
+      onUpdateRoute(myKey, null);
+      try { localStorage.removeItem(`rdRoute_${myKey}`); } catch(e) {}
+
+      Promise.all([
+        FB.set(`routes/${myKey}`, null),
+        histEntry.routeId ? FB.set(`routeHistory/${histEntry.routeId}`, histEntry) : Promise.resolve(),
+      ]).finally(() => {
+        writingRef.current = false;
+      });
+
+      return;
+    }
+
     Promise.all([
       FB.set(`routes/${myKey}`, updated),
       updated.routeId ? FB.set(`routeHistory/${updated.routeId}`, updated) : Promise.resolve(),
     ]).finally(() => {
       writingRef.current = false;
     });
-    // Route fully complete
-    const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
-    if (allDone) {
-      const histEntry = { ...updated, completedAt: new Date().toISOString(), histId: `H-${Date.now()}` };
-      setRouteHistory(prev => {
-        const next = [histEntry, ...prev].slice(0, 50);
-        try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e){}
-        return next;
-      });
-      // Marcar esta ruta como vista para siempre
-      const routeKey = updated.routeId || updated.sentAt;
-      if (routeKey) seenRouteIds.current.add(routeKey);
-      if (updated.sentAt) seenRouteIds.current.add(updated.sentAt);
-      try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
-      // Eliminar de la cola local (UI y localStorage)
-      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
-      const newQueue = currentQueue.filter(r =>
-        updated.routeId ? r.routeId !== updated.routeId : r.sentAt !== updated.sentAt
-      );
-      if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = newQueue;
-      try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
-      setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
-      // Marcar como "completed" en Firebase (NO borrar — así el admin no la reencola)
-      markQueueStatusInFirebase(updated.routeId, updated.sentAt, "completed");
-      // Sacar la ruta activa de la pantalla y dejarla solo en historial.
-      // Esto evita que una ruta ya completada quede persistente y bloquee/sustituya mal la siguiente cola.
-      clearActiveRouteLocal(histEntry);
-      setTab(newQueue.length > 0 ? "pending" : "history");
-    }
   };
 
   const addChatMsg = (text) => {
@@ -3065,80 +2992,34 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const saveEvidenceAndSync = async (stopId, mode, photoDataUrl, note) => {
     const stop = stops.find(s => s.id === stopId);
     if (!stop) return;
-    const ts        = Date.now();
-    const timeStr   = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
+
+    const ts          = Date.now();
+    const timeStr     = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
     const isDelivered = mode === "delivered";
+    const photoKey    = `evidence/${myKey}/${ts}_${stopId}`;
+    const evidencePhotoUrl = `firebase:${photoKey}`;
+    const evKey       = `deliveryEvents/${ts}_${stopId}`;
 
-    // 1. Subir foto a Firebase Storage (base64 en Realtime DB como fallback si no hay Storage)
-    //    En producción reemplazar por Firebase Storage upload
-    const photoKey = `evidence/${myKey}/${ts}_${stopId}`;
-    await FB.set(photoKey, { photo: photoDataUrl, ts, stopId });
-    const evidencePhotoUrl = `firebase:${photoKey}`; // placeholder hasta integrar Storage
-
-    // 2. Obtener GPS actual
-    let gpsLocation = null;
-    try {
-      gpsLocation = await new Promise((res) =>
-        navigator.geolocation.getCurrentPosition(
-          p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
-          () => res(null),
-          { timeout: 4000, enableHighAccuracy: true }
-        )
-      );
-    } catch {}
-
-    // 3. Construir payload de sincronización
-    const syncPayload = {
-      packageCode:    stop.tracking || stop.id,
-      status:         isDelivered ? "delivered" : "failed",
-      evidencePhotoUrl,
-      courierId:      myKey,
-      courierName:    users.find(u => u.email === myKey)?.name || myKey,
-      deliveredAt:    isDelivered ? new Date().toISOString() : null,
-      failedAt:       !isDelivered ? new Date().toISOString() : null,
-      failNote:       !isDelivered ? (note || "Sin detalles") : null,
-      gpsLocation,
-      syncStatus:     "pending",
-      createdAt:      ts,
-      stopId,
-    };
-
-    // 4. Guardar en Firebase (nodo deliveryEvents)
-    const evKey = `deliveryEvents/${ts}_${stopId}`;
-    await FB.set(evKey, syncPayload);
-
-    // 5. Enviar al backend para sync con SilpoPack (fire-and-forget con reintento)
-    const trySyncBackend = async (attempt = 1) => {
-      try {
-        const resp = await fetch(`${BACKEND_URL}/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...syncPayload, firebaseKey: evKey }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        // Backend confirma → actualizar syncStatus
-        FB.set(`${evKey}/syncStatus`, "synced");
-      } catch (e) {
-        if (attempt < 3) {
-          setTimeout(() => trySyncBackend(attempt + 1), attempt * 5000);
-        } else {
-          FB.set(`${evKey}/syncStatus`, "failed");
-          FB.set(`${evKey}/errorMessage`, e.message);
-        }
-      }
-    };
-    trySyncBackend();
-
-    // 6. Actualizar estado local de la parada
+    // 1) Marcar en pantalla INMEDIATO, sin esperar GPS/backend.
     if (isDelivered) {
       let foundNext = false;
       const updated = stops.map(s => {
-        if (s.id === stopId) return { ...s, driverStatus:"delivered", deliveredAt:timeStr, evidencePhotoUrl };
-        if (!foundNext && s.driverStatus === "pending") { foundNext = true; return { ...s, driverStatus:"en_ruta" }; }
+        if (s.id === stopId) return {
+          ...s,
+          driverStatus:"delivered",
+          deliveredAt:timeStr,
+          evidencePhotoUrl,
+          evidencePreview: photoDataUrl,
+          syncStatus:"pending",
+        };
+        if (!foundNext && s.driverStatus === "pending") {
+          foundNext = true;
+          return { ...s, driverStatus:"en_ruta" };
+        }
         return s;
       });
-      setStops(updated); pushUpdate(updated);
+      setStops(updated);
+      pushUpdate(updated);
       addChatMsg(`✓ Entregado: ${stop.client || "Parada #"+stop.stopNum}`);
       const notifId = "n"+ts+stopId;
       FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
@@ -3147,9 +3028,18 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         time:timeStr, read:false, isNew:true, createdAt:ts });
     } else {
       const updated = stops.map(s => s.id===stopId
-        ? { ...s, driverStatus:"problema", issue:note||"Sin detalles", issueAt:timeStr, evidencePhotoUrl }
+        ? {
+            ...s,
+            driverStatus:"problema",
+            issue:note||"Sin detalles",
+            issueAt:timeStr,
+            evidencePhotoUrl,
+            evidencePreview: photoDataUrl,
+            syncStatus:"pending",
+          }
         : s);
-      setStops(updated); pushUpdate(updated);
+      setStops(updated);
+      pushUpdate(updated);
       addChatMsg(`⚠ Problema parada #${stop.stopNum}: ${note||"Sin detalles"}`);
       const notifId = "n"+ts+stopId;
       FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
@@ -3157,7 +3047,81 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         body:`${myKey} · ${note||"Sin detalles"} · #${stop.stopNum}`,
         time:timeStr, read:false, isNew:true, createdAt:ts });
     }
-    setEvidenceFlow(null); setShowProb(null); setProbNote(""); setSelStop(null);
+
+    // Cerrar modal rápido para que el mensajero siga trabajando.
+    setEvidenceFlow(null);
+    setShowProb(null);
+    setProbNote("");
+    setSelStop(null);
+
+    // 2) Sincronizar evidencia + SilpoPack en segundo plano.
+    (async () => {
+      try {
+        await FB.set(photoKey, { photo: photoDataUrl, ts, stopId, routeId: myRoute?.routeId || null });
+
+        let gpsLocation = null;
+        try {
+          gpsLocation = await new Promise((res) =>
+            navigator.geolocation.getCurrentPosition(
+              p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+              () => res(null),
+              { timeout: 2500, enableHighAccuracy: true, maximumAge: 10000 }
+            )
+          );
+        } catch {}
+
+        const syncPayload = {
+          packageCode:    stop.tracking || stop.id,
+          status:         isDelivered ? "delivered" : "failed",
+          evidencePhotoUrl,
+          courierId:      myKey,
+          courierName:    users.find(u => u.email === myKey)?.name || myKey,
+          deliveredAt:    isDelivered ? new Date(ts).toISOString() : null,
+          failedAt:       !isDelivered ? new Date(ts).toISOString() : null,
+          failNote:       !isDelivered ? (note || "Sin detalles") : null,
+          gpsLocation,
+          syncStatus:     "pending",
+          createdAt:      ts,
+          stopId,
+          routeId:        myRoute?.routeId || null,
+        };
+
+        await FB.set(evKey, syncPayload);
+
+        const trySyncBackend = async (attempt = 1) => {
+          try {
+            const resp = await fetch(`${BACKEND_URL}/sync`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...syncPayload, firebaseKey: evKey }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            FB.set(`${evKey}/syncStatus`, "synced");
+            FB.set(`${evKey}/syncedAt`, new Date().toISOString());
+          } catch (e) {
+            if (attempt < 3) {
+              setTimeout(() => trySyncBackend(attempt + 1), attempt * 5000);
+            } else {
+              FB.set(`${evKey}/syncStatus`, "failed");
+              FB.set(`${evKey}/errorMessage`, e.message || String(e));
+            }
+          }
+        };
+
+        trySyncBackend();
+      } catch (e) {
+        FB.set(evKey, {
+          packageCode: stop.tracking || stop.id,
+          status: isDelivered ? "delivered" : "failed",
+          evidencePhotoUrl,
+          syncStatus:"failed",
+          errorMessage: e.message || String(e),
+          createdAt: ts,
+          stopId,
+        });
+      }
+    })();
   };
 
   // markDelivered ahora abre la cámara primero
@@ -3178,14 +3142,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     if (allDone) {
       setShowCompletedBanner(true);
       clearTimeout(completedBannerTimer.current);
-      // Si hay rutas pendientes, mantener el banner más tiempo para que pueda verlo
-      const delay = pendingRoutes.length > 0 ? 12000 : 6000;
+      const delay = 6000;
       completedBannerTimer.current = setTimeout(() => setShowCompletedBanner(false), delay);
     } else {
       setShowCompletedBanner(false);
     }
     return () => clearTimeout(completedBannerTimer.current);
-  }, [stops, pendingRoutes.length]);
+  }, [stops]);
 
   // -- Colores por status del driver ---------------------------------------------
   const dsColor = (ds) => ds==="delivered"?"#10b981":ds==="problema"?"#ef4444":ds==="en_ruta"?"#3b82f6":"#f59e0b";
@@ -3517,20 +3480,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
         {/* Route complete banner */}
         {showCompletedBanner && tab!=="chat" && tab!=="pending" && (
-          <div style={{ position:"absolute",bottom:14,left:14,right:14,background:"rgba(6,12,20,0.98)",border:`1px solid ${pendingRoutes.length>0?"rgba(245,158,11,0.25)":"rgba(255,255,255,0.1)"}`,borderRadius:16,padding:"16px",textAlign:"center",backdropFilter:"blur(20px)",boxShadow:"0 8px 32px rgba(0,0,0,0.8)",animation:"popIn .3s cubic-bezier(.4,0,.2,1)",zIndex:50 }}>
+          <div style={{ position:"absolute",bottom:14,left:14,right:14,background:"rgba(6,12,20,0.98)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:16,padding:"16px",textAlign:"center",backdropFilter:"blur(20px)",boxShadow:"0 8px 32px rgba(0,0,0,0.8)",animation:"popIn .3s cubic-bezier(.4,0,.2,1)",zIndex:50 }}>
             <button onClick={()=>setShowCompletedBanner(false)} style={{ position:"absolute",top:8,right:10,background:"none",border:"none",color:"rgba(255,255,255,0.3)",fontSize:16,cursor:"pointer",lineHeight:1,padding:4 }}>✕</button>
             <div style={{ fontSize:30,marginBottom:6 }}>🎉</div>
             <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white" }}>¡Ruta completada!</div>
             <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:3 }}>{delivered.length} entregas · {problems.length > 0 ? `${problems.length} con problemas` : "todo entregado"}</div>
-            {pendingRoutes.length > 0 && (
-              <button onClick={()=>{setShowCompletedBanner(false);setTab("pending");}}
-                style={{ marginTop:12,width:"100%",padding:"10px",borderRadius:10,border:"none",background:"rgba(245,158,11,0.15)",color:"#f59e0b",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Ver {pendingRoutes.length} ruta{pendingRoutes.length>1?"s":""} pendiente{pendingRoutes.length>1?"s":""}
-              </button>
-            )}
             <div style={{ marginTop:10,height:2,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden" }}>
-              <div style={{ height:2,background:pendingRoutes.length>0?"#f59e0b":"white",borderRadius:2,width:"100%",animation:`countdown ${pendingRoutes.length>0?12:6}s linear forwards` }}/>
+              <div style={{ height:2,background:"white",borderRadius:2,width:"100%",animation:"countdown 6s linear forwards" }}/>
             </div>
           </div>
         )}
@@ -3832,6 +3788,12 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           {stop.deliveredAt}
                         </div>
                       )}
+                      {stop.evidencePreview && (
+                        <div style={{ marginTop:7, display:"flex", alignItems:"center", gap:7 }}>
+                          <img src={stop.evidencePreview} alt="Evidencia" style={{ width:46, height:46, objectFit:"cover", borderRadius:9, border:"1px solid rgba(255,255,255,0.12)" }}/>
+                          <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontFamily:"'DM Sans',sans-serif" }}>Prueba guardada</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Right: status badge + chevron */}
@@ -3963,166 +3925,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               style={{ width:42,height:42,borderRadius:12,border:"none",background:chatMsg.trim()?"#2563eb":"#0a1420",color:chatMsg.trim()?"white":"rgba(255,255,255,0.2)",cursor:chatMsg.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s",border:"1px solid #1a2d40" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* ══ TAB: RUTAS PENDIENTES ══ */}
-      {tab === "pending" && (
-        <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#060c14",paddingBottom:60 }}>
-          {/* Header */}
-          <div style={{ padding:"13px 16px",borderBottom:"1px solid #0d1a26",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
-            <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid #1a2d40",background:"rgba(255,255,255,0.03)",color:"rgba(255,255,255,0.4)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:14,fontWeight:700,color:"#f1f5f9" }}>Rutas pendientes</div>
-              <div style={{ fontSize:11,color:"rgba(255,255,255,0.3)" }}>
-                {pendingRoutes.length === 0 ? "Sin rutas en cola" : `${pendingRoutes.length} ruta${pendingRoutes.length>1?"s":""} esperando`}
-              </div>
-            </div>
-            {pendingRoutes.length > 0 && (
-              <div style={{ padding:"3px 10px",borderRadius:20,background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.25)",fontSize:11,color:"#f59e0b",fontWeight:700 }}>
-                {pendingRoutes.length} en cola
-              </div>
-            )}
-          </div>
-
-          {/* Info banner */}
-          <div style={{ margin:"12px 14px 0",padding:"10px 13px",background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:12,display:"flex",gap:9,alignItems:"flex-start" }}>
-            <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>ℹ️</span>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5 }}>
-              Estas rutas fueron enviadas mientras tenías trabajo activo. <strong style={{color:"rgba(255,255,255,0.85)"}}>Termina tu ruta actual</strong> y luego activa la siguiente desde aquí.
-            </div>
-          </div>
-
-          {/* Lista de rutas pendientes */}
-          <div style={{ flex:1,overflow:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:10 }}>
-            {pendingRoutes.length === 0 ? (
-              <div style={{ textAlign:"center",padding:"48px 0" }}>
-                <div style={{ fontSize:36,marginBottom:12,opacity:0.3 }}>📋</div>
-                <div style={{ fontSize:14,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",fontWeight:600 }}>Sin rutas pendientes</div>
-                <div style={{ fontSize:12,color:"rgba(255,255,255,0.15)",marginTop:6,fontFamily:"'DM Sans',sans-serif" }}>El admin enviará rutas aquí cuando tengas trabajo activo</div>
-              </div>
-            ) : pendingRoutes.map((route, idx) => {
-              const stopsCount = route.stops?.length || 0;
-              const sent = route.sentAt ? new Date(route.sentAt).toLocaleString("es-DO",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
-              const isFirst = idx === 0;
-              const hasActiveWork = stops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
-              return (
-                <div key={route.routeId||route.sentAt||idx}
-                  style={{ background:"#161616",border:`1.5px solid ${isFirst?"rgba(245,158,11,0.4)":"rgba(255,255,255,0.08)"}`,borderRadius:16,padding:"14px",animation:"fadeUp .25s ease both" }}>
-                  {/* Badge posición en cola */}
-                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
-                    <div style={{ width:22,height:22,borderRadius:6,background:isFirst?"rgba(245,158,11,0.2)":"rgba(255,255,255,0.05)",border:`1px solid ${isFirst?"rgba(245,158,11,0.4)":"rgba(255,255,255,0.08)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:isFirst?"#f59e0b":"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif" }}>
-                      {idx+1}
-                    </div>
-                    <span style={{ fontSize:11,color:isFirst?"#f59e0b":"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",fontWeight:600 }}>
-                      {isFirst ? "⚡ PRÓXIMA EN ACTIVAR" : `Cola #${idx+1}`}
-                    </span>
-                    <div style={{ marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Mono',monospace" }}>{sent}</div>
-                  </div>
-
-                  {/* Nombre de ruta */}
-                  <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(255,255,255,0.9)",marginBottom:4 }}>
-                    {route.routeName || "Ruta sin nombre"}
-                  </div>
-
-                  {/* Detalles */}
-                  <div style={{ display:"flex",gap:12,marginBottom:12 }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:5,fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif" }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      {stopsCount} paradas
-                    </div>
-                    <div style={{ display:"flex",alignItems:"center",gap:5,fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif" }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><polyline points="12 8 12 12 14 14"/></svg>
-                      {route.km || "—"} km
-                    </div>
-                  </div>
-
-                  {/* Preview de primeras paradas */}
-                  {stopsCount > 0 && (
-                    <div style={{ background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)",borderRadius:10,padding:"8px 10px",marginBottom:12,display:"flex",flexDirection:"column",gap:4 }}>
-                      {(route.stops||[]).slice(0,3).map((s,si) => (
-                        <div key={si} style={{ display:"flex",gap:8,alignItems:"center" }}>
-                          <div style={{ width:18,height:18,borderRadius:5,background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"rgba(255,255,255,0.4)",fontWeight:700,flexShrink:0 }}>{s.stopNum||si+1}</div>
-                          <span style={{ fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1 }}>{s.client||"Cliente"} · {s.displayAddr||s.rawAddr||"—"}</span>
-                        </div>
-                      ))}
-                      {stopsCount > 3 && (
-                        <div style={{ fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",paddingLeft:26 }}>+{stopsCount-3} paradas más</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Botón activar */}
-                  <button
-                    disabled={hasActiveWork && isFirst}
-                    onClick={() => {
-                      if (hasActiveWork) return;
-                      // Marcar como vista para siempre — Firebase no la reinyectará
-                      const routeKey = route.routeId || route.sentAt;
-                      seenRouteIds.current.add(routeKey);
-                      if (route.sentAt) seenRouteIds.current.add(route.sentAt);
-                      try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
-
-                      // Eliminar de la cola local (UI y localStorage)
-                      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
-                      const newQueue = currentQueue.filter(r =>
-                        route.routeId ? r.routeId !== route.routeId : r.sentAt !== route.sentAt
-                      );
-                      if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                      window.__rdPendingRoutes[myKey] = newQueue;
-                      try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
-                      setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
-                      // Marcar como "active" en Firebase (NO borrar — así el admin no la reencola)
-                      markQueueStatusInFirebase(route.routeId, route.sentAt, "active");
-
-                      // Activar como ruta actual
-                      lastSentAt.current = route.sentAt;
-                      const newStops = (route.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
-                      const activeRoute = { ...route, stops: newStops };
-                      setStops(newStops);
-                      if (!window.__rdRouteStore) window.__rdRouteStore = {};
-                      window.__rdRouteStore[myKey] = activeRoute;
-                      _memStore.routes[myKey] = activeRoute;
-                      LS.setRoute(myKey, activeRoute);
-                      onUpdateRoute(myKey, activeRoute);
-                      try { localStorage.setItem(`rdRoute_${myKey}`, JSON.stringify(activeRoute)); } catch(e) {}
-                      addChatMsg(`🚀 Ruta "${route.routeName}" activada · ${stopsCount} paradas`);
-                      setTab("route");
-                      setFilterMode("all");
-                    }}
-                    style={{
-                      width:"100%",padding:"12px",borderRadius:12,border:"none",
-                      background: hasActiveWork && isFirst
-                        ? "rgba(255,255,255,0.04)"
-                        : isFirst
-                          ? "white"
-                          : "rgba(255,255,255,0.06)",
-                      color: hasActiveWork && isFirst
-                        ? "rgba(255,255,255,0.2)"
-                        : isFirst ? "black" : "rgba(255,255,255,0.5)",
-                      fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,
-                      cursor: hasActiveWork && isFirst ? "not-allowed" : "pointer",
-                      transition:"all .15s",
-                      display:"flex",alignItems:"center",justifyContent:"center",gap:7
-                    }}>
-                    {hasActiveWork && isFirst ? (
-                      <>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        Termina la ruta actual primero
-                      </>
-                    ) : (
-                      <>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        {isFirst ? "Activar esta ruta" : "Activar (saltar cola)"}
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}
@@ -4395,9 +4197,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
                       label:"Problemas", sub:`${problems.length} reportados`, badge:problems.length, badgeColor:"#ef4444",
                       active:false, action:()=>{setFilterMode("problema");setTab("route");setMenuOpen(false);} },
-                    { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-                      label:"En cola", sub:`${pendingRoutes.length} rutas esperando`, badge:pendingRoutes.length, badgeColor:"#f59e0b",
-                      active:tab==="pending", action:()=>{setTab("pending");setMenuOpen(false);} },
                     { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
                       label:"Mi historial", sub:"Entregas anteriores", badge:0, badgeColor:"#8b5cf6",
                       active:tab==="history", action:()=>{setTab("history");setMenuOpen(false);} },
@@ -4455,9 +4254,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
           { id:"mapa", label:"Mapa",
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
-          { id:"pending", label:"En cola",
-            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-            badge:pendingRoutes.length },
           { id:"history", label:"Historial",
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
@@ -6374,42 +6170,46 @@ const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
   const videoRef    = useRef(null);
   const canvasRef   = useRef(null);
   const streamRef   = useRef(null);
-  const [phase,     setPhase]     = useState("preview");   // preview | captured | saving
-  const [photoData, setPhotoData] = useState(null);        // base64 dataURL
+  const fileInputRef = useRef(null);
+  const [phase,     setPhase]     = useState("choice");   // choice | preview | captured | saving
+  const [photoData, setPhotoData] = useState(null);       // base64 dataURL
   const [camErr,    setCamErr]    = useState(null);
   const [flash,     setFlash]     = useState(false);
   const isDelivered = mode === "delivered";
   const accentColor = isDelivered ? "#10b981" : "#ef4444";
   const label       = isDelivered ? "Entregado" : "Fallido";
 
-  // Iniciar cámara al montar
+  const stopCamera = () => {
+    streamRef.current?.getTracks?.().forEach(t => t.stop());
+    streamRef.current = null;
+  };
+
   useEffect(() => {
-    let active = true;
-    const startCam = async () => {
-      try {
-        // Preferir cámara trasera en móvil (mejor calidad de evidencia)
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
+    return () => stopCamera();
+  }, []);
+
+  const startCamera = async () => {
+    setCamErr(null);
+    setPhase("preview");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
+          videoRef.current.play?.();
         }
-      } catch (e) {
-        setCamErr(e.name === "NotAllowedError"
-          ? "Permiso de cámara denegado. Ve a Ajustes > Navegador > Cámara y actívalo."
-          : "No se pudo acceder a la cámara: " + e.message);
-      }
-    };
-    startCam();
-    return () => {
-      active = false;
-      streamRef.current?.getTracks().forEach(t => t.stop());
-    };
-  }, []);
+      }, 80);
+    } catch (e) {
+      setCamErr(e.name === "NotAllowedError"
+        ? "Permiso de cámara denegado. Puedes subir una foto desde la galería."
+        : "No se pudo acceder a la cámara. Puedes subir una foto desde la galería.");
+      setPhase("choice");
+    }
+  };
 
   const takePhoto = () => {
     const video  = videoRef.current;
@@ -6418,26 +6218,37 @@ const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
     canvas.width  = video.videoWidth  || 1280;
     canvas.height = video.videoHeight || 720;
     canvas.getContext("2d").drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.78);
     setPhotoData(dataUrl);
     setPhase("captured");
     setFlash(true);
-    setTimeout(() => setFlash(false), 200);
-    // Parar stream para liberar cámara
-    streamRef.current?.getTracks().forEach(t => t.stop());
+    setTimeout(() => setFlash(false), 180);
+    stopCamera();
+  };
+
+  const chooseGallery = () => {
+    stopCamera();
+    fileInputRef.current?.click();
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setPhotoData(ev.target.result);
+      setPhase("captured");
+      setCamErr(null);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const retake = () => {
     setPhotoData(null);
-    setPhase("preview");
+    setPhase("choice");
     setCamErr(null);
-    // Re-iniciar cámara
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } }, audio: false,
-    }).then(stream => {
-      streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
-    }).catch(e => setCamErr("Error al reiniciar cámara: " + e.message));
+    stopCamera();
   };
 
   const confirm = () => {
@@ -6453,100 +6264,112 @@ const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
         @keyframes camPop { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
       `}</style>
 
-      {/* Flash overlay */}
-      {flash && <div style={{ position:"absolute", inset:0, background:"white", zIndex:10001, animation:"camFlash .2s ease forwards", pointerEvents:"none" }}/>}
+      {flash && <div style={{ position:"absolute", inset:0, background:"white", zIndex:10001, animation:"camFlash .18s ease forwards", pointerEvents:"none" }}/>}
 
-      {/* Header */}
-      <div style={{ padding:"16px 20px 12px", display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.8)", flexShrink:0 }}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        style={{ display:"none" }}
+      />
+
+      <div style={{ padding:"16px 20px 12px", display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.88)", flexShrink:0 }}>
         <div style={{ width:36, height:36, borderRadius:10, background:`${accentColor}22`, border:`1.5px solid ${accentColor}55`, display:"flex", alignItems:"center", justifyContent:"center" }}>
           {isDelivered
             ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
             : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
         </div>
-        <div style={{ flex:1 }}>
+        <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, fontWeight:800, color:"white", fontFamily:"'Syne',sans-serif" }}>
-            📸 Foto de evidencia — {label}
+            Evidencia — {label}
           </div>
-          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)", marginTop:1 }}>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)", marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {stop.client} · #{stop.tracking || stop.stopNum}
           </div>
         </div>
-        <button onClick={onCancel} style={{ width:30, height:30, borderRadius:8, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        <button onClick={() => { stopCamera(); onCancel(); }} style={{ width:30, height:30, borderRadius:8, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
       </div>
 
-      {/* Viewfinder */}
       <div style={{ flex:1, position:"relative", overflow:"hidden", background:"#111" }}>
-        {/* Error de cámara */}
-        {camErr && (
-          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:30, textAlign:"center", zIndex:10 }}>
-            <div style={{ fontSize:40, marginBottom:16 }}>📷</div>
-            <div style={{ fontSize:14, color:"#f87171", fontWeight:600, lineHeight:1.5, marginBottom:20 }}>{camErr}</div>
-            <button onClick={onCancel} style={{ padding:"10px 24px", borderRadius:10, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.1)", color:"#f87171", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              Cancelar
-            </button>
+        {phase === "choice" && (
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:26, textAlign:"center" }}>
+            <div style={{ fontSize:46, marginBottom:12 }}>📸</div>
+            <div style={{ fontSize:18, fontFamily:"'Syne',sans-serif", fontWeight:800, color:"white", marginBottom:6 }}>
+              Agregar prueba de {label.toLowerCase()}
+            </div>
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.45, maxWidth:320, marginBottom:20 }}>
+              Elige cámara o galería. Al confirmar, el paquete se marca y se envía al robot de SilpoPack.
+            </div>
+            {camErr && <div style={{ fontSize:12, color:"#f87171", marginBottom:14, maxWidth:320 }}>{camErr}</div>}
+            <div style={{ display:"flex", gap:10, width:"100%", maxWidth:360 }}>
+              <button onClick={startCamera}
+                style={{ flex:1, padding:"15px 10px", borderRadius:14, border:`1px solid ${accentColor}55`, background:`${accentColor}18`, color:"white", fontSize:13, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
+                📷 Cámara
+              </button>
+              <button onClick={chooseGallery}
+                style={{ flex:1, padding:"15px 10px", borderRadius:14, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", fontSize:13, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
+                🖼️ Galería
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Video preview */}
-        {phase === "preview" && !camErr && (
-          <video ref={videoRef} autoPlay playsInline muted
-            style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
-        )}
-
-        {/* Foto tomada */}
-        {phase === "captured" && photoData && (
-          <img src={photoData} alt="evidencia"
-            style={{ width:"100%", height:"100%", objectFit:"contain", animation:"camPop .2s ease" }}/>
-        )}
-
-        {/* Canvas oculto para captura */}
-        <canvas ref={canvasRef} style={{ display:"none" }}/>
-
-        {/* Overlay de guía cuando está en preview */}
-        {phase === "preview" && !camErr && (
+        {phase === "preview" && (
           <>
-            {/* Esquinas de encuadre */}
-            {[["0,0","top:12px;left:12px;border-top-left-radius:6px"],
-              ["90deg","top:12px;right:12px;border-top-right-radius:6px"],
-              ["180deg","bottom:12px;right:12px;border-bottom-right-radius:6px"],
-              ["270deg","bottom:12px;left:12px;border-bottom-left-radius:6px"],
-            ].map(([, pos], i) => (
+            <video ref={videoRef} autoPlay playsInline muted style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+            {[["top:12px;left:12px;border-top-left-radius:6px"],
+              ["top:12px;right:12px;border-top-right-radius:6px"],
+              ["bottom:12px;right:12px;border-bottom-right-radius:6px"],
+              ["bottom:12px;left:12px;border-bottom-left-radius:6px"],
+            ].map(([pos], i) => (
               <div key={i} style={{ position:"absolute", width:28, height:28, borderTop:`2.5px solid ${accentColor}`, borderLeft:`2.5px solid ${accentColor}`, opacity:0.8, ...Object.fromEntries(pos.split(";").map(p => { const [k,v]=p.split(":"); return [k.trim().replace(/-([a-z])/g,(_,c)=>c.toUpperCase()),v?.trim()]; }).filter(([k])=>k)) }}/>
             ))}
-            <div style={{ position:"absolute", bottom:80, left:0, right:0, textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'Syne',sans-serif" }}>
-              Encuadra el paquete o la puerta del cliente
+            <div style={{ position:"absolute", bottom:86, left:0, right:0, textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.55)", fontFamily:"'Syne',sans-serif" }}>
+              Encuadra el paquete, puerta o firma visual
             </div>
           </>
         )}
 
-        {/* Label de estado capturado */}
-        {phase === "captured" && (
-          <div style={{ position:"absolute", top:12, left:12, background:`${accentColor}dd`, color:"white", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>
-            ✓ Foto capturada
-          </div>
+        {phase === "captured" && photoData && (
+          <>
+            <img src={photoData} alt="evidencia" style={{ width:"100%", height:"100%", objectFit:"contain", animation:"camPop .18s ease" }}/>
+            <div style={{ position:"absolute", top:12, left:12, background:`${accentColor}dd`, color:"white", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>
+              ✓ Foto lista
+            </div>
+          </>
         )}
+
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
       </div>
 
-      {/* Controles */}
-      <div style={{ padding:"20px 24px 28px", background:"rgba(0,0,0,0.9)", flexShrink:0 }}>
-        {phase === "preview" && !camErr && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ padding:"18px 22px 26px", background:"rgba(0,0,0,0.92)", flexShrink:0 }}>
+        {phase === "preview" && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16 }}>
+            <button onClick={() => { stopCamera(); setPhase("choice"); }}
+              style={{ width:52, height:52, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", cursor:"pointer", fontSize:20 }}>
+              ‹
+            </button>
             <button onClick={takePhoto}
               style={{ width:72, height:72, borderRadius:"50%", border:`4px solid ${accentColor}`, background:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 0 6px ${accentColor}33` }}>
               <div style={{ width:52, height:52, borderRadius:"50%", background:accentColor }}/>
             </button>
+            <button onClick={chooseGallery}
+              style={{ width:52, height:52, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", cursor:"pointer", fontSize:18 }}>
+              🖼️
+            </button>
           </div>
         )}
 
         {phase === "captured" && (
-          <div style={{ display:"flex", gap:12 }}>
+          <div style={{ display:"flex", gap:10 }}>
             <button onClick={retake}
-              style={{ flex:1, padding:"14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.7)", fontSize:13, fontWeight:700, fontFamily:"'Syne',sans-serif", cursor:"pointer" }}>
-              🔄 Repetir
+              style={{ flex:1, padding:"14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.75)", fontSize:13, fontWeight:700, fontFamily:"'Syne',sans-serif", cursor:"pointer" }}>
+              Cambiar
             </button>
             <button onClick={confirm}
               style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`, color:"white", fontSize:13, fontWeight:800, fontFamily:"'Syne',sans-serif", cursor:"pointer", boxShadow:`0 4px 20px ${accentColor}55` }}>
-              ✓ Usar esta foto — {label}
+              Confirmar — {label}
             </button>
           </div>
         )}
@@ -6554,7 +6377,7 @@ const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
         {phase === "saving" && (
           <div style={{ textAlign:"center", color:"rgba(255,255,255,0.6)", fontSize:13 }}>
             <div style={{ width:24, height:24, border:"2px solid rgba(255,255,255,0.2)", borderTopColor:"white", borderRadius:"50%", animation:"spin .8s linear infinite", margin:"0 auto 8px" }}/>
-            Guardando evidencia…
+            Guardando y enviando a SilpoPack…
           </div>
         )}
       </div>
@@ -8935,74 +8758,44 @@ const CircuitEngine = () => {
                         routeId: `R-${Date.now()}`,
                       };
 
-                      // ── LÓGICA DE COLA ─────────────────────────────────────────
-                      // Verificar trabajo activo DESDE FIREBASE (fuente de verdad real)
-                      const fbRoute = await FB.get(`routes/${driverId}`);
-                      const fbStops = fbRoute?.stops
-                        ? (Array.isArray(fbRoute.stops) ? fbRoute.stops : Object.values(fbRoute.stops))
-                        : [];
-                      const hasActiveStops = fbStops.some(
-                        s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
-                      );
+                      // ── SIN COLA: la ruta nueva llega directo como ruta activa ──
+                      // Si el mensajero tenía una ruta abierta, esta nueva ruta la reemplaza.
+                      if (!window.__rdRouteStore) window.__rdRouteStore = {};
+                      window.__rdRouteStore[driverId] = route;
+                      LS.setRoute(driverId, route);
+                      // Guardar también en historial de rutas (keyed by routeId, no por driverId)
+                      FB.set(`routeHistory/${route.routeId}`, { ...route, sentAt: route.sentAt });
+                      if (typeof window.__rdSetRoute === "function") window.__rdSetRoute(driverId, route);
 
-                      if (hasActiveStops) {
-                        // → Agregar a la cola de rutas pendientes
-                        // SIEMPRE leer desde memoria local (no Firebase) para evitar resucitar rutas completadas
-                        if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                        const currentQueue = window.__rdPendingRoutes[driverId] || [];
-                        // Verificar que no esté ya en la cola (evitar duplicados)
-                        const alreadyQueued = currentQueue.some(r =>
-                          r.routeId === route.routeId || r.sentAt === route.sentAt
-                        );
-                        if (!alreadyQueued) {
-                          const routeWithStatus = { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() };
-                          const queue = [...currentQueue, routeWithStatus];
-                          window.__rdPendingRoutes[driverId] = queue;
-                          LS.setPending(driverId, queue);
-                          if (typeof window.__rdSetPending === "function") window.__rdSetPending(driverId, queue);
-                        }
-                        // Chat automático
-                        if (!window.__rdChatStore) window.__rdChatStore = {};
-                        const chatNote = { from:"admin", text:`📋 Ruta "${routeName}" en cola - ${confirmed.length} paradas · ${km} km. Se activará cuando termines la ruta actual.`, time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}) };
-                        const updatedChat = [...(window.__rdChatStore[driverId]||[]), chatNote];
-                        window.__rdChatStore[driverId] = updatedChat;
-                        LS.setChat(driverId, updatedChat);
-                        alert(`📋 Ruta enviada a la COLA de ${mensajero?.name || driverId}\n\n${confirmed.length} paradas · ${km} km\n\nEl mensajero tiene una ruta activa. Esta ruta quedará pendiente hasta que la termine.`);
-                      } else {
-                        // → Asignar directamente como ruta activa
-                        if (!window.__rdRouteStore) window.__rdRouteStore = {};
-                        window.__rdRouteStore[driverId] = route;
-                        LS.setRoute(driverId, route);
-                        // Guardar también en historial de rutas (keyed by routeId, no por driverId)
-                        FB.set(`routeHistory/${route.routeId}`, { ...route, sentAt: route.sentAt });
-                        if (typeof window.__rdSetRoute === "function") window.__rdSetRoute(driverId, route);
-                        // ── Notificación Firebase al mensajero ──
-                        const driverNotifId = "dn"+Date.now();
-                        FB.set(`driverNotifs/${driverId}/${driverNotifId}`, {
-                          id: driverNotifId,
-                          type: "route_assigned",
-                          title: "📦 Nueva ruta asignada",
-                          body: `${routeName} · ${confirmed.length} paradas · ${km} km`,
-                          routeId: route.routeId,
-                          sentAt: new Date().toISOString(),
-                          read: false,
-                        });
-                        // Chat automático
-                        if (!window.__rdChatStore) window.__rdChatStore = {};
-                        const chatNote = { from:"admin", text:`📦 Ruta "${routeName}" asignada - ${confirmed.length} paradas · ${km} km`, time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}) };
-                        const updatedChat = [...(window.__rdChatStore[driverId]||[]), chatNote];
-                        window.__rdChatStore[driverId] = updatedChat;
-                        LS.setChat(driverId, updatedChat);
-                        // Evento real en notificaciones admin
-                        if (typeof window.__rdPushEvent === "function") window.__rdPushEvent({
-                          id:"e"+Date.now(), type:"new", icon:"📦", color:"#3b82f6",
-                          title:`Ruta enviada → ${mensajero?.name||driverId}`,
-                          body:`${routeName} · ${confirmed.length} paradas · ${km} km`,
-                          time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
-                          read: false, isNew: true,
-                        });
-                        alert(`✅ Ruta enviada a ${mensajero?.name || driverId} · ${confirmed.length} paradas · ${km} km`);
-                      }
+                      // ── Notificación Firebase al mensajero ──
+                      const driverNotifId = "dn"+Date.now();
+                      FB.set(`driverNotifs/${driverId}/${driverNotifId}`, {
+                        id: driverNotifId,
+                        type: "route_assigned",
+                        title: "📦 Nueva ruta asignada",
+                        body: `${routeName} · ${confirmed.length} paradas · ${km} km`,
+                        routeId: route.routeId,
+                        sentAt: new Date().toISOString(),
+                        read: false,
+                      });
+
+                      // Chat automático
+                      if (!window.__rdChatStore) window.__rdChatStore = {};
+                      const chatNote = { from:"admin", text:`📦 Ruta "${routeName}" asignada - ${confirmed.length} paradas · ${km} km`, time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}) };
+                      const updatedChat = [...(window.__rdChatStore[driverId]||[]), chatNote];
+                      window.__rdChatStore[driverId] = updatedChat;
+                      LS.setChat(driverId, updatedChat);
+
+                      // Evento real en notificaciones admin
+                      if (typeof window.__rdPushEvent === "function") window.__rdPushEvent({
+                        id:"e"+Date.now(), type:"new", icon:"📦", color:"#3b82f6",
+                        title:`Ruta enviada → ${mensajero?.name||driverId}`,
+                        body:`${routeName} · ${confirmed.length} paradas · ${km} km`,
+                        time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
+                        read: false, isNew: true,
+                      });
+
+                      alert(`✅ Ruta enviada directamente a ${mensajero?.name || driverId} · ${confirmed.length} paradas · ${km} km`);
                     }}
                     style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "white", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 150, boxShadow:"0 4px 20px #3b82f650", letterSpacing:"0.3px", position:"relative", overflow:"hidden" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
