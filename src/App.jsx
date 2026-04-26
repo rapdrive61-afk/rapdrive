@@ -4844,6 +4844,1180 @@ const parseAddress = (raw) => {
   };
 };
 
+const geocodeWithGoogle = async (rawAddress) => {
+  const cacheKey = rawAddress.trim().toLowerCase();
+
+  // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
+  if (_learnedCache.has(cacheKey)) {
+    const l = _learnedCache.get(cacheKey);
+    return { ok: true, lat: l.lat, lng: l.lng, display: l.display, confidence: 99, allResults: [], source: "learned" };
+  }
+
+  // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
+  if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
+
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const queries = buildQueryVariants(rawAddress);
+
+  // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
+  const anchor = findAnchor(rawAddress);
+  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
+    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
+    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
+  ) : null;
+
+  // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
+  let bestResult = null;
+  let bestScore  = 0;
+
+  for (const q of queries) {
+    try {
+      const gcOpts = { address: q, region: "DO" };
+      // componentRestrictions eliminado — rechaza resultados válidos en sectores informales
+      // Usamos bounds del anchor si lo hay; sino bounds completos de RD
+      if (hintBounds) gcOpts.bounds = hintBounds;
+      const result = await new Promise((res, rej) =>
+        geocoder.geocode(gcOpts, (results, status) => status === "OK" ? res(results) : rej(status))
+      );
+      if (!result || result.length === 0) continue;
+
+      // Evaluar TODOS los candidatos, quedarse con el mejor score
+      const candidates = result
+        .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
+        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates.length === 0) continue;
+      const { r: top, score: conf } = candidates[0];
+
+      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
+      if (anchor) {
+        const dlat = top.geometry.location.lat() - anchor.lat;
+        const dlng = top.geometry.location.lng() - anchor.lng;
+        const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
+        if (distKm > 15) continue; // resultado random, ignorar
+      }
+
+      if (conf > bestScore) {
+        bestScore = conf;
+        bestResult = { top, conf, allCandidates: candidates };
+      }
+
+      // Score excelente → no seguir buscando variantes
+      if (bestScore >= 90) break;
+    } catch { /* try next variant */ }
+  }
+
+  if (bestResult) {
+    const { top, conf, allCandidates } = bestResult;
+    const lat = top.geometry.location.lat();
+    const lng = top.geometry.location.lng();
+    const out = {
+      ok: true, lat, lng,
+      display: top.formatted_address,
+      confidence: conf,
+      types: top.types || [],
+      source: "geocoding_api",
+      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
+        display: r.formatted_address,
+        lat: r.geometry.location.lat(),
+        lng: r.geometry.location.lng(),
+        confidence: score,
+      })),
+    };
+    _geoCache.set(cacheKey, out);
+    return out;
+  }
+
+  // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
+  try {
+    const placesResult = await searchWithPlaces(rawAddress);
+    if (placesResult) {
+      _geoCache.set(cacheKey, placesResult);
+      return placesResult;
+    }
+  } catch { /* places failed */ }
+
+  // ── CAPA 3: Nominatim (último recurso) ────────────────────────────────────
+  try {
+    const nominatimQueries = [
+      rawAddress + ", República Dominicana",
+      expandRDAddress(rawAddress) + ", República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
+    ];
+    for (const nmQuery of nominatimQueries) {
+      const encoded = encodeURIComponent(nmQuery);
+      const nm = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`,
+        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" } }
+      );
+      if (!nm.ok) continue;
+      const nmData = await nm.json();
+      if (!nmData?.length) continue;
+
+      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
+      if (rdResults.length === 0) continue;
+
+      const top = rdResults[0];
+      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+      let conf = 50;
+      if (top.type === "house")           conf = 85;
+      else if (top.type === "building")   conf = 78;
+      else if (top.class === "highway")   conf = 70;
+      else if (top.type === "residential") conf = 65;
+      else if (top.class === "place")     conf = 57;
+      const nums = rawAddress.match(/\d{1,4}/g);
+      if (nums?.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
+
+      const out = {
+        ok: true, lat, lng,
+        display: top.display_name.split(",").slice(0, 3).join(",").trim(),
+        confidence: conf,
+        types: [top.type || "nominatim"],
+        source: "nominatim",
+        allResults: rdResults.slice(0, 3).map(r => ({
+          display: r.display_name.split(",").slice(0, 3).join(",").trim(),
+          lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+          confidence: 52,
+        })),
+      };
+      _geoCache.set(cacheKey, out);
+      return out;
+    }
+  } catch { /* nominatim failed */ }
+
+  // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
+  // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
+  // con confianza baja para que el admin sepa que es aproximado
+  const lastAnchor = findAnchor(rawAddress);
+  if (lastAnchor) {
+    const fallbackOut = {
+      ok: true,
+      lat: lastAnchor.lat,
+      lng: lastAnchor.lng,
+      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
+      confidence: 35,
+      types: ["anchor_fallback"],
+      source: "anchor_local",
+      allResults: [],
+    };
+    _geoCache.set(cacheKey, fallbackOut);
+    return fallbackOut;
+  }
+
+  const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+  return failed;
+};
+
+// Build multiple query variants for maximum hit rate
+// Estrategia: de más específico a más general, hasta que Google responda
+const buildQueryVariants = (raw) => {
+  const s = String(raw || "").trim();
+  if (!s) return [];
+
+  const expanded = expandRDAddress(s);
+  const variants = new Set();
+
+  // --- Detección de contexto geográfico ---
+  const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
+  const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
+  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
+
+  const RD = ", República Dominicana";
+  const SD = ", Santo Domingo" + RD;
+  const DN = ", Distrito Nacional" + RD;
+
+  // 1. Versión expandida + ciudad — SDO primero si hay anchor en esa zona
+  const _anchor = findAnchor(s);
+  const _isSDO = _anchor?.city === "Santo Domingo Oeste";
+  const _isDN  = _anchor?.city === "Distrito Nacional";
+  const _isSDE = _anchor?.city === "Santo Domingo Este";
+  const _isSDN = _anchor?.city === "Santo Domingo Norte";
+  if (!hasCountry && !hasCity) {
+    // Priorizar la ciudad del anchor — evita que Google devuelva resultado en zona equivocada
+    if (_isSDO) {
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+    } else if (_isDN) {
+      variants.add(expanded + DN);
+      variants.add(expanded + SD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+    } else if (_isSDE) {
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + SD);
+    } else if (_isSDN) {
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+      variants.add(expanded + SD);
+    } else {
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+    }
+  } else if (!hasCountry) {
+    variants.add(expanded + RD);
+    variants.add(expanded);
+  } else {
+    variants.add(expanded);
+  }
+
+  // 2. Raw original + contexto
+  if (s !== expanded) {
+    if (!hasCity && !hasCountry) {
+      variants.add(s + SD);
+      variants.add(s + RD);
+    } else if (!hasCountry) {
+      variants.add(s + RD);
+    }
+    variants.add(s);
+  }
+
+  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
+  const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
+  if (secMatch) {
+    const sec = secMatch[1].trim();
+    variants.add(sec + SD);
+    variants.add(sec + ", Santo Domingo Este" + RD);
+    variants.add(sec + ", Santo Domingo Oeste" + RD);
+    // Agregar calle + sector para mayor precisión
+    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
+    if (calleMatch) {
+      variants.add(calleMatch[0].trim() + ", " + sec + SD);
+    }
+  }
+
+  // 4. Extraer solo la parte de calle + número (sin piso/apto) como fallback
+  const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
+  if (calleNum && !hasCity) {
+    variants.add(calleNum[0].trim() + SD);
+    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
+  }
+
+  // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
+  const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    variants.add(parts.slice(0, 2).join(", ") + SD);
+  }
+  if (parts.length >= 1 && !hasCity) {
+    variants.add(parts[0] + SD);
+  }
+
+  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
+  const numMatch = expanded.match(/(\d{1,4})/);
+  if (numMatch) {
+    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
+    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
+  }
+
+  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
+  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
+  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
+  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
+
+  // Eliminar variantes vacías o muy cortas
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
+};
+
+// RD-specific address normalizer - expanded for Dominican Republic
+const expandRDAddress = (s) => {
+  // 1. Limpieza inicial
+  let r = s.trim();
+
+  // 2. Separadores comunes en RD: barras, guiones como separadores de sector/calle
+  r = r.replace(/\s*\/\s*/g, ", ").replace(/\s*-{2,}\s*/g, ", ");
+
+  // 3. Tipos de vía
+  const abbrevs = [
+    // Avenida
+    [/\bav\.\s*/gi,            "Avenida "],
+    [/\bave\.\s*/gi,           "Avenida "],
+    [/\bavda\.\s*/gi,          "Avenida "],
+    [/\bavenida\s*/gi,         "Avenida "],
+    // Calle
+    [/\bc\/\s*/gi,             "Calle "],
+    [/\bclle?\.\s*/gi,         "Calle "],
+    [/\bcl\.\s*/gi,            "Calle "],
+    [/\bca\.\s+(?=[A-ZÁÉÍÓÚ])/gi, "Calle "],
+    // Callejón
+    [/\bclj[oó]n?\.\s*/gi,    "Callejón "],
+    // Residencial / Urbanización / Sector / Barrio
+    [/\bres(?:id(?:encial)?)?\.\s*/gi, "Residencial "],
+    [/\burb\.\s*/gi,           "Urbanización "],
+    [/\burbaniz\.\s*/gi,       "Urbanización "],
+    [/\bsect?\.\s*/gi,         "Sector "],
+    [/\bbarr?\.\s*/gi,         "Barrio "],
+    [/\bens\.\s*/gi,           "Ensanche "],
+    [/\bensanche\s*/gi,        "Ensanche "],
+    [/\bprol\.\s*/gi,          "Prolongación "],
+    [/\besq\.\s*/gi,           "Esquina "],
+    [/\besquina\s+con\s*/gi,   "Esquina "],
+    // Numeración
+    [/\bno\.\s*(\d)/gi,        "No. $1"],
+    [/\bn[oº°#]\s*(\d)/gi,     "No. $1"],
+    [/\bnúm\.\s*(\d)/gi,       "No. $1"],
+    [/\b#\s*(\d)/gi,           "No. $1"],
+    // Kilómetro
+    [/\bkm\.?\s+/gi,           "Km "],
+    // Apartamento / Edificio / Torre / Local
+    [/\bapto\.?\s*/gi,         "Apartamento "],
+    [/\bapt\.?\s*/gi,          "Apartamento "],
+    [/\bap\.?\s+(?=\d)/gi,     "Apartamento "],
+    [/\bdepto\.?\s*/gi,        "Departamento "],
+    [/\bedif\.?\s*/gi,         "Edificio "],
+    [/\bedificio\s*/gi,        "Edificio "],
+    [/\btorre\s+/gi,           "Torre "],
+    [/\bloc\.?\s*/gi,          "Local "],
+    // Zonas especiales RD
+    [/\bz\.?\s*col(?:onial)?\b/gi,  "Zona Colonial"],
+    [/\bznc?\b/gi,             "Zona Colonial"],
+    [/\bd\.?\s*n\.?\b/gi,      "Distrito Nacional"],
+    [/\bsto\.?\s*dgo\.?\b/gi,  "Santo Domingo"],
+    [/\bsdo\.?\b/gi,           "Santo Domingo"],
+    [/\bsdq\b/gi,              "Santo Domingo"],
+    [/\bstgo\.?\b/gi,          "Santiago"],
+    [/\bstgo\s+de\s+los\s+cab\b/gi, "Santiago de los Caballeros"],
+    [/\blr\b/gi,               "La Romana"],
+    [/\bpup\b/gi,              "Punta Cana"],
+    [/\bspm\b/gi,              "San Pedro de Macorís"],
+    [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
+    [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
+    [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
+    // Sectores comunes SD
+    [/\bnaco\b/gi,             "Naco, Santo Domingo"],
+    [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
+    [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
+    [/\bpolo\s*gov\b/gi,       "Polígono Central, Santo Domingo"],
+    [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
+    [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
+    [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
+
+    // ── Santo Domingo Oeste – Zona Herrera (núcleo principal) ─────────────────
+    [/\bherrera\b(?!\s+de)/gi,                 "Herrera, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+herrera\b/gi,    "Buenos Aires de Herrera, Santo Domingo Oeste"],
+    [/\bel\s+caf[eé]\s+de\s+herrera\b/gi,     "El Café de Herrera, Santo Domingo Oeste"],
+    [/\blas\s+palmas\s+de\s+herrera\b/gi,      "Las Palmas de Herrera, Santo Domingo Oeste"],
+    [/\benriquillo\b/gi,                        "Enriquillo, Santo Domingo Oeste"],
+    [/\bduarte\s*(?:\(herrera\))?\b/gi,        "Duarte, Herrera, Santo Domingo Oeste"],
+    [/\bpueblo\s+nuevo\b(?!.*ozama)/gi,        "Pueblo Nuevo, Santo Domingo Oeste"],
+    [/\bjuan\s+guzm[aá]n\b/gi,                "Juan Guzmán, Santo Domingo Oeste"],
+    [/\biv[aá]n\s+guzm[aá]n\s+klang\b/gi,    "Iván Guzmán Klang, Santo Domingo Oeste"],
+    [/\blas\s+mercedes\b/gi,                   "Las Mercedes, Santo Domingo Oeste"],
+    [/\bvilla\s+aura\b/gi,                     "Villa Aura, Santo Domingo Oeste"],
+    [/\bolimpo\b/gi,                            "Olimpo, Santo Domingo Oeste"],
+    [/\bbarrio\s+duarte\b/gi,                  "Barrio Duarte, Santo Domingo Oeste"],
+    [/\bbarrio\s+nuevo\b/gi,                   "Barrio Nuevo, Santo Domingo Oeste"],
+    [/\bbarrio\s+san\s+francisco\b/gi,         "Barrio San Francisco, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Las Caobas ────────────────────────────────
+    [/\blas\s+caobas\b/gi,                     "Las Caobas, Santo Domingo Oeste"],
+    [/\blas\s+caobitas\b/gi,                   "Las Caobitas, Santo Domingo Oeste"],
+    [/\blas\s+colinas\b/gi,                    "Las Colinas, Santo Domingo Oeste"],
+    [/\blas\s+palmas\b(?!\s+de\s+herrera)/gi,  "Las Palmas, Santo Domingo Oeste"],
+    [/\bel\s+libertador\b/gi,                  "El Libertador, Santo Domingo Oeste"],
+    [/\bsavica\b/gi,                            "Savica, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+las\s+caobas\b/gi, "Buenos Aires de Las Caobas, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+las\s+caobas\b/gi, "Urbanización Las Caobas, Santo Domingo Oeste"],
+    [/\baltos\s+de\s+las\s+caobas\b/gi,        "Altos de Las Caobas, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Bayona / Manoguayabo ──────────────────────
+    [/\bbayona\b/gi,                            "Bayona, Santo Domingo Oeste"],
+    [/\bmanoguayabo\b/gi,                       "Manoguayabo, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+manoguayabo\b/gi,"Buenos Aires de Manoguayabo, Santo Domingo Oeste"],
+    [/\bel\s+hoyo\s+de\s+manoguayabo\b/gi,     "El Hoyo de Manoguayabo, Santo Domingo Oeste"],
+    [/\bbarrio\s+san\s+miguel\b/gi,            "Barrio San Miguel, Santo Domingo Oeste"],
+    [/\bla\s+venta\b/gi,                        "La Venta, Santo Domingo Oeste"],
+    [/\bel\s+8\s+de\s+bayona\b/gi,             "El 8 de Bayona, Santo Domingo Oeste"],
+    [/\bbarrio\s+enriquillo\b/gi,              "Barrio Enriquillo, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Engombe ───────────────────────────────────
+    [/\bengombe\b/gi,                           "Engombe, Santo Domingo Oeste"],
+    [/\baltos\s+de\s+engombe\b/gi,             "Altos de Engombe, Santo Domingo Oeste"],
+    [/\bla\s+ure[nñ]a\b/gi,                   "La Ureña, Santo Domingo Oeste"],
+    [/\bbarrio\s+progreso\b/gi,               "Barrio Progreso, Santo Domingo Oeste"],
+    [/\bbarrio\s+libertad\b/gi,               "Barrio Libertad, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,  "Urbanización Engombe, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Hato Nuevo / Expansión ────────────────────
+    [/\bhato\s+nuevo\b/gi,                     "Hato Nuevo, Santo Domingo Oeste"],
+    [/\bcaballona\b/gi,                         "Caballona, Santo Domingo Oeste"],
+    [/\blechería\b/gi,                          "Lechería, Santo Domingo Oeste"],
+    [/\bbatey\s+bienvenido\b/gi,              "Batey Bienvenido, Santo Domingo Oeste"],
+    [/\bnuevo\s+horizonte\b/gi,               "Barrio Nuevo Horizonte, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Residenciales y Urbanizaciones ─────────────────
+    [/\bres(?:idencial)?\s+carmen\s+renata\b/gi, "Residencial Carmen Renata, Santo Domingo Oeste"],
+    [/\bbrisas\s+del\s+oeste\b/gi,            "Residencial Brisas del Oeste, Santo Domingo Oeste"],
+    [/\bciudad\s+agraria\b/gi,                "Ciudad Agraria, Santo Domingo Oeste"],
+    [/\boperaciones\s+especiales\b/gi,         "Operaciones Especiales, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+antonia\b/gi,       "Residencial Antonia, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+altagracia\b/gi,    "Residencial Altagracia, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi, "Urbanización El Café, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+las\s+palmas\b/gi,  "Urbanización Las Palmas, Santo Domingo Oeste"],
+    [/\bdon\s+honorio\b/gi,                    "Residencial Don Honorio, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Sectores en crecimiento ────────────────────────
+    [/\barroyo\s+bonito\b/gi,                 "Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bel\s+30\s+de\s+mayo\b/gi,            "El 30 de Mayo, Santo Domingo Oeste"],
+    [/\bbarrio\s+libertador\b/gi,             "Barrio Libertador, Santo Domingo Oeste"],
+    [/\bbarrio\s+progreso\s+ii\b/gi,          "Barrio Progreso II, Santo Domingo Oeste"],
+    [/\bla\s+isabela\b/gi,                    "La Isabela, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Corredores viales clave ────────────────────────
+    [/\bautopista\s+duarte\b/gi,              "Autopista Duarte, Santo Domingo Oeste"],
+    [/\bprol(?:ongaci[oó]n)?\s+27\s+de\s+febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+isabel\s+aguiar\b/gi,  "Avenida Isabel Aguiar, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+las\s+palmas\b/gi,     "Avenida Las Palmas, Santo Domingo Oeste"],
+    [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi, "Prolongación Independencia, Santo Domingo Oeste"],
+
+    // ── Abreviaturas rápidas SDO ──────────────────────────────────────────────
+    [/\bsdo\s+oeste\b/gi,                     "Santo Domingo Oeste"],
+    [/\bsd\s+o\b/gi,                          "Santo Domingo Oeste"],
+  ];
+
+  for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
+
+  // 4. Limpiar espacios múltiples y comas duplicadas
+  r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
+
+  return r;
+};
+
+// Score Google result quality
+const scoreGoogleResult = (result, original) => {
+  const types = result.types || [];
+  const addr  = result.formatted_address || "";
+  let score = 55;
+
+  // Tipo de resultado (cuanto más específico, mejor)
+  if      (types.includes("street_address"))            score = 96;
+  else if (types.includes("premise"))                   score = 93;
+  else if (types.includes("subpremise"))                score = 91;
+  else if (types.includes("route"))                     score = 82;
+  else if (types.includes("intersection"))              score = 80;
+  else if (types.includes("neighborhood"))              score = 70;
+  else if (types.includes("sublocality"))               score = 68;
+  else if (types.includes("sublocality_level_1"))       score = 68;
+  else if (types.includes("sublocality_level_2"))       score = 65;
+  else if (types.includes("locality"))                  score = 60;
+  else if (types.includes("administrative_area_level_1")) score = 40;
+  else if (types.includes("country"))                   score = 20;
+
+  // Bonus: original tiene número Y el resultado también → más preciso
+  const origHasNum = /\d/.test(original);
+  const resHasNum  = /\d/.test(addr);
+  if (origHasNum && resHasNum)   score = Math.min(score + 5, 99);
+  if (origHasNum && !resHasNum)  score = Math.max(score - 8, 10); // no encontró el número
+
+  // Bonus: resultado está dentro de la bounding box de RD
+  const loc = result.geometry.location;
+  const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+  const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+  if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) {
+    score = Math.max(score - 50, 3); // resultado fuera de RD → descartar
+  }
+
+  // Bonus: la dirección formateada contiene la ciudad/sector del original
+  const origLower = (original || "").toLowerCase();
+  const addrLower = addr.toLowerCase();
+  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
+    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
+    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
+    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
+  }
+
+  // Bonus: resultado tiene número de calle cuando el original también lo tiene
+  const numInOrig = (original || "").match(/\d{1,4}/g);
+  if (numInOrig) {
+    const anyMatch = numInOrig.some(n => addr.includes(n));
+    if (anyMatch) score = Math.min(score + 3, 99);
+  }
+
+  // Penalizar si el resultado es solo país/provincia (demasiado vago)
+  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
+
+  return Math.min(Math.max(score, 1), 99);
+};
+
+// --- PLUS CODE → LAT/LNG via Google ------------------------------------------
+const decodePlusCodeGoogle = async (code) => {
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const query = code.includes(" ") ? code : code + " Santo Domingo";
+  try {
+    const r = await new Promise((res, rej) =>
+      geocoder.geocode({ address: query }, (results, status) =>
+        status === "OK" ? res(results) : rej(status))
+    );
+    if (r?.[0]) {
+      const loc = r[0].geometry.location;
+      return { ok: true, lat: loc.lat(), lng: loc.lng(), display: r[0].formatted_address, confidence: 99 };
+    }
+  } catch {}
+  return { ok: false };
+};
+
+// --- COORDINATE DETECTOR - acepta múltiples formatos ---
+// Detecta: "18.4714,-69.9318" | "18.4714, -69.9318" | links de Google Maps
+const detectCoords = (s) => {
+  const t = (s || "").trim();
+
+  // Formato: lat,lng o lat, lng (con o sin espacios)
+  const pair = t.match(/^(-?\d{1,3}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})$/);
+  if (pair) {
+    const lat = parseFloat(pair[1]), lng = parseFloat(pair[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // Link de Google Maps: https://maps.google.com/?q=18.4714,-69.9318
+  const gmLink = t.match(/[?&]q=(-?\d{1,3}\.\d{3,})[,+](-?\d{1,3}\.\d{3,})/);
+  if (gmLink) {
+    const lat = parseFloat(gmLink[1]), lng = parseFloat(gmLink[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // Link de Google Maps con @lat,lng
+  const atLink = t.match(/@(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
+  if (atLink) {
+    const lat = parseFloat(atLink[1]), lng = parseFloat(atLink[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  return null;
+};
+
+// Plus Code detector: acepta códigos completos (8+2) y cortos (con ciudad)
+// Ejemplos: "G2F8+7G3" | "G2F8+7G3 Santo Domingo" | "7G3 Santo Domingo"
+const isPlusCode = (s) => {
+  const t = (s || "").trim();
+  // Código completo: XXXXXXXX+XX o XXXX+XX
+  if (/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(t)) return true;
+  // Código corto + ciudad: XX+XX Ciudad
+  if (/^[23456789CFGHJMPQRVWX]{2,}\+[23456789CFGHJMPQRVWX]{2,}\s+\w/i.test(t)) return true;
+  return false;
+};
+
+// --- HAVERSINE (fallback local cuando Routes API no disponible) ---------------
+const hav = (a, b) => {
+  const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
+  const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+// --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
+// Usa calles reales, sentidos de vía y tráfico de Santo Domingo.
+// Google permite hasta 25 waypoints intermedios por solicitud.
+// Chunking automático si hay más de 25 paradas válidas.
+const optimizeWithRoutesAPI = async (validStops) => {
+  // Máximo 25 waypoints por llamada a la API
+  const CHUNK = 25;
+  if (validStops.length <= 1) return validStops.map((s, i) => ({ ...s, stopNum: i + 1 }));
+
+  // Helper: llamada a la Routes API v2 para un chunk
+  const callRoutesAPI = async (chunk) => {
+    const waypoints = chunk.map(s => ({
+      location: { latLng: { latitude: s.lat, longitude: s.lng } },
+    }));
+
+    const body = {
+      origin:      { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      destination: { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      intermediates: waypoints,
+      travelMode: "DRIVE",
+      optimizeWaypointOrder: true,
+      routingPreference: "TRAFFIC_AWARE",
+      languageCode: "es",
+    };
+
+    const resp = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": GMAPS_KEY,
+          "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!resp.ok) throw new Error(`Routes API HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const route = data?.routes?.[0];
+    if (!route?.optimizedIntermediateWaypointIndex) throw new Error("No optimized order returned");
+
+    return {
+      order:    route.optimizedIntermediateWaypointIndex,   // índices reordenados
+      durations: (route.legs || []).slice(1).map(l =>       // segundos por tramo (sin el tramo depot→1)
+        parseInt(l.duration?.replace("s", "") || "0", 10)
+      ),
+      distances: (route.legs || []).slice(1).map(l => Math.round((l.distanceMeters || 0) / 1000 * 10) / 10),
+    };
+  };
+
+  // Si entran ≤25 paradas → una sola llamada
+  if (validStops.length <= CHUNK) {
+    try {
+      const { order, durations, distances } = await callRoutesAPI(validStops);
+      return order.map((origIdx, newPos) => ({
+        ...validStops[origIdx],
+        stopNum:      newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+    } catch (e) {
+      console.warn("Routes API falló, usando Haversine:", e.message);
+      return null; // señal para caer al fallback
+    }
+  }
+
+  // Más de 25: dividir en chunks, optimizar cada uno y concatenar
+  const ordered = [];
+  for (let i = 0; i < validStops.length; i += CHUNK) {
+    const chunk = validStops.slice(i, i + CHUNK);
+    try {
+      const { order, durations, distances } = await callRoutesAPI(chunk);
+      const reordered = order.map((origIdx, newPos) => ({
+        ...chunk[origIdx],
+        stopNum:      ordered.length + newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+      ordered.push(...reordered);
+    } catch {
+      // Chunk fallido → mantener orden Haversine para ese chunk
+      chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
+    }
+  }
+  return ordered;
+};
+
+// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️  MOTOR DE OPTIMIZACIÓN LOCAL v3 — NO MODIFICAR SIN AUTORIZACIÓN
+// Clustering geográfico (CLUSTER_KM) + NN + 2-opt + Or-opt
+// Garantiza paradas de la misma zona en bloques CONSECUTIVOS.
+// No depende de Routes API — funciona siempre.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CLUSTER_KM = 2.0; // radio de zona — 2km captura mejor zonas como Las Caobas, Engombe
+
+const optimizeRouteLocal = (stops) => {
+  if (!stops || stops.length === 0) return [];
+  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
+  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
+  if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
+  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
+
+  const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
+  const centroid = (idxArr) => ({
+    lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
+    lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
+  });
+
+  // PASO 1: Clustering geográfico greedy
+  const clusters = [];
+  valid.forEach((stop, si) => {
+    let bestCluster = -1, bestDist = CLUSTER_KM;
+    clusters.forEach((cl, ci) => {
+      const d = hav(stop, centroid(cl));
+      if (d < bestDist) { bestDist = d; bestCluster = ci; }
+    });
+    if (bestCluster === -1) clusters.push([si]);
+    else clusters[bestCluster].push(si);
+  });
+
+  // PASO 1b: Fusionar outliers solitarios con el cluster más cercano
+  // Un cluster de 1 sola parada a >3km de cualquier otro es un "outlier excursión".
+  // En vez de visitarlo por separado (crea zigzag), se fusiona con el cluster
+  // más cercano para que quede de paso en esa zona.
+  const OUTLIER_MERGE_KM = 3.5; // si está a menos de esto del cluster más cercano, fusionar
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let ci = 0; ci < clusters.length; ci++) {
+      if (clusters[ci].length > 1) continue; // solo outliers solitarios
+      const c = centroid(clusters[ci]);
+      let bestOther = -1, bestDist = Infinity;
+      clusters.forEach((cl, oi) => {
+        if (oi === ci) return;
+        const d = hav(c, centroid(cl));
+        if (d < bestDist) { bestDist = d; bestOther = oi; }
+      });
+      if (bestOther >= 0 && bestDist < OUTLIER_MERGE_KM) {
+        clusters[bestOther].push(...clusters[ci]);
+        clusters.splice(ci, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  // PASO 2: Ordenar clusters desde DEPOT (NN entre centroides)
+  let remClusters = clusters.map((_, ci) => ci);
+  const ordClusters = [];
+  let curPoint = depot;
+  while (remClusters.length) {
+    let bestPos = 0, bestDist = Infinity;
+    remClusters.forEach((ci, pos) => {
+      const d = hav(curPoint, centroid(clusters[ci]));
+      if (d < bestDist) { bestDist = d; bestPos = pos; }
+    });
+    const chosen = remClusters.splice(bestPos, 1)[0];
+    ordClusters.push(chosen);
+    curPoint = centroid(clusters[chosen]);
+  }
+
+  // PASO 3: NN dentro de cada cluster desde punto de entrada
+  let tour = [];
+  let entryPt = depot;
+  ordClusters.forEach(ci => {
+    let remStops = [...clusters[ci]];
+    const clTour = [];
+    while (remStops.length) {
+      let bestPos = 0, bestDist = Infinity;
+      remStops.forEach((si, pos) => {
+        const d = hav(entryPt, valid[si]);
+        if (d < bestDist) { bestDist = d; bestPos = pos; }
+      });
+      const chosen = remStops.splice(bestPos, 1)[0];
+      clTour.push(valid[chosen]);
+      entryPt = valid[chosen];
+    }
+    tour = tour.concat(clTour);
+  });
+
+  // PASO 4: 2-opt global
+  let improved = true, iterations = 0;
+  while (improved && iterations < 150) {
+    improved = false; iterations++;
+    for (let i = 0; i < tour.length - 1; i++) {
+      for (let j = i + 1; j < tour.length; j++) {
+        const A = i === 0 ? depot : tour[i-1], B = tour[i];
+        const C = tour[j], D = j+1 < tour.length ? tour[j+1] : depot;
+        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
+          let l = i, r = j;
+          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
+          improved = true;
+        }
+      }
+    }
+  }
+
+  // PASO 5: Or-opt (mover nodos individuales)
+  let orImproved = true, orIter = 0;
+  while (orImproved && orIter < 30) {
+    orImproved = false; orIter++;
+    for (let i = 0; i < tour.length; i++) {
+      const node = tour[i], prev = i === 0 ? depot : tour[i-1], next = i === tour.length-1 ? depot : tour[i+1];
+      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
+      let bestGain = 0.001, bestJ = -1;
+      for (let j = 0; j < tour.length; j++) {
+        if (j === i || j === i-1) continue;
+        const a = tour[j], b = j+1 < tour.length ? tour[j+1] : depot;
+        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
+        if (gain > bestGain) { bestGain = gain; bestJ = j; }
+      }
+      if (bestJ >= 0) {
+        const removed = tour.splice(i, 1)[0];
+        tour.splice(bestJ > i ? bestJ : bestJ+1, 0, removed);
+        orImproved = true; break;
+      }
+    }
+  }
+
+  return [
+    ...tour.map((s, i) => ({ ...s, stopNum: i+1 })),
+    ...invalid.map(s => ({ ...s, stopNum: null })),
+  ];
+};
+
+// ⚠️ Routes API deshabilitada — producía saltos entre zonas.
+// Motor v3 local (clustering) da mejores resultados para mensajería urbana en RD.
+const optimizeRoute = (stops) => optimizeRouteLocal(stops);
+
+const optimizeRouteAsync = async (stops, onProgress) => {
+  onProgress?.("Optimizando con motor de zonas v3…");
+  const result = optimizeRouteLocal(stops);
+  onProgress?.("✓ Ruta optimizada con motor de zonas");
+  return result;
+};
+
+const totalKm = (stops) => {
+  const v = stops.filter(s => s.lat && s.lng);
+  if (!v.length) return 0;
+  // Si hay datos reales de la Routes API, sumarlos
+  if (v[0]?.distKmRoutes !== undefined && v[0]?.distKmRoutes !== null) {
+    return Math.round(v.reduce((acc, s) => acc + (s.distKmRoutes || 0), 0) * 10) / 10;
+  }
+  return Math.round((v.reduce((acc, s, i) => acc + hav(i === 0 ? DEPOT : v[i - 1], s), 0) + hav(v[v.length - 1], DEPOT)) * 10) / 10;
+};
+
+// --- COLUMN AUTODETECT --------------------------------------------------------
+const autoDetect = (headers) => {
+  const patterns = {
+    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
+    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
+    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
+    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
+    notes:     /notas?|notes?|observ|instruc|detalle/i,
+    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
+    ciudad:    /ciudad|municipio|localidad|town|city/i,
+    provincia: /provincia|province|estado|state|dpto|departamento/i,
+    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
+    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
+  };
+  const m = {};
+  headers.forEach(h => {
+    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
+  });
+  return m;
+};
+
+// --- GOOGLE MAP COMPONENT -----------------------------------------------------
+const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
+  const ref = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const polyRef = useRef(null);
+  const infoRef = useRef(null);
+
+  useEffect(() => {
+    loadGoogleMaps().then(() => {
+      if (mapRef.current) return;
+      mapRef.current = new window.google.maps.Map(ref.current, {
+        center: { lat: DEPOT.lat, lng: DEPOT.lng },
+        zoom: 12,
+        mapTypeId: "roadmap",
+        styles: [
+          {featureType:"poi",stylers:[{visibility:"off"}]},
+          {featureType:"transit",stylers:[{visibility:"off"}]},
+          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
+          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
+          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
+          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
+        ],
+        disableDefaultUI: true,
+        zoomControl: true,
+        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
+      });
+      infoRef.current = new window.google.maps.InfoWindow();
+
+      // Depot marker - house icon like Circuit
+      const depotSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1d4ed8" stroke="white" stroke-width="2.5"/><path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/></svg>';
+      new window.google.maps.Marker({
+        map: mapRef.current,
+        position: { lat: DEPOT.lat, lng: DEPOT.lng },
+        title: DEPOT.label,
+        zIndex: 999,
+        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
+      });
+    });
+  }, []);
+
+  const stopsLenRef = useRef(0);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    // Clear old markers properly to prevent memory leaks
+    markersRef.current.forEach(m => { m.setMap(null); });
+    markersRef.current = [];
+    if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
+
+    const valid = stops.filter(s => s.lat && s.lng && s.stopNum);
+
+    // Draw route polyline
+    if (valid.length > 1 && phase === "route") {
+      const path = [
+        { lat: DEPOT.lat, lng: DEPOT.lng },
+        ...valid.map(s => ({ lat: s.lat, lng: s.lng })),
+        { lat: DEPOT.lat, lng: DEPOT.lng },
+      ];
+      polyRef.current = new window.google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: "#3b82f6",
+        strokeOpacity: 0.9,
+        strokeWeight: 3,
+        map: mapRef.current,
+      });
+    }
+
+    // Inject shared SVG filters once (avoids per-marker filter accumulation)
+    if (!document.getElementById("rd-map-filters")) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svg.id = "rd-map-filters";
+      svg.setAttribute("style","position:absolute;width:0;height:0;overflow:hidden");
+      svg.innerHTML = `<defs>
+        <filter id="rdGlowSel" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="rdGlowNorm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>`;
+      document.body.appendChild(svg);
+    }
+
+    // Draw stop markers
+    const colMap = { ok: "#3b82f6", warning: "#f59e0b", error: "#ef4444", pending: "#475569" };
+    stops.filter(s => s.lat && s.lng).forEach(stop => {
+      const isSelected = stop.id === selectedId;
+      const col = colMap[stop.status] || "#3b82f6";
+
+      // Detect co-located stops (same lat/lng rounded to 4 decimals)
+      const key = `${stop.lat?.toFixed(4)},${stop.lng?.toFixed(4)}`;
+      const colocated = stops.filter(s => s.lat && s.lng && `${s.lat?.toFixed(4)},${s.lng?.toFixed(4)}` === key);
+      const isCluster = colocated.length > 1;
+      const clusterIdx = colocated.findIndex(s => s.id === stop.id);
+      // Only render marker for the first of a cluster group (to avoid stacking)
+      if (isCluster && clusterIdx !== 0) return;
+
+      const displayStop = isCluster && selectedId
+        ? (colocated.find(s => s.id === selectedId) || colocated[0])
+        : stop;
+
+      const label = isCluster
+        ? (isSelected ? String(displayStop.stopNum || "?") : `${colocated.length}`)
+        : String(stop.stopNum || "?");
+      const fs = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
+      const w = isSelected ? 40 : 32;
+      const filterId = isSelected ? "rdGlowSel" : "rdGlowNorm";
+      const clusterRing = isCluster && !isSelected ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.4" stroke-dasharray="3 2"/>` : "";
+      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40">${clusterRing}<circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
+      const marker = new window.google.maps.Marker({
+        map: mapRef.current,
+        position: { lat: stop.lat, lng: stop.lng },
+        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(w, w), anchor: new window.google.maps.Point(w/2, w/2) },
+        zIndex: isSelected ? 100 : 10,
+        title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
+      });
+      marker.addListener("click", () => {
+        if (isCluster) {
+          // Cycle through co-located stops
+          const curIdx = colocated.findIndex(s => s.id === selectedId);
+          const nextIdx = (curIdx + 1) % colocated.length;
+          onSelectStop(colocated[nextIdx].id, true);
+        } else {
+          onSelectStop(stop.id, true);
+        }
+        infoRef.current.close();
+      });
+      markersRef.current.push(marker);
+    });
+
+    // Fit bounds only when number of valid stops changes (first load / after geocoding)
+    const newLen = valid.length;
+    if (newLen > 0 && newLen !== stopsLenRef.current) {
+      stopsLenRef.current = newLen;
+      const bounds = new window.google.maps.LatLngBounds();
+      bounds.extend({ lat: DEPOT.lat, lng: DEPOT.lng });
+      valid.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
+      mapRef.current.fitBounds(bounds, { padding: 40 });
+    }
+  }, [stops, selectedId, phase]);
+
+  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
+};
+
+// --- ADDRESS EDIT MODAL --------------------------------------------------------
+// Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
+const AddressEditModal = ({ stop, onSave, onCancel }) => {
+  const inputRef = useRef(null);
+  const acRef    = useRef(null);
+  const [saving,  setSaving]  = useState(false);
+  const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
+  const [errMsg,  setErrMsg]  = useState("");
+
+  // Inject light-mode pac-container styles
+  useEffect(() => {
+    const id = "pac-light-style";
+    if (!document.getElementById(id)) {
+      const s = document.createElement("style");
+      s.id = id;
+      s.textContent = `
+        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
+        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
+        .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
+        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
+        .pac-matched { color:#2563eb!important; }
+        .pac-icon { display:none!important; }
+        .pac-logo:after { display:none!important; }
+      `;
+      document.head.appendChild(s);
+    }
+    loadGoogleMaps().then(() => {
+      if (!inputRef.current) return;
+      if (acRef.current) { window.google.maps.event.clearInstanceListeners(acRef.current); acRef.current = null; }
+      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
+        componentRestrictions: { country: "DO" },
+        fields: ["formatted_address", "geometry", "name"],
+      });
+      acRef.current.addListener("place_changed", () => {
+        const place = acRef.current.getPlace();
+        if (place?.geometry?.location) {
+          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
+          setFound(result);
+          setErrMsg("");
+        }
+      });
+      setTimeout(() => inputRef.current?.focus(), 60);
+    });
+    return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
+  }, []);
+
+  const handleSearch = async () => {
+    const text = inputRef.current?.value?.trim();
+    if (!text) return;
+    setFound(null); setErrMsg(""); setSaving(true);
+    // Coords? (18.xxx, -69.xxx)
+    const coords = detectCoords(text);
+    if (coords) {
+      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
+      setSaving(false); return;
+    }
+    // Plus Code?
+    if (isPlusCode(text)) {
+      const r = await decodePlusCodeGoogle(text);
+      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
+    }
+    // Google geocoder
+    const r = await geocodeWithGoogle(text);
+    setSaving(false);
+    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
+    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
+  };
+
+  const handleConfirm = () => { if (found) onSave(found); };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+
+      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+
+      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+              {stop.client} · Parada #{stop.stopNum || "?"}
+            </div>
+          </div>
+          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
+        </div>
+
+        <div style={{ padding:"20px 22px 22px" }}>
+
+          {/* ── DIRECCIÓN ACTUAL ── */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
+            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
+              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
+              <div>
+                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
+                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
+              </div>
+            </div>
+          </div>
+
+          {/* ── NUEVA DIRECCIÓN ── */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
+            <div style={{ display:"flex",gap:8 }}>
+              <input
+                ref={inputRef}
+                defaultValue=""
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
+                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
+                autoComplete="off"
+                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
+              />
+              <button onClick={handleSearch} disabled={saving}
+                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
+                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
+                {saving ? "..." : "Buscar"}
+              </button>
+            </div>
+            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
+              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
+            </div>
+          </div>
+
+          {/* ── RESULTADO ENCONTRADO ── */}
+          {found && (
+            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
+              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
+              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
+              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
+                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
+                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
+              </div>
+            </div>
+          )}
+
+          {/* ── ERROR ── */}
+          {errMsg && (
+            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
+              ⚠ {errMsg}
+            </div>
+          )}
+
+          {/* ── ACTIONS ── */}
+          <div style={{ display:"flex",gap:8,marginTop:4 }}>
+            <button onClick={onCancel}
+              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
+              Cancelar
+            </button>
+            <button onClick={handleConfirm} disabled={!found}
+              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- ADDRESS SEARCH BOX (usado en el editor inline legacy) --------------------
+const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
+  const ref = useRef(null);
+  const acRef = useRef(null);
+  useEffect(() => {
+    loadGoogleMaps().then(() => {
+      setTimeout(() => {
+        if (acRef.current || !ref.current) return;
+        acRef.current = new window.google.maps.places.Autocomplete(ref.current, {
+          componentRestrictions: { country: "DO" },
+          fields: ["formatted_address", "geometry", "name"],
+        });
+        acRef.current.addListener("place_changed", () => {
+          const place = acRef.current.getPlace();
+          if (place?.geometry) onSelect({ display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 });
+        });
+        ref.current?.focus();
+      }, 60);
+    });
+  }, []);
+  return (
+    <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
+      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── IMPORTMODAL usa el geocodificador real (geocodeWithGoogle) ───────────────
 // geocodeAddress ya no es un fake — delega al motor real de 4 capas.
 // Se llama desde runGeocoding con la query enriquecida: dirección + sector + dirección2
@@ -6258,1154 +7432,6 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-const geocodeWithGoogle = async (rawAddress) => {
-  const cacheKey = rawAddress.trim().toLowerCase();
-
-  // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
-  if (_learnedCache.has(cacheKey)) {
-    const l = _learnedCache.get(cacheKey);
-    return { ok: true, lat: l.lat, lng: l.lng, display: l.display, confidence: 99, allResults: [], source: "learned" };
-  }
-
-  // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
-  if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
-
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress);
-
-  // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
-  const anchor = findAnchor(rawAddress);
-  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
-    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
-    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
-  ) : null;
-
-  // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
-  let bestResult = null;
-  let bestScore  = 0;
-
-  for (const q of queries) {
-    try {
-      const gcOpts = { address: q, region: "DO" };
-      // componentRestrictions eliminado — rechaza resultados válidos en sectores informales
-      // Usamos bounds del anchor si lo hay; sino bounds completos de RD
-      if (hintBounds) gcOpts.bounds = hintBounds;
-      const result = await new Promise((res, rej) =>
-        geocoder.geocode(gcOpts, (results, status) => status === "OK" ? res(results) : rej(status))
-      );
-      if (!result || result.length === 0) continue;
-
-      // Evaluar TODOS los candidatos, quedarse con el mejor score
-      const candidates = result
-        .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
-        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
-        .sort((a, b) => b.score - a.score);
-
-      if (candidates.length === 0) continue;
-      const { r: top, score: conf } = candidates[0];
-
-      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
-      if (anchor) {
-        const dlat = top.geometry.location.lat() - anchor.lat;
-        const dlng = top.geometry.location.lng() - anchor.lng;
-        const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
-        if (distKm > 15) continue; // resultado random, ignorar
-      }
-
-      if (conf > bestScore) {
-        bestScore = conf;
-        bestResult = { top, conf, allCandidates: candidates };
-      }
-
-      // Score excelente → no seguir buscando variantes
-      if (bestScore >= 90) break;
-    } catch { /* try next variant */ }
-  }
-
-  if (bestResult) {
-    const { top, conf, allCandidates } = bestResult;
-    const lat = top.geometry.location.lat();
-    const lng = top.geometry.location.lng();
-    const out = {
-      ok: true, lat, lng,
-      display: top.formatted_address,
-      confidence: conf,
-      types: top.types || [],
-      source: "geocoding_api",
-      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
-        display: r.formatted_address,
-        lat: r.geometry.location.lat(),
-        lng: r.geometry.location.lng(),
-        confidence: score,
-      })),
-    };
-    _geoCache.set(cacheKey, out);
-    return out;
-  }
-
-  // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
-  try {
-    const placesResult = await searchWithPlaces(rawAddress);
-    if (placesResult) {
-      _geoCache.set(cacheKey, placesResult);
-      return placesResult;
-    }
-  } catch { /* places failed */ }
-
-  // ── CAPA 3: Nominatim (último recurso) ────────────────────────────────────
-  try {
-    const nominatimQueries = [
-      rawAddress + ", República Dominicana",
-      expandRDAddress(rawAddress) + ", República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
-    ];
-    for (const nmQuery of nominatimQueries) {
-      const encoded = encodeURIComponent(nmQuery);
-      const nm = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`,
-        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" } }
-      );
-      if (!nm.ok) continue;
-      const nmData = await nm.json();
-      if (!nmData?.length) continue;
-
-      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
-      if (rdResults.length === 0) continue;
-
-      const top = rdResults[0];
-      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-      let conf = 50;
-      if (top.type === "house")           conf = 85;
-      else if (top.type === "building")   conf = 78;
-      else if (top.class === "highway")   conf = 70;
-      else if (top.type === "residential") conf = 65;
-      else if (top.class === "place")     conf = 57;
-      const nums = rawAddress.match(/\d{1,4}/g);
-      if (nums?.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
-
-      const out = {
-        ok: true, lat, lng,
-        display: top.display_name.split(",").slice(0, 3).join(",").trim(),
-        confidence: conf,
-        types: [top.type || "nominatim"],
-        source: "nominatim",
-        allResults: rdResults.slice(0, 3).map(r => ({
-          display: r.display_name.split(",").slice(0, 3).join(",").trim(),
-          lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-          confidence: 52,
-        })),
-      };
-      _geoCache.set(cacheKey, out);
-      return out;
-    }
-  } catch { /* nominatim failed */ }
-
-  // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
-  // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
-  // con confianza baja para que el admin sepa que es aproximado
-  const lastAnchor = findAnchor(rawAddress);
-  if (lastAnchor) {
-    const fallbackOut = {
-      ok: true,
-      lat: lastAnchor.lat,
-      lng: lastAnchor.lng,
-      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
-      confidence: 35,
-      types: ["anchor_fallback"],
-      source: "anchor_local",
-      allResults: [],
-    };
-    _geoCache.set(cacheKey, fallbackOut);
-    return fallbackOut;
-  }
-
-  const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
-  return failed;
-};
-
-// Build multiple query variants for maximum hit rate
-// Estrategia: de más específico a más general, hasta que Google responda
-const buildQueryVariants = (raw) => {
-  const s = String(raw || "").trim();
-  if (!s) return [];
-
-  const expanded = expandRDAddress(s);
-  const variants = new Set();
-
-  // --- Detección de contexto geográfico ---
-  const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
-  const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
-  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
-
-  const RD = ", República Dominicana";
-  const SD = ", Santo Domingo" + RD;
-  const DN = ", Distrito Nacional" + RD;
-
-  // 1. Versión expandida + ciudad — SDO primero si hay anchor en esa zona
-  const _anchor = findAnchor(s);
-  const _isSDO = _anchor?.city === "Santo Domingo Oeste";
-  const _isDN  = _anchor?.city === "Distrito Nacional";
-  const _isSDE = _anchor?.city === "Santo Domingo Este";
-  const _isSDN = _anchor?.city === "Santo Domingo Norte";
-  if (!hasCountry && !hasCity) {
-    // Priorizar la ciudad del anchor — evita que Google devuelva resultado en zona equivocada
-    if (_isSDO) {
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-      variants.add(expanded + SD);
-      variants.add(expanded + DN);
-    } else if (_isDN) {
-      variants.add(expanded + DN);
-      variants.add(expanded + SD);
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-    } else if (_isSDE) {
-      variants.add(expanded + ", Santo Domingo Este" + RD);
-      variants.add(expanded + SD);
-    } else if (_isSDN) {
-      variants.add(expanded + ", Santo Domingo Norte" + RD);
-      variants.add(expanded + SD);
-    } else {
-      variants.add(expanded + SD);
-      variants.add(expanded + DN);
-      variants.add(expanded + ", Santo Domingo Este" + RD);
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-      variants.add(expanded + ", Santo Domingo Norte" + RD);
-    }
-  } else if (!hasCountry) {
-    variants.add(expanded + RD);
-    variants.add(expanded);
-  } else {
-    variants.add(expanded);
-  }
-
-  // 2. Raw original + contexto
-  if (s !== expanded) {
-    if (!hasCity && !hasCountry) {
-      variants.add(s + SD);
-      variants.add(s + RD);
-    } else if (!hasCountry) {
-      variants.add(s + RD);
-    }
-    variants.add(s);
-  }
-
-  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
-  const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
-  if (secMatch) {
-    const sec = secMatch[1].trim();
-    variants.add(sec + SD);
-    variants.add(sec + ", Santo Domingo Este" + RD);
-    variants.add(sec + ", Santo Domingo Oeste" + RD);
-    // Agregar calle + sector para mayor precisión
-    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
-    if (calleMatch) {
-      variants.add(calleMatch[0].trim() + ", " + sec + SD);
-    }
-  }
-
-  // 4. Extraer solo la parte de calle + número (sin piso/apto) como fallback
-  const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
-  if (calleNum && !hasCity) {
-    variants.add(calleNum[0].trim() + SD);
-    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
-  }
-
-  // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
-  const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    variants.add(parts.slice(0, 2).join(", ") + SD);
-  }
-  if (parts.length >= 1 && !hasCity) {
-    variants.add(parts[0] + SD);
-  }
-
-  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
-  const numMatch = expanded.match(/(\d{1,4})/);
-  if (numMatch) {
-    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
-    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
-  }
-
-  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
-  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
-  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
-  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
-
-  // Eliminar variantes vacías o muy cortas
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
-};
-
-// RD-specific address normalizer - expanded for Dominican Republic
-const expandRDAddress = (s) => {
-  // 1. Limpieza inicial
-  let r = s.trim();
-
-  // 2. Separadores comunes en RD: barras, guiones como separadores de sector/calle
-  r = r.replace(/\s*\/\s*/g, ", ").replace(/\s*-{2,}\s*/g, ", ");
-
-  // 3. Tipos de vía
-  const abbrevs = [
-    // Avenida
-    [/\bav\.\s*/gi,            "Avenida "],
-    [/\bave\.\s*/gi,           "Avenida "],
-    [/\bavda\.\s*/gi,          "Avenida "],
-    [/\bavenida\s*/gi,         "Avenida "],
-    // Calle
-    [/\bc\/\s*/gi,             "Calle "],
-    [/\bclle?\.\s*/gi,         "Calle "],
-    [/\bcl\.\s*/gi,            "Calle "],
-    [/\bca\.\s+(?=[A-ZÁÉÍÓÚ])/gi, "Calle "],
-    // Callejón
-    [/\bclj[oó]n?\.\s*/gi,    "Callejón "],
-    // Residencial / Urbanización / Sector / Barrio
-    [/\bres(?:id(?:encial)?)?\.\s*/gi, "Residencial "],
-    [/\burb\.\s*/gi,           "Urbanización "],
-    [/\burbaniz\.\s*/gi,       "Urbanización "],
-    [/\bsect?\.\s*/gi,         "Sector "],
-    [/\bbarr?\.\s*/gi,         "Barrio "],
-    [/\bens\.\s*/gi,           "Ensanche "],
-    [/\bensanche\s*/gi,        "Ensanche "],
-    [/\bprol\.\s*/gi,          "Prolongación "],
-    [/\besq\.\s*/gi,           "Esquina "],
-    [/\besquina\s+con\s*/gi,   "Esquina "],
-    // Numeración
-    [/\bno\.\s*(\d)/gi,        "No. $1"],
-    [/\bn[oº°#]\s*(\d)/gi,     "No. $1"],
-    [/\bnúm\.\s*(\d)/gi,       "No. $1"],
-    [/\b#\s*(\d)/gi,           "No. $1"],
-    // Kilómetro
-    [/\bkm\.?\s+/gi,           "Km "],
-    // Apartamento / Edificio / Torre / Local
-    [/\bapto\.?\s*/gi,         "Apartamento "],
-    [/\bapt\.?\s*/gi,          "Apartamento "],
-    [/\bap\.?\s+(?=\d)/gi,     "Apartamento "],
-    [/\bdepto\.?\s*/gi,        "Departamento "],
-    [/\bedif\.?\s*/gi,         "Edificio "],
-    [/\bedificio\s*/gi,        "Edificio "],
-    [/\btorre\s+/gi,           "Torre "],
-    [/\bloc\.?\s*/gi,          "Local "],
-    // Zonas especiales RD
-    [/\bz\.?\s*col(?:onial)?\b/gi,  "Zona Colonial"],
-    [/\bznc?\b/gi,             "Zona Colonial"],
-    [/\bd\.?\s*n\.?\b/gi,      "Distrito Nacional"],
-    [/\bsto\.?\s*dgo\.?\b/gi,  "Santo Domingo"],
-    [/\bsdo\.?\b/gi,           "Santo Domingo"],
-    [/\bsdq\b/gi,              "Santo Domingo"],
-    [/\bstgo\.?\b/gi,          "Santiago"],
-    [/\bstgo\s+de\s+los\s+cab\b/gi, "Santiago de los Caballeros"],
-    [/\blr\b/gi,               "La Romana"],
-    [/\bpup\b/gi,              "Punta Cana"],
-    [/\bspm\b/gi,              "San Pedro de Macorís"],
-    [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
-    [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
-    [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
-    // Sectores comunes SD
-    [/\bnaco\b/gi,             "Naco, Santo Domingo"],
-    [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
-    [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
-    [/\bpolo\s*gov\b/gi,       "Polígono Central, Santo Domingo"],
-    [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
-    [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
-    [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
-
-    // ── Santo Domingo Oeste – Zona Herrera (núcleo principal) ─────────────────
-    [/\bherrera\b(?!\s+de)/gi,                 "Herrera, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+herrera\b/gi,    "Buenos Aires de Herrera, Santo Domingo Oeste"],
-    [/\bel\s+caf[eé]\s+de\s+herrera\b/gi,     "El Café de Herrera, Santo Domingo Oeste"],
-    [/\blas\s+palmas\s+de\s+herrera\b/gi,      "Las Palmas de Herrera, Santo Domingo Oeste"],
-    [/\benriquillo\b/gi,                        "Enriquillo, Santo Domingo Oeste"],
-    [/\bduarte\s*(?:\(herrera\))?\b/gi,        "Duarte, Herrera, Santo Domingo Oeste"],
-    [/\bpueblo\s+nuevo\b(?!.*ozama)/gi,        "Pueblo Nuevo, Santo Domingo Oeste"],
-    [/\bjuan\s+guzm[aá]n\b/gi,                "Juan Guzmán, Santo Domingo Oeste"],
-    [/\biv[aá]n\s+guzm[aá]n\s+klang\b/gi,    "Iván Guzmán Klang, Santo Domingo Oeste"],
-    [/\blas\s+mercedes\b/gi,                   "Las Mercedes, Santo Domingo Oeste"],
-    [/\bvilla\s+aura\b/gi,                     "Villa Aura, Santo Domingo Oeste"],
-    [/\bolimpo\b/gi,                            "Olimpo, Santo Domingo Oeste"],
-    [/\bbarrio\s+duarte\b/gi,                  "Barrio Duarte, Santo Domingo Oeste"],
-    [/\bbarrio\s+nuevo\b/gi,                   "Barrio Nuevo, Santo Domingo Oeste"],
-    [/\bbarrio\s+san\s+francisco\b/gi,         "Barrio San Francisco, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Las Caobas ────────────────────────────────
-    [/\blas\s+caobas\b/gi,                     "Las Caobas, Santo Domingo Oeste"],
-    [/\blas\s+caobitas\b/gi,                   "Las Caobitas, Santo Domingo Oeste"],
-    [/\blas\s+colinas\b/gi,                    "Las Colinas, Santo Domingo Oeste"],
-    [/\blas\s+palmas\b(?!\s+de\s+herrera)/gi,  "Las Palmas, Santo Domingo Oeste"],
-    [/\bel\s+libertador\b/gi,                  "El Libertador, Santo Domingo Oeste"],
-    [/\bsavica\b/gi,                            "Savica, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+las\s+caobas\b/gi, "Buenos Aires de Las Caobas, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+las\s+caobas\b/gi, "Urbanización Las Caobas, Santo Domingo Oeste"],
-    [/\baltos\s+de\s+las\s+caobas\b/gi,        "Altos de Las Caobas, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Bayona / Manoguayabo ──────────────────────
-    [/\bbayona\b/gi,                            "Bayona, Santo Domingo Oeste"],
-    [/\bmanoguayabo\b/gi,                       "Manoguayabo, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+manoguayabo\b/gi,"Buenos Aires de Manoguayabo, Santo Domingo Oeste"],
-    [/\bel\s+hoyo\s+de\s+manoguayabo\b/gi,     "El Hoyo de Manoguayabo, Santo Domingo Oeste"],
-    [/\bbarrio\s+san\s+miguel\b/gi,            "Barrio San Miguel, Santo Domingo Oeste"],
-    [/\bla\s+venta\b/gi,                        "La Venta, Santo Domingo Oeste"],
-    [/\bel\s+8\s+de\s+bayona\b/gi,             "El 8 de Bayona, Santo Domingo Oeste"],
-    [/\bbarrio\s+enriquillo\b/gi,              "Barrio Enriquillo, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Engombe ───────────────────────────────────
-    [/\bengombe\b/gi,                           "Engombe, Santo Domingo Oeste"],
-    [/\baltos\s+de\s+engombe\b/gi,             "Altos de Engombe, Santo Domingo Oeste"],
-    [/\bla\s+ure[nñ]a\b/gi,                   "La Ureña, Santo Domingo Oeste"],
-    [/\bbarrio\s+progreso\b/gi,               "Barrio Progreso, Santo Domingo Oeste"],
-    [/\bbarrio\s+libertad\b/gi,               "Barrio Libertad, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,  "Urbanización Engombe, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Hato Nuevo / Expansión ────────────────────
-    [/\bhato\s+nuevo\b/gi,                     "Hato Nuevo, Santo Domingo Oeste"],
-    [/\bcaballona\b/gi,                         "Caballona, Santo Domingo Oeste"],
-    [/\blechería\b/gi,                          "Lechería, Santo Domingo Oeste"],
-    [/\bbatey\s+bienvenido\b/gi,              "Batey Bienvenido, Santo Domingo Oeste"],
-    [/\bnuevo\s+horizonte\b/gi,               "Barrio Nuevo Horizonte, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Residenciales y Urbanizaciones ─────────────────
-    [/\bres(?:idencial)?\s+carmen\s+renata\b/gi, "Residencial Carmen Renata, Santo Domingo Oeste"],
-    [/\bbrisas\s+del\s+oeste\b/gi,            "Residencial Brisas del Oeste, Santo Domingo Oeste"],
-    [/\bciudad\s+agraria\b/gi,                "Ciudad Agraria, Santo Domingo Oeste"],
-    [/\boperaciones\s+especiales\b/gi,         "Operaciones Especiales, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+antonia\b/gi,       "Residencial Antonia, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+altagracia\b/gi,    "Residencial Altagracia, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi, "Urbanización El Café, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+las\s+palmas\b/gi,  "Urbanización Las Palmas, Santo Domingo Oeste"],
-    [/\bdon\s+honorio\b/gi,                    "Residencial Don Honorio, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Sectores en crecimiento ────────────────────────
-    [/\barroyo\s+bonito\b/gi,                 "Arroyo Bonito, Santo Domingo Oeste"],
-    [/\bel\s+30\s+de\s+mayo\b/gi,            "El 30 de Mayo, Santo Domingo Oeste"],
-    [/\bbarrio\s+libertador\b/gi,             "Barrio Libertador, Santo Domingo Oeste"],
-    [/\bbarrio\s+progreso\s+ii\b/gi,          "Barrio Progreso II, Santo Domingo Oeste"],
-    [/\bla\s+isabela\b/gi,                    "La Isabela, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Corredores viales clave ────────────────────────
-    [/\bautopista\s+duarte\b/gi,              "Autopista Duarte, Santo Domingo Oeste"],
-    [/\bprol(?:ongaci[oó]n)?\s+27\s+de\s+febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+isabel\s+aguiar\b/gi,  "Avenida Isabel Aguiar, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+las\s+palmas\b/gi,     "Avenida Las Palmas, Santo Domingo Oeste"],
-    [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi, "Prolongación Independencia, Santo Domingo Oeste"],
-
-    // ── Abreviaturas rápidas SDO ──────────────────────────────────────────────
-    [/\bsdo\s+oeste\b/gi,                     "Santo Domingo Oeste"],
-    [/\bsd\s+o\b/gi,                          "Santo Domingo Oeste"],
-  ];
-
-  for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
-
-  // 4. Limpiar espacios múltiples y comas duplicadas
-  r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
-
-  return r;
-};
-
-// Score Google result quality
-const scoreGoogleResult = (result, original) => {
-  const types = result.types || [];
-  const addr  = result.formatted_address || "";
-  let score = 55;
-
-  // Tipo de resultado (cuanto más específico, mejor)
-  if      (types.includes("street_address"))            score = 96;
-  else if (types.includes("premise"))                   score = 93;
-  else if (types.includes("subpremise"))                score = 91;
-  else if (types.includes("route"))                     score = 82;
-  else if (types.includes("intersection"))              score = 80;
-  else if (types.includes("neighborhood"))              score = 70;
-  else if (types.includes("sublocality"))               score = 68;
-  else if (types.includes("sublocality_level_1"))       score = 68;
-  else if (types.includes("sublocality_level_2"))       score = 65;
-  else if (types.includes("locality"))                  score = 60;
-  else if (types.includes("administrative_area_level_1")) score = 40;
-  else if (types.includes("country"))                   score = 20;
-
-  // Bonus: original tiene número Y el resultado también → más preciso
-  const origHasNum = /\d/.test(original);
-  const resHasNum  = /\d/.test(addr);
-  if (origHasNum && resHasNum)   score = Math.min(score + 5, 99);
-  if (origHasNum && !resHasNum)  score = Math.max(score - 8, 10); // no encontró el número
-
-  // Bonus: resultado está dentro de la bounding box de RD
-  const loc = result.geometry.location;
-  const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
-  const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
-  if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) {
-    score = Math.max(score - 50, 3); // resultado fuera de RD → descartar
-  }
-
-  // Bonus: la dirección formateada contiene la ciudad/sector del original
-  const origLower = (original || "").toLowerCase();
-  const addrLower = addr.toLowerCase();
-  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
-    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
-    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
-    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
-  }
-
-  // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\d{1,4}/g);
-  if (numInOrig) {
-    const anyMatch = numInOrig.some(n => addr.includes(n));
-    if (anyMatch) score = Math.min(score + 3, 99);
-  }
-
-  // Penalizar si el resultado es solo país/provincia (demasiado vago)
-  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
-
-  return Math.min(Math.max(score, 1), 99);
-};
-
-// --- PLUS CODE → LAT/LNG via Google ------------------------------------------
-const decodePlusCodeGoogle = async (code) => {
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const query = code.includes(" ") ? code : code + " Santo Domingo";
-  try {
-    const r = await new Promise((res, rej) =>
-      geocoder.geocode({ address: query }, (results, status) =>
-        status === "OK" ? res(results) : rej(status))
-    );
-    if (r?.[0]) {
-      const loc = r[0].geometry.location;
-      return { ok: true, lat: loc.lat(), lng: loc.lng(), display: r[0].formatted_address, confidence: 99 };
-    }
-  } catch {}
-  return { ok: false };
-};
-
-// --- COORDINATE DETECTOR - acepta múltiples formatos ---
-// Detecta: "18.4714,-69.9318" | "18.4714, -69.9318" | links de Google Maps
-const detectCoords = (s) => {
-  const t = (s || "").trim();
-
-  // Formato: lat,lng o lat, lng (con o sin espacios)
-  const pair = t.match(/^(-?\d{1,3}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})$/);
-  if (pair) {
-    const lat = parseFloat(pair[1]), lng = parseFloat(pair[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  // Link de Google Maps: https://maps.google.com/?q=18.4714,-69.9318
-  const gmLink = t.match(/[?&]q=(-?\d{1,3}\.\d{3,})[,+](-?\d{1,3}\.\d{3,})/);
-  if (gmLink) {
-    const lat = parseFloat(gmLink[1]), lng = parseFloat(gmLink[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  // Link de Google Maps con @lat,lng
-  const atLink = t.match(/@(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
-  if (atLink) {
-    const lat = parseFloat(atLink[1]), lng = parseFloat(atLink[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  return null;
-};
-
-// Plus Code detector: acepta códigos completos (8+2) y cortos (con ciudad)
-// Ejemplos: "G2F8+7G3" | "G2F8+7G3 Santo Domingo" | "7G3 Santo Domingo"
-const isPlusCode = (s) => {
-  const t = (s || "").trim();
-  // Código completo: XXXXXXXX+XX o XXXX+XX
-  if (/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(t)) return true;
-  // Código corto + ciudad: XX+XX Ciudad
-  if (/^[23456789CFGHJMPQRVWX]{2,}\+[23456789CFGHJMPQRVWX]{2,}\s+\w/i.test(t)) return true;
-  return false;
-};
-
-// --- HAVERSINE (fallback local cuando Routes API no disponible) ---------------
-const hav = (a, b) => {
-  const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
-  const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-};
-
-// --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
-// Usa calles reales, sentidos de vía y tráfico de Santo Domingo.
-// Google permite hasta 25 waypoints intermedios por solicitud.
-// Chunking automático si hay más de 25 paradas válidas.
-const optimizeWithRoutesAPI = async (validStops) => {
-  // Máximo 25 waypoints por llamada a la API
-  const CHUNK = 25;
-  if (validStops.length <= 1) return validStops.map((s, i) => ({ ...s, stopNum: i + 1 }));
-
-  // Helper: llamada a la Routes API v2 para un chunk
-  const callRoutesAPI = async (chunk) => {
-    const waypoints = chunk.map(s => ({
-      location: { latLng: { latitude: s.lat, longitude: s.lng } },
-    }));
-
-    const body = {
-      origin:      { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
-      destination: { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
-      intermediates: waypoints,
-      travelMode: "DRIVE",
-      optimizeWaypointOrder: true,
-      routingPreference: "TRAFFIC_AWARE",
-      languageCode: "es",
-    };
-
-    const resp = await fetch(
-      "https://routes.googleapis.com/directions/v2:computeRoutes",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": GMAPS_KEY,
-          "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters",
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!resp.ok) throw new Error(`Routes API HTTP ${resp.status}`);
-    const data = await resp.json();
-
-    const route = data?.routes?.[0];
-    if (!route?.optimizedIntermediateWaypointIndex) throw new Error("No optimized order returned");
-
-    return {
-      order:    route.optimizedIntermediateWaypointIndex,   // índices reordenados
-      durations: (route.legs || []).slice(1).map(l =>       // segundos por tramo (sin el tramo depot→1)
-        parseInt(l.duration?.replace("s", "") || "0", 10)
-      ),
-      distances: (route.legs || []).slice(1).map(l => Math.round((l.distanceMeters || 0) / 1000 * 10) / 10),
-    };
-  };
-
-  // Si entran ≤25 paradas → una sola llamada
-  if (validStops.length <= CHUNK) {
-    try {
-      const { order, durations, distances } = await callRoutesAPI(validStops);
-      return order.map((origIdx, newPos) => ({
-        ...validStops[origIdx],
-        stopNum:      newPos + 1,
-        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
-        distKmRoutes: distances[newPos] ?? null,
-      }));
-    } catch (e) {
-      console.warn("Routes API falló, usando Haversine:", e.message);
-      return null; // señal para caer al fallback
-    }
-  }
-
-  // Más de 25: dividir en chunks, optimizar cada uno y concatenar
-  const ordered = [];
-  for (let i = 0; i < validStops.length; i += CHUNK) {
-    const chunk = validStops.slice(i, i + CHUNK);
-    try {
-      const { order, durations, distances } = await callRoutesAPI(chunk);
-      const reordered = order.map((origIdx, newPos) => ({
-        ...chunk[origIdx],
-        stopNum:      ordered.length + newPos + 1,
-        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
-        distKmRoutes: distances[newPos] ?? null,
-      }));
-      ordered.push(...reordered);
-    } catch {
-      // Chunk fallido → mantener orden Haversine para ese chunk
-      chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
-    }
-  }
-  return ordered;
-};
-
-// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
-// ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️  MOTOR DE OPTIMIZACIÓN LOCAL v3 — NO MODIFICAR SIN AUTORIZACIÓN
-// Clustering geográfico (CLUSTER_KM) + NN + 2-opt + Or-opt
-// Garantiza paradas de la misma zona en bloques CONSECUTIVOS.
-// No depende de Routes API — funciona siempre.
-// ═══════════════════════════════════════════════════════════════════════════════
-const CLUSTER_KM = 1.5;
-
-const optimizeRouteLocal = (stops) => {
-  if (!stops || stops.length === 0) return [];
-  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
-  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
-  if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
-  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
-
-  const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const centroid = (idxArr) => ({
-    lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
-    lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
-  });
-
-  // PASO 1: Clustering geográfico
-  const clusters = [];
-  valid.forEach((stop, si) => {
-    let bestCluster = -1, bestDist = CLUSTER_KM;
-    clusters.forEach((cl, ci) => {
-      const d = hav(stop, centroid(cl));
-      if (d < bestDist) { bestDist = d; bestCluster = ci; }
-    });
-    if (bestCluster === -1) clusters.push([si]);
-    else clusters[bestCluster].push(si);
-  });
-
-  // PASO 2: Ordenar clusters desde DEPOT
-  let remClusters = clusters.map((_, ci) => ci);
-  const ordClusters = [];
-  let curPoint = depot;
-  while (remClusters.length) {
-    let bestPos = 0, bestDist = Infinity;
-    remClusters.forEach((ci, pos) => {
-      const d = hav(curPoint, centroid(clusters[ci]));
-      if (d < bestDist) { bestDist = d; bestPos = pos; }
-    });
-    const chosen = remClusters.splice(bestPos, 1)[0];
-    ordClusters.push(chosen);
-    curPoint = centroid(clusters[chosen]);
-  }
-
-  // PASO 3: NN dentro de cada cluster
-  let tour = [];
-  let entryPt = depot;
-  ordClusters.forEach(ci => {
-    let remStops = [...clusters[ci]];
-    const clTour = [];
-    while (remStops.length) {
-      let bestPos = 0, bestDist = Infinity;
-      remStops.forEach((si, pos) => {
-        const d = hav(entryPt, valid[si]);
-        if (d < bestDist) { bestDist = d; bestPos = pos; }
-      });
-      const chosen = remStops.splice(bestPos, 1)[0];
-      clTour.push(valid[chosen]);
-      entryPt = valid[chosen];
-    }
-    tour = tour.concat(clTour);
-  });
-
-  // PASO 4: 2-opt global
-  let improved = true, iterations = 0;
-  while (improved && iterations < 100) {
-    improved = false; iterations++;
-    for (let i = 0; i < tour.length - 1; i++) {
-      for (let j = i + 1; j < tour.length; j++) {
-        const A = i === 0 ? depot : tour[i-1], B = tour[i];
-        const C = tour[j], D = j+1 < tour.length ? tour[j+1] : depot;
-        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
-          let l = i, r = j;
-          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
-          improved = true;
-        }
-      }
-    }
-  }
-
-  // PASO 5: Or-opt
-  let orImproved = true, orIter = 0;
-  while (orImproved && orIter < 20) {
-    orImproved = false; orIter++;
-    for (let i = 0; i < tour.length; i++) {
-      const node = tour[i], prev = i === 0 ? depot : tour[i-1], next = i === tour.length-1 ? depot : tour[i+1];
-      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
-      let bestGain = 0.001, bestJ = -1;
-      for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i-1) continue;
-        const a = tour[j], b = j+1 < tour.length ? tour[j+1] : depot;
-        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
-        if (gain > bestGain) { bestGain = gain; bestJ = j; }
-      }
-      if (bestJ >= 0) {
-        const removed = tour.splice(i, 1)[0];
-        tour.splice(bestJ > i ? bestJ : bestJ+1, 0, removed);
-        orImproved = true; break;
-      }
-    }
-  }
-
-  return [
-    ...tour.map((s, i) => ({ ...s, stopNum: i+1 })),
-    ...invalid.map(s => ({ ...s, stopNum: null })),
-  ];
-};
-
-// ⚠️ Routes API deshabilitada — producía saltos entre zonas.
-// Motor v3 local (clustering) da mejores resultados para mensajería urbana en RD.
-const optimizeRoute = (stops) => optimizeRouteLocal(stops);
-
-const optimizeRouteAsync = async (stops, onProgress) => {
-  onProgress?.("Optimizando con motor de zonas v3…");
-  const result = optimizeRouteLocal(stops);
-  onProgress?.("✓ Ruta optimizada con motor de zonas");
-  return result;
-};
-
-const totalKm = (stops) => {
-  const v = stops.filter(s => s.lat && s.lng);
-  if (!v.length) return 0;
-  // Si hay datos reales de la Routes API, sumarlos
-  if (v[0]?.distKmRoutes !== undefined && v[0]?.distKmRoutes !== null) {
-    return Math.round(v.reduce((acc, s) => acc + (s.distKmRoutes || 0), 0) * 10) / 10;
-  }
-  return Math.round((v.reduce((acc, s, i) => acc + hav(i === 0 ? DEPOT : v[i - 1], s), 0) + hav(v[v.length - 1], DEPOT)) * 10) / 10;
-};
-
-// --- COLUMN AUTODETECT --------------------------------------------------------
-const autoDetect = (headers) => {
-  const patterns = {
-    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
-    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
-    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
-    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
-    notes:     /notas?|notes?|observ|instruc|detalle/i,
-    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
-    ciudad:    /ciudad|municipio|localidad|town|city/i,
-    provincia: /provincia|province|estado|state|dpto|departamento/i,
-    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
-    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
-  };
-  const m = {};
-  headers.forEach(h => {
-    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
-  });
-  return m;
-};
-
-// --- GOOGLE MAP COMPONENT -----------------------------------------------------
-const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
-  const ref = useRef(null);
-  const mapRef = useRef(null);
-  const markersRef = useRef([]);
-  const polyRef = useRef(null);
-  const infoRef = useRef(null);
-
-  useEffect(() => {
-    loadGoogleMaps().then(() => {
-      if (mapRef.current) return;
-      mapRef.current = new window.google.maps.Map(ref.current, {
-        center: { lat: DEPOT.lat, lng: DEPOT.lng },
-        zoom: 12,
-        mapTypeId: "roadmap",
-        styles: [
-          {featureType:"poi",stylers:[{visibility:"off"}]},
-          {featureType:"transit",stylers:[{visibility:"off"}]},
-          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
-          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
-          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
-          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
-          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
-          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
-          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
-          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
-        ],
-        disableDefaultUI: true,
-        zoomControl: true,
-        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
-      });
-      infoRef.current = new window.google.maps.InfoWindow();
-
-      // Depot marker - house icon like Circuit
-      const depotSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1d4ed8" stroke="white" stroke-width="2.5"/><path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/></svg>';
-      new window.google.maps.Marker({
-        map: mapRef.current,
-        position: { lat: DEPOT.lat, lng: DEPOT.lng },
-        title: DEPOT.label,
-        zIndex: 999,
-        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
-      });
-    });
-  }, []);
-
-  const stopsLenRef = useRef(0);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-    // Clear old markers properly to prevent memory leaks
-    markersRef.current.forEach(m => { m.setMap(null); });
-    markersRef.current = [];
-    if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
-
-    const valid = stops.filter(s => s.lat && s.lng && s.stopNum);
-
-    // Draw route polyline
-    if (valid.length > 1 && phase === "route") {
-      const path = [
-        { lat: DEPOT.lat, lng: DEPOT.lng },
-        ...valid.map(s => ({ lat: s.lat, lng: s.lng })),
-        { lat: DEPOT.lat, lng: DEPOT.lng },
-      ];
-      polyRef.current = new window.google.maps.Polyline({
-        path,
-        geodesic: true,
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.9,
-        strokeWeight: 3,
-        map: mapRef.current,
-      });
-    }
-
-    // Inject shared SVG filters once (avoids per-marker filter accumulation)
-    if (!document.getElementById("rd-map-filters")) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
-      svg.id = "rd-map-filters";
-      svg.setAttribute("style","position:absolute;width:0;height:0;overflow:hidden");
-      svg.innerHTML = `<defs>
-        <filter id="rdGlowSel" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        <filter id="rdGlowNorm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>`;
-      document.body.appendChild(svg);
-    }
-
-    // Draw stop markers
-    const colMap = { ok: "#3b82f6", warning: "#f59e0b", error: "#ef4444", pending: "#475569" };
-    stops.filter(s => s.lat && s.lng).forEach(stop => {
-      const isSelected = stop.id === selectedId;
-      const col = colMap[stop.status] || "#3b82f6";
-
-      // Detect co-located stops (same lat/lng rounded to 4 decimals)
-      const key = `${stop.lat?.toFixed(4)},${stop.lng?.toFixed(4)}`;
-      const colocated = stops.filter(s => s.lat && s.lng && `${s.lat?.toFixed(4)},${s.lng?.toFixed(4)}` === key);
-      const isCluster = colocated.length > 1;
-      const clusterIdx = colocated.findIndex(s => s.id === stop.id);
-      // Only render marker for the first of a cluster group (to avoid stacking)
-      if (isCluster && clusterIdx !== 0) return;
-
-      const displayStop = isCluster && selectedId
-        ? (colocated.find(s => s.id === selectedId) || colocated[0])
-        : stop;
-
-      const label = isCluster
-        ? (isSelected ? String(displayStop.stopNum || "?") : `${colocated.length}`)
-        : String(stop.stopNum || "?");
-      const fs = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
-      const w = isSelected ? 40 : 32;
-      const filterId = isSelected ? "rdGlowSel" : "rdGlowNorm";
-      const clusterRing = isCluster && !isSelected ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.4" stroke-dasharray="3 2"/>` : "";
-      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40">${clusterRing}<circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
-      const marker = new window.google.maps.Marker({
-        map: mapRef.current,
-        position: { lat: stop.lat, lng: stop.lng },
-        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(w, w), anchor: new window.google.maps.Point(w/2, w/2) },
-        zIndex: isSelected ? 100 : 10,
-        title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
-      });
-      marker.addListener("click", () => {
-        if (isCluster) {
-          // Cycle through co-located stops
-          const curIdx = colocated.findIndex(s => s.id === selectedId);
-          const nextIdx = (curIdx + 1) % colocated.length;
-          onSelectStop(colocated[nextIdx].id, true);
-        } else {
-          onSelectStop(stop.id, true);
-        }
-        infoRef.current.close();
-      });
-      markersRef.current.push(marker);
-    });
-
-    // Fit bounds only when number of valid stops changes (first load / after geocoding)
-    const newLen = valid.length;
-    if (newLen > 0 && newLen !== stopsLenRef.current) {
-      stopsLenRef.current = newLen;
-      const bounds = new window.google.maps.LatLngBounds();
-      bounds.extend({ lat: DEPOT.lat, lng: DEPOT.lng });
-      valid.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
-      mapRef.current.fitBounds(bounds, { padding: 40 });
-    }
-  }, [stops, selectedId, phase]);
-
-  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
-};
-
-// --- ADDRESS EDIT MODAL --------------------------------------------------------
-// Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
-const AddressEditModal = ({ stop, onSave, onCancel }) => {
-  const inputRef = useRef(null);
-  const acRef    = useRef(null);
-  const [saving,  setSaving]  = useState(false);
-  const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
-  const [errMsg,  setErrMsg]  = useState("");
-
-  // Inject light-mode pac-container styles
-  useEffect(() => {
-    const id = "pac-light-style";
-    if (!document.getElementById(id)) {
-      const s = document.createElement("style");
-      s.id = id;
-      s.textContent = `
-        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
-        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
-        .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
-        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
-        .pac-matched { color:#2563eb!important; }
-        .pac-icon { display:none!important; }
-        .pac-logo:after { display:none!important; }
-      `;
-      document.head.appendChild(s);
-    }
-    loadGoogleMaps().then(() => {
-      if (!inputRef.current) return;
-      if (acRef.current) { window.google.maps.event.clearInstanceListeners(acRef.current); acRef.current = null; }
-      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
-        componentRestrictions: { country: "DO" },
-        fields: ["formatted_address", "geometry", "name"],
-      });
-      acRef.current.addListener("place_changed", () => {
-        const place = acRef.current.getPlace();
-        if (place?.geometry?.location) {
-          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
-          setFound(result);
-          setErrMsg("");
-        }
-      });
-      setTimeout(() => inputRef.current?.focus(), 60);
-    });
-    return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
-  }, []);
-
-  const handleSearch = async () => {
-    const text = inputRef.current?.value?.trim();
-    if (!text) return;
-    setFound(null); setErrMsg(""); setSaving(true);
-    // Coords? (18.xxx, -69.xxx)
-    const coords = detectCoords(text);
-    if (coords) {
-      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
-      setSaving(false); return;
-    }
-    // Plus Code?
-    if (isPlusCode(text)) {
-      const r = await decodePlusCodeGoogle(text);
-      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
-    }
-    // Google geocoder
-    const r = await geocodeWithGoogle(text);
-    setSaving(false);
-    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
-    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
-  };
-
-  const handleConfirm = () => { if (found) onSave(found); };
-
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-
-      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-
-      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
-
-        {/* ── HEADER ── */}
-        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-              {stop.client} · Parada #{stop.stopNum || "?"}
-            </div>
-          </div>
-          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
-        </div>
-
-        <div style={{ padding:"20px 22px 22px" }}>
-
-          {/* ── DIRECCIÓN ACTUAL ── */}
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
-            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
-              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
-              <div>
-                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
-                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
-              </div>
-            </div>
-          </div>
-
-          {/* ── NUEVA DIRECCIÓN ── */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
-            <div style={{ display:"flex",gap:8 }}>
-              <input
-                ref={inputRef}
-                defaultValue=""
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
-                autoComplete="off"
-                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
-              />
-              <button onClick={handleSearch} disabled={saving}
-                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
-                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
-                {saving ? "..." : "Buscar"}
-              </button>
-            </div>
-            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
-              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
-            </div>
-          </div>
-
-          {/* ── RESULTADO ENCONTRADO ── */}
-          {found && (
-            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
-              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
-              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
-              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
-                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
-                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
-              </div>
-            </div>
-          )}
-
-          {/* ── ERROR ── */}
-          {errMsg && (
-            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
-              ⚠ {errMsg}
-            </div>
-          )}
-
-          {/* ── ACTIONS ── */}
-          <div style={{ display:"flex",gap:8,marginTop:4 }}>
-            <button onClick={onCancel}
-              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
-              Cancelar
-            </button>
-            <button onClick={handleConfirm} disabled={!found}
-              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- ADDRESS SEARCH BOX (usado en el editor inline legacy) --------------------
-const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
-  const ref = useRef(null);
-  const acRef = useRef(null);
-  useEffect(() => {
-    loadGoogleMaps().then(() => {
-      setTimeout(() => {
-        if (acRef.current || !ref.current) return;
-        acRef.current = new window.google.maps.places.Autocomplete(ref.current, {
-          componentRestrictions: { country: "DO" },
-          fields: ["formatted_address", "geometry", "name"],
-        });
-        acRef.current.addListener("place_changed", () => {
-          const place = acRef.current.getPlace();
-          if (place?.geometry) onSelect({ display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 });
-        });
-        ref.current?.focus();
-      }, 60);
-    });
-  }, []);
-  return (
-    <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
-      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN
-// ═══════════════════════════════════════════════════════════════════════════════
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
@@ -7567,14 +7593,8 @@ const CircuitEngine = () => {
     const localOptimized = optimizeRoute(results);
     setStops(localOptimized);
     setPhase("review");
-    setRoutesOptStatus("Optimizando con calles reales…");
-
-    // ── Optimización asíncrona con Routes API (en segundo plano) ──────────────
-    optimizeRouteAsync(results, (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
-      setStops(apiOptimized);
-      setRoutesOptStatus("✓ Ruta optimizada con Google Routes API");
-      setTimeout(() => setRoutesOptStatus(""), 4000);
-    }).catch(() => setRoutesOptStatus(""));
+    setRoutesOptStatus("✓ Ruta optimizada con motor de zonas v3");
+    setTimeout(() => setRoutesOptStatus(""), 4000);
   }, [rawRows, mapping]);
 
   // -- EDIT + RE-GEOCODE ------------------------------------------------------
@@ -7638,15 +7658,12 @@ const CircuitEngine = () => {
 
   const reOpt = () => {
     setReoptimizing(true);
-    setRoutesOptStatus("Consultando Routes API…");
-    // Optimización local inmediata para feedback visual
+    setRoutesOptStatus("Optimizando con motor de zonas v3…");
+    // Re-optimización con motor v3 local
     setStops(prev => optimizeRoute([...prev]));
-    // Optimización con calles reales en segundo plano
-    optimizeRouteAsync([...stops], (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
-      setStops(apiOptimized);
-      setRoutesOptStatus("✓ Re-optimizado con calles reales");
-      setTimeout(() => setRoutesOptStatus(""), 4000);
-    }).catch(() => setRoutesOptStatus("")).finally(() => setReoptimizing(false));
+    setRoutesOptStatus("✓ Re-optimizado con motor de zonas v3");
+    setTimeout(() => setRoutesOptStatus(""), 3000);
+    setReoptimizing(false);
   };
 
   const deleteStop = (stopId) => {
