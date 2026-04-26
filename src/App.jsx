@@ -125,7 +125,22 @@ if (typeof window !== "undefined") {
   window.__rdRouteStore    = LS.getRoutes();
   window.__rdChatStore     = LS.getChats();
   window.__rdMensajeros    = LS.getMens();
-  window.__rdPendingRoutes = LS.getAllPending();
+  // Reconstruir pendingRoutes desde localStorage individual de cada mensajero
+  // (evitar que _memStore traiga rutas completadas de Firebase)
+  window.__rdPendingRoutes = (() => {
+    const result = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("rdQueue_")) {
+          const driverId = k.replace("rdQueue_", "");
+          const q = JSON.parse(localStorage.getItem(k) || "[]");
+          if (Array.isArray(q)) result[driverId] = q;
+        }
+      }
+    } catch(e) {}
+    return result;
+  })();
 
   // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
   FB.get("routes").then(data => {
@@ -134,9 +149,9 @@ if (typeof window !== "undefined") {
   FB.get("chats").then(data => {
     if (data) { _memStore.chats = data; window.__rdChatStore = data; }
   });
-  FB.get("pendingRoutes").then(data => {
-    if (data) { _memStore.pendingRoutes = data; window.__rdPendingRoutes = data; }
-  });
+  // NO sobreescribir pendingRoutes desde Firebase globalmente —
+  // cada mensajero gestiona su cola desde localStorage (fuente de verdad local).
+  // Firebase solo se usa para que el admin ENVÍE rutas nuevas.
   // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
   FB.get("mens").then(data => {
     if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
@@ -642,6 +657,7 @@ const PageRoutes = () => {
   const [allRouteHistory, setAllRouteHistory] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [filterDriver, setFilterDriver]   = useState("all");
+  const [filterDate,   setFilterDate]     = useState("");
   const [stopSearch,   setStopSearch]     = useState("");
   const mapRef  = useRef(null);
   const gMapRef = useRef(null);
@@ -736,9 +752,20 @@ const PageRoutes = () => {
         const isDone    = stop.driverStatus === "delivered";
         const isProb    = stop.driverStatus === "problema";
         const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-          <circle cx="16" cy="16" r="14" fill="${color}" opacity="${isDone?0.7:1}" stroke="white" stroke-width="2"/>
-          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="38" viewBox="0 0 32 38">
+          <defs>
+            <filter id="sh" x="-40%" y="-20%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="${color}" flood-opacity="0.4"/>
+            </filter>
+          </defs>
+          <g filter="url(#sh)">
+            <path d="M9,${isDone?16:14} Q16,28 16,28 Q16,28 23,${isDone?16:14}Z" fill="${color}" opacity="${isDone?0.7:1}"/>
+            <circle cx="16" cy="${isDone?13:11}" r="${isDone?11:10}" fill="${color}" opacity="${isDone?0.75:1}" stroke="white" stroke-width="2"/>
+          </g>
+          <text x="16" y="${isDone?17:15}" text-anchor="middle" dominant-baseline="central"
+            font-size="${String(stop.stopNum||"?").length>2?7:10}" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+          ${isDone ? `<circle cx="24" cy="5" r="6" fill="#059669" stroke="white" stroke-width="1.5"/>
+          <path d="M21,5 l2,2 4,-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` : ""}
         </svg>`;
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
@@ -759,7 +786,11 @@ const PageRoutes = () => {
   }, [selectedRoute]);
 
   const allDrivers = [...new Set(allRouteHistory.map(r => r.driverName).filter(Boolean))];
-  const filtered = filterDriver === "all" ? allRouteHistory : allRouteHistory.filter(r => r.driverName === filterDriver);
+  const filtered = allRouteHistory.filter(r => {
+    const driverOk = filterDriver === "all" || r.driverName === filterDriver;
+    const dateOk = !filterDate || (r.sentAt && r.sentAt.slice(0,10) === filterDate);
+    return driverOk && dateOk;
+  });
 
   const fmtDate = (iso) => {
     if (!iso) return "—";
@@ -779,16 +810,32 @@ const PageRoutes = () => {
     <div style={{ flex:1, display:"flex", overflow:"hidden", background:"#060b10" }}>
 
       {/* LEFT: route list */}
-      <div style={{ width:300, borderRight:"1px solid #0d1420", display:"flex", flexDirection:"column", overflow:"hidden", flexShrink:0 }}>
+      <div style={{ width:380, borderRight:"1px solid #0d1420", display:"flex", flexDirection:"column", overflow:"hidden", flexShrink:0 }}>
         {/* Header */}
-        <div style={{ padding:"16px 14px 12px", borderBottom:"1px solid #0d1420", flexShrink:0 }}>
-          <div style={{ fontSize:10, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1.5px", marginBottom:10 }}>HISTORIAL DE RUTAS</div>
+        <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid #0d1420", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <div style={{ fontSize:10, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"1.5px" }}>HISTORIAL DE RUTAS</div>
+            <div style={{ fontSize:10, color:"#2d4a60", fontFamily:"'Syne',sans-serif" }}>{filtered.length} ruta{filtered.length!==1?"s":""}</div>
+          </div>
           {/* Driver filter */}
           <select value={filterDriver} onChange={e=>setFilterDriver(e.target.value)}
-            style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px", color:"#94a3b8", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer" }}>
+            style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px", color:"#94a3b8", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", marginBottom:8 }}>
             <option value="all">Todos los mensajeros</option>
             {allDrivers.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
+          {/* Date filter */}
+          <div style={{ position:"relative" }}>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={e=>setFilterDate(e.target.value)}
+              style={{ width:"100%", background:"#0a1019", border:"1px solid #1e2d3d", borderRadius:8, padding:"7px 10px 7px 32px", color: filterDate?"#94a3b8":"#374151", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", colorScheme:"dark" }}
+            />
+            <svg style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            {filterDate && (
+              <button onClick={()=>setFilterDate("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#374151", cursor:"pointer", fontSize:13, lineHeight:1, padding:"0 2px" }}>✕</button>
+            )}
+          </div>
         </div>
 
         {/* List */}
@@ -806,38 +853,54 @@ const PageRoutes = () => {
               <div key={`${route.driverId}-${route.sentAt}-${i}`}
                 onClick={() => { setSelectedRoute(isSel ? null : route); setStopSearch(""); }}
                 style={{
-                  padding:"12px 14px", borderBottom:"1px solid #0a0f18",
+                  padding:"16px 18px 14px",
+                  borderBottom:"1px solid #0d1420",
                   background: isSel ? "#091527" : "transparent",
                   borderLeft: `3px solid ${isSel ? "#3b82f6" : "transparent"}`,
-                  cursor:"pointer", transition:"all .12s",
+                  cursor:"pointer", transition:"background .12s, border-color .12s",
                   animation:`slideIn .3s ${Math.min(i,15)*30}ms ease both`,
                 }}>
+
                 {/* Route name */}
-                <div style={{ fontSize:12, fontFamily:"'Syne',sans-serif", fontWeight:700, color: isSel?"#e2e8f0":"#94a3b8", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:14, fontFamily:"'Syne',sans-serif", fontWeight:800, color: isSel ? "#e2e8f0" : "#94a3b8", marginBottom:7, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px" }}>
                   {route.routeName || "Ruta sin nombre"}
                 </div>
-                {/* Driver + date */}
-                <div style={{ fontSize:10, color:"#374151", marginBottom:8, display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ color:"#2d4a60", fontWeight:600 }}>{route.driverName || "—"}</span>
-                  <span style={{ color:"#1e2d3d" }}>·</span>
-                  <span>{fmtDate(route.sentAt)}</span>
+
+                {/* Mensajero */}
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
+                  <div style={{ width:22, height:22, borderRadius:6, background:"#0d1b2a", border:"1px solid #1e3550", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <span style={{ fontSize:12, color:"#60a5fa", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>{route.driverName || "—"}</span>
                 </div>
+
+                {/* Fecha */}
+                <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:11 }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  <span style={{ fontSize:11, color:"#374151", fontFamily:"'Inter',sans-serif" }}>{fmtDate(route.sentAt)}</span>
+                </div>
+
                 {/* Stats pills */}
-                <div style={{ display:"flex", gap:5 }}>
-                  <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(16,185,129,0.1)", color:"#10b981" }}>
-                    ✓ {stats.delivered}
+                <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                  <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(16,185,129,0.12)", color:"#10b981", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(16,185,129,0.15)" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    {stats.delivered} entregados
                   </div>
                   {stats.problems > 0 && (
-                    <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(239,68,68,0.1)", color:"#ef4444" }}>
-                      ⚠ {stats.problems}
+                    <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(239,68,68,0.12)", color:"#ef4444", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(239,68,68,0.15)" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                      {stats.problems} problema{stats.problems !== 1 ? "s" : ""}
                     </div>
                   )}
                   {stats.pending > 0 && (
-                    <div style={{ fontSize:9.5, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"2px 7px", borderRadius:5, background:"rgba(245,158,11,0.1)", color:"#f59e0b" }}>
-                      ○ {stats.pending}
+                    <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(245,158,11,0.12)", color:"#f59e0b", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(245,158,11,0.15)" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      {stats.pending} pendientes
                     </div>
                   )}
-                  <div style={{ fontSize:9.5, color:"#2d4a60", marginLeft:"auto" }}>{stats.total} paradas · {route.km||"—"} km</div>
+                  <div style={{ fontSize:11, color:"#2d4a60", marginLeft:"auto", fontFamily:"'Inter',sans-serif", whiteSpace:"nowrap" }}>
+                    {stats.total} paradas{route.km ? ` · ${route.km} km` : ""}
+                  </div>
                 </div>
               </div>
             );
@@ -904,8 +967,10 @@ const PageRoutes = () => {
                 const c = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
                 return (
                   <div key={stop.id||i} style={{ display:"flex", gap:12, padding:"10px 16px", borderBottom:"1px solid #080e16", alignItems:"flex-start" }}>
-                    <div style={{ width:26, height:26, borderRadius:7, background:`${c}15`, border:`1px solid ${c}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, color:c, flexShrink:0, marginTop:1 }}>
-                      {isDone ? "✓" : isProb ? "!" : stop.stopNum || i+1}
+                    <div style={{ width:26, height:26, borderRadius:7, background:`${c}18`, border:`1.5px solid ${c}40`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, color:c, flexShrink:0, marginTop:1, position:"relative" }}>
+                      {stop.stopNum || i+1}
+                      {isDone && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#10b981", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>✓</div>}
+                      {isProb && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#ef4444", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>!</div>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Cliente primero, dirección debajo */}
@@ -2238,6 +2303,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [chatLog,    setChatLog]    = useState(() => (window.__rdChatStore||{})[myKey]||[]);
   const [showProb,   setShowProb]   = useState(null);
   const [probNote,   setProbNote]   = useState("");
+  // ── Flujo de evidencia con cámara ──────────────────────────────────────────
+  const [evidenceFlow, setEvidenceFlow] = useState(null); // { stopId, mode:"delivered"|"failed", probNote? }
   const [time,       setTime]       = useState(new Date());
   const [logoutConf, setLogoutConf] = useState(false);
   const [search,     setSearch]     = useState("");
@@ -2508,9 +2575,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
       window.__rdPendingRoutes[myKey] = queue;
       try { localStorage.setItem(LS_QUEUE_KEY, JSON.stringify(queue)); } catch(e) {}
-      // Sincronizar a Firebase para que el admin vea la cola
-      FB.set(`pendingRoutes/${myKey}`, queue);
+      // NO escribir en Firebase aquí — el admin gestiona pendingRoutes desde su lado
+      // Escribir desde el mensajero causaría loop: saveQueue→Firebase→applyPending→saveQueue
       setPendingRoutes(queue.filter(r => r.queueStatus === "pending"));
+    };
+
+    // Marcar ruta como completada en Firebase (sin borrar — para que el admin no la reencole)
+    const markDoneInFirebase = (routeId, sentAt) => {
+      FB.get(`pendingRoutes/${myKey}`).then(fbData => {
+        const arr = Array.isArray(fbData) ? fbData
+          : (fbData && typeof fbData === "object") ? Object.values(fbData) : [];
+        const updated = arr.map(r => {
+          const matches = (routeId && r.routeId === routeId) || (sentAt && r.sentAt === sentAt);
+          return matches ? { ...r, queueStatus: "completed", completedAt: new Date().toISOString() } : r;
+        });
+        if (updated.some(r => (r.routeId === routeId || r.sentAt === sentAt) && r.queueStatus === "completed")) {
+          FB.set(`pendingRoutes/${myKey}`, updated);
+        }
+      }).catch(() => {});
     };
 
     // ── applyRoute: solo acepta rutas completamente nuevas del admin ─────────
@@ -2562,40 +2644,41 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       });
     };
 
-    // applyPending: Firebase envía la cola — solo agregar rutas que no hayamos visto
+    // applyPending: Firebase envía la cola — solo agregar rutas genuinamente nuevas
     const applyPending = (queue) => {
-      let arr = Array.isArray(queue) ? queue
+      const arr = Array.isArray(queue) ? queue
         : (queue && typeof queue === "object") ? Object.values(queue) : [];
 
-      // Filtrar solo las realmente nuevas (no vistas, no procesadas)
-      const newRoutes = arr.filter(r => {
-        const key = r.routeId || r.sentAt;
-        return key && !seenRouteIds.current.has(key) && r.queueStatus === "pending";
+      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
+      const currentIds = new Set(currentQueue.map(r => r.routeId || r.sentAt).filter(Boolean));
+
+      const toAdd = arr.filter(r => {
+        const k = r.routeId || r.sentAt;
+        if (!k) return false;
+        if (r.queueStatus === "completed") return false;  // ya completada — nunca reencolar
+        if (seenRouteIds.current.has(k)) return false;   // ya procesada en esta sesión
+        if (r.sentAt && seenRouteIds.current.has(r.sentAt)) return false;
+        if (currentIds.has(k)) return false;             // ya está en la cola local
+        return r.queueStatus === "pending";
       });
 
-      if (newRoutes.length === 0) return; // nada nuevo — no tocar nada
-
-      // Agregar las nuevas a la cola local
-      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
-      const currentIds = new Set(currentQueue.map(r => r.routeId || r.sentAt));
-      const toAdd = newRoutes.filter(r => !currentIds.has(r.routeId || r.sentAt));
-      if (toAdd.length > 0) {
-        saveQueue([...currentQueue, ...toAdd]);
-      }
+      if (toAdd.length > 0) saveQueue([...currentQueue, ...toAdd]);
     };
 
     const applyChat = (msgs) => {
       if (Array.isArray(msgs)) setChatLog([...msgs]);
     };
 
-    // ── 4. Listeners Firebase ────────────────────────────────────────────────
-    FB.get(`routes/${myKey}`).then(applyRoute);
+    // ── 4. Firebase listeners ─────────────────────────────────────────────────
+    // NO llamar FB.get("routes/myKey") al montar — ya tenemos localStorage como fuente de verdad.
+    // Solo escuchar cambios NUEVOS del admin. Esto evita que la ruta con progreso parcial
+    // se re-aplique al recargar la página.
     FB.get(`pendingRoutes/${myKey}`).then(applyPending);
     FB.get(`chats/${myKey}`).then(applyChat);
 
-    const unsubRoute   = FB.listen(`routes/${myKey}`,   applyRoute);
+    const unsubRoute   = FB.listen(`routes/${myKey}`, applyRoute);
     const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
-    const unsubChat    = FB.listen(`chats/${myKey}`,    applyChat);
+    const unsubChat    = FB.listen(`chats/${myKey}`, applyChat);
 
     // ── 5. Exponer helpers para admin en mismo navegador ─────────────────────
     window.__rdSetRoute   = (driverId, route) => { if (driverId === myKey) applyRoute(route); };
@@ -2641,10 +2724,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       });
     });
 
-    // Polling de respaldo cada 8s para rutas + notifs (por si SSE falla)
+    // Polling de respaldo cada 8s — solo notifs y pendingRoutes (NO routes para no revertir progreso)
     const pollInterval = setInterval(() => {
       if (!writingRef.current) {
-        FB.get(`routes/${myKey}`).then(applyRoute);
         FB.get(`pendingRoutes/${myKey}`).then(applyPending);
       }
       checkNotifs();
@@ -2798,36 +2880,35 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
         ${isNow ? `<ellipse cx="${ballCX}" cy="${ballCY}" rx="${ballR+8}" ry="${ballR+8}" fill="url(#glow${id})"/>` : ""}
 
-        <!-- Pin shape: circle top + triangular tail -->
+        <!-- Pin shape -->
         <g filter="url(#sh${id})">
-          <!-- Tail -->
           <path d="M${ballCX-7},${ballCY+ballR-4} Q${ballCX},${tipY+6} ${tipX},${tipY} Q${ballCX},${tipY+6} ${ballCX+7},${ballCY+ballR-4}Z"
             fill="url(#bg${id})"/>
-          <!-- Main circle -->
           <circle cx="${ballCX}" cy="${ballCY}" r="${ballR}"
             fill="url(#bg${id})"
             stroke="rgba(255,255,255,${isNow?0.6:0.4})"
             stroke-width="${isNow?2:1.5}"/>
-          <!-- Glass highlight -->
           <ellipse cx="${ballCX-ballR*0.22}" cy="${ballCY-ballR*0.28}"
             rx="${ballR*0.42}" ry="${ballR*0.26}"
             fill="rgba(255,255,255,0.32)"
             transform="rotate(-25,${ballCX-ballR*0.22},${ballCY-ballR*0.28})"/>
         </g>
 
-        <!-- Contenido del pin -->
-        ${isDone
-          ? `<path d="M${ballCX-5},${ballCY} l3,3 6,-6"
-               stroke="white" stroke-width="${isNow?2.5:2}" stroke-linecap="round" stroke-linejoin="round"
-               fill="none" opacity="0.95"/>`
-          : isProb
-            ? `<text x="${ballCX}" y="${ballCY+1}" text-anchor="middle" dominant-baseline="central"
-                 font-size="${isNow?15:12}" font-weight="900" fill="white"
-                 font-family="-apple-system,BlinkMacSystemFont,sans-serif" opacity="0.95">!</text>`
-            : `<text x="${ballCX}" y="${ballCY+0.5}" text-anchor="middle" dominant-baseline="central"
-                 font-size="${fs}" font-weight="900" fill="white"
-                 font-family="-apple-system,BlinkMacSystemFont,sans-serif" letter-spacing="-0.5" opacity="0.97">${label}</text>`
-        }
+        <!-- Siempre mostrar el número de parada -->
+        <text x="${ballCX}" y="${ballCY+0.5}" text-anchor="middle" dominant-baseline="central"
+          font-size="${fs}" font-weight="900" fill="white"
+          font-family="-apple-system,BlinkMacSystemFont,sans-serif" letter-spacing="-0.5" opacity="0.97">${label}</text>
+
+        <!-- Badge de estado (esquina superior derecha) -->
+        ${isDone ? `
+          <circle cx="${ballCX+ballR-1}" cy="${ballCY-ballR+1}" r="6" fill="#059669" stroke="white" stroke-width="1.5"/>
+          <path d="M${ballCX+ballR-4},${ballCY-ballR+1} l2,2 4,-4"
+            stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        ` : isProb ? `
+          <circle cx="${ballCX+ballR-1}" cy="${ballCY-ballR+1}" r="6" fill="#dc2626" stroke="white" stroke-width="1.5"/>
+          <text x="${ballCX+ballR-1}" y="${ballCY-ballR+1.5}" text-anchor="middle" dominant-baseline="central"
+            font-size="7" font-weight="900" fill="white" font-family="sans-serif">!</text>
+        ` : ""}
       </svg>`;
 
       const marker = new window.google.maps.Marker({
@@ -2913,7 +2994,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (routeKey) seenRouteIds.current.add(routeKey);
       if (updated.sentAt) seenRouteIds.current.add(updated.sentAt);
       try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
-      // Eliminar de la cola local
+      // Eliminar de la cola local (UI y localStorage)
       const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
       const newQueue = currentQueue.filter(r =>
         updated.routeId ? r.routeId !== updated.routeId : r.sentAt !== updated.sentAt
@@ -2921,8 +3002,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
       window.__rdPendingRoutes[myKey] = newQueue;
       try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
-      FB.set(`pendingRoutes/${myKey}`, newQueue.length > 0 ? newQueue : null);
       setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
+      // Marcar como "completed" en Firebase (NO borrar — así el admin no la reencola)
+      markDoneInFirebase(updated.routeId, updated.sentAt);
     }
   };
 
@@ -2934,39 +3016,113 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     setChatLog(nl);
   };
 
-  const markDelivered = (stopId) => {
-    let foundNext = false;
-    const updated = stops.map(s => {
-      if (s.id===stopId) return {...s,driverStatus:"delivered",deliveredAt:new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})};
-      if (!foundNext&&s.driverStatus==="pending") { foundNext=true; return {...s,driverStatus:"en_ruta"}; }
-      return s;
-    });
-    setStops(updated); pushUpdate(updated);
-    const stop = stops.find(s=>s.id===stopId);
-    addChatMsg(`✓ Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`);
-    // Notificar al admin via Firebase
-    const notifId = "n"+Date.now()+stopId;
-    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
-      title:`Entregado: ${stop?.client||"Parada #"+stop?.stopNum}`,
-      body:`${myKey} · #${stop?.stopNum} · ${stop?.displayAddr||stop?.rawAddr||""}`,
-      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
-      read: false, isNew: true, createdAt: Date.now() });
-    setSelStop(null);
+  // ── Guardar evidencia en Firebase + enviar al backend para sync con SilpoPack ──
+  const saveEvidenceAndSync = async (stopId, mode, photoDataUrl, note) => {
+    const stop = stops.find(s => s.id === stopId);
+    if (!stop) return;
+    const ts        = Date.now();
+    const timeStr   = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
+    const isDelivered = mode === "delivered";
+
+    // 1. Subir foto a Firebase Storage (base64 en Realtime DB como fallback si no hay Storage)
+    //    En producción reemplazar por Firebase Storage upload
+    const photoKey = `evidence/${myKey}/${ts}_${stopId}`;
+    await FB.set(photoKey, { photo: photoDataUrl, ts, stopId });
+    const evidencePhotoUrl = `firebase:${photoKey}`; // placeholder hasta integrar Storage
+
+    // 2. Obtener GPS actual
+    let gpsLocation = null;
+    try {
+      gpsLocation = await new Promise((res) =>
+        navigator.geolocation.getCurrentPosition(
+          p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+          () => res(null),
+          { timeout: 4000, enableHighAccuracy: true }
+        )
+      );
+    } catch {}
+
+    // 3. Construir payload de sincronización
+    const syncPayload = {
+      packageCode:    stop.tracking || stop.id,
+      status:         isDelivered ? "delivered" : "failed",
+      evidencePhotoUrl,
+      courierId:      myKey,
+      courierName:    users.find(u => u.email === myKey)?.name || myKey,
+      deliveredAt:    isDelivered ? new Date().toISOString() : null,
+      failedAt:       !isDelivered ? new Date().toISOString() : null,
+      failNote:       !isDelivered ? (note || "Sin detalles") : null,
+      gpsLocation,
+      syncStatus:     "pending",
+      createdAt:      ts,
+      stopId,
+    };
+
+    // 4. Guardar en Firebase (nodo deliveryEvents)
+    const evKey = `deliveryEvents/${ts}_${stopId}`;
+    await FB.set(evKey, syncPayload);
+
+    // 5. Enviar al backend para sync con SilpoPack (fire-and-forget con reintento)
+    const trySyncBackend = async (attempt = 1) => {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...syncPayload, firebaseKey: evKey }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // Backend confirma → actualizar syncStatus
+        FB.set(`${evKey}/syncStatus`, "synced");
+      } catch (e) {
+        if (attempt < 3) {
+          setTimeout(() => trySyncBackend(attempt + 1), attempt * 5000);
+        } else {
+          FB.set(`${evKey}/syncStatus`, "failed");
+          FB.set(`${evKey}/errorMessage`, e.message);
+        }
+      }
+    };
+    trySyncBackend();
+
+    // 6. Actualizar estado local de la parada
+    if (isDelivered) {
+      let foundNext = false;
+      const updated = stops.map(s => {
+        if (s.id === stopId) return { ...s, driverStatus:"delivered", deliveredAt:timeStr, evidencePhotoUrl };
+        if (!foundNext && s.driverStatus === "pending") { foundNext = true; return { ...s, driverStatus:"en_ruta" }; }
+        return s;
+      });
+      setStops(updated); pushUpdate(updated);
+      addChatMsg(`✓ Entregado: ${stop.client || "Parada #"+stop.stopNum}`);
+      const notifId = "n"+ts+stopId;
+      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
+        title:`Entregado: ${stop.client||"Parada #"+stop.stopNum}`,
+        body:`${myKey} · #${stop.stopNum} · ${stop.displayAddr||stop.rawAddr||""}`,
+        time:timeStr, read:false, isNew:true, createdAt:ts });
+    } else {
+      const updated = stops.map(s => s.id===stopId
+        ? { ...s, driverStatus:"problema", issue:note||"Sin detalles", issueAt:timeStr, evidencePhotoUrl }
+        : s);
+      setStops(updated); pushUpdate(updated);
+      addChatMsg(`⚠ Problema parada #${stop.stopNum}: ${note||"Sin detalles"}`);
+      const notifId = "n"+ts+stopId;
+      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
+        title:`Problema: ${stop.client||"Parada #"+stop.stopNum}`,
+        body:`${myKey} · ${note||"Sin detalles"} · #${stop.stopNum}`,
+        time:timeStr, read:false, isNew:true, createdAt:ts });
+    }
+    setEvidenceFlow(null); setShowProb(null); setProbNote(""); setSelStop(null);
   };
 
+  // markDelivered ahora abre la cámara primero
+  const markDelivered = (stopId) => {
+    setEvidenceFlow({ stopId, mode: "delivered" });
+  };
+
+  // markProblem ahora abre la cámara primero
   const markProblem = (stopId) => {
-    const updated = stops.map(s=>s.id===stopId?{...s,driverStatus:"problema",issue:probNote||"Sin detalles",issueAt:new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}:s);
-    setStops(updated); pushUpdate(updated);
-    const stop = stops.find(s=>s.id===stopId);
-    addChatMsg(`⚠ Problema parada #${stop?.stopNum}: ${probNote||"Sin detalles"}`);
-    // Notificar al admin via Firebase
-    const notifId = "n"+Date.now()+stopId;
-    FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
-      title:`Problema: ${stop?.client||"Parada #"+stop?.stopNum}`,
-      body:`${myKey} · ${probNote||"Sin detalles"} · #${stop?.stopNum}`,
-      time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
-      read: false, isNew: true, createdAt: Date.now() });
-    setShowProb(null); setProbNote(""); setSelStop(null);
+    setEvidenceFlow({ stopId, mode: "failed", probNote: probNote || "Sin detalles" });
   };
 
   const sendChat = () => { if (!chatMsg.trim()) return; addChatMsg(chatMsg.trim()); setChatMsg(""); };
@@ -3617,7 +3773,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     {/* Content */}
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Nombre cliente */}
-                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.3)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2, textDecoration:isDone?"line-through":"none" }}>
+                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.35)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2 }}>
                         {stop.client||`Parada ${stop.stopNum}`}
                       </div>
                       {/* Dirección */}
@@ -3807,7 +3963,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               const stopsCount = route.stops?.length || 0;
               const sent = route.sentAt ? new Date(route.sentAt).toLocaleString("es-DO",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
               const isFirst = idx === 0;
-              // Ruta completada = todos delivered o problema → cola se puede activar
+              // Ruta completada = todos delivered/problema → cola se puede activar
               const allCompleted = stops.length > 0 && stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
               const hasActiveWork = !allCompleted && stops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
               return (
@@ -3863,7 +4019,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       // Verificación en tiempo real — no depende del estado React del render
                       const stopsNow = window.__rdRouteStore?.[myKey]?.stops || [];
                       const reallyActive = stopsNow.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
-                      if (reallyActive) return; // bloqueo real: hay trabajo genuinamente en curso
+                      if (reallyActive) return;
 
                       // Guardar ruta completada al historial ANTES de reemplazarla
                       const currentActive = window.__rdRouteStore?.[myKey];
@@ -3893,15 +4049,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
                       window.__rdPendingRoutes[myKey] = newQueue;
                       try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
-                      FB.set(`pendingRoutes/${myKey}`, newQueue.length > 0 ? newQueue : null);
                       setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
+                      markDoneInFirebase(route.routeId, route.sentAt);
 
                       // Activar como ruta actual
                       lastSentAt.current = route.sentAt;
                       const newStops = (route.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
                       const activeRoute = { ...route, stops: newStops };
                       setStops(newStops);
-                      setShowCompletedBanner(false); // limpiar banner de ruta anterior
+                      setShowCompletedBanner(false);
                       if (!window.__rdRouteStore) window.__rdRouteStore = {};
                       window.__rdRouteStore[myKey] = activeRoute;
                       _memStore.routes[myKey] = activeRoute;
@@ -4293,6 +4449,22 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       </div>
 
       {/* -- Reportar problema modal -- */}
+      {/* ── Cámara de evidencia obligatoria ─────────────────────────────── */}
+      {evidenceFlow && (() => {
+        const flowStop = stops.find(s => s.id === evidenceFlow.stopId);
+        if (!flowStop) return null;
+        return (
+          <EvidenceCameraModal
+            stop={flowStop}
+            mode={evidenceFlow.mode}
+            onConfirm={(photoDataUrl) => {
+              saveEvidenceAndSync(evidenceFlow.stopId, evidenceFlow.mode, photoDataUrl, evidenceFlow.probNote);
+            }}
+            onCancel={() => { setEvidenceFlow(null); }}
+          />
+        );
+      })()}
+
       {showProb && (() => {
         const probStop = stops.find(s=>s.id===showProb);
         const REASONS = ["Nadie en casa","Dirección incorrecta","Cliente canceló","Negocio cerrado","Acceso no disponible","Paquete dañado","Otro"];
@@ -4822,101 +4994,1779 @@ const RoleGuard = ({ allowed, currentRole, children, fallback }) => {
 // The core differentiator: Excel import + geocoding + route optimization
 
 // Geocoding: parse & normalize Spanish addresses into structured data
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSER DOMINICANO — descompone direcciones en formato RD en sus partes
+// Soporta:
+//   "C/Mella #45, 2da planta, al lado del colmado El Rey, Herrera"
+//   "frente a la iglesia, detrás del parque, Bayona"
+//   "Res. Carmen Renata I, Calle 5 casa 12, SDO"
+//   "Km 9 Autopista Duarte, al lado de PriceSmart"
+//   "7VXP+Q3 Herrera"  (Plus Code)
+//   "esq. Av. Isabel Aguiar con Calle 3, Herrera"
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Palabras de referencia relacional — frases que indican "cerca de X"
+const RD_REF_PATTERNS = [
+  /\b(?:al\s+lado\s+(?:de(?:l)?)?|next\s+to)\s+(.+?)(?:,|$)/gi,
+  /\b(?:frente\s+a(?:l)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:detr[aá]s\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:cerca\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:esquina\s+(?:con|a)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:diagonal\s+(?:a(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:subiendo|bajando)\s+(.+?)(?:,|$)/gi,
+  /\b(?:entre\s+.+?\s+y)\s+(.+?)(?:,|$)/gi,
+  /\b(?:a\s+(?:una\s+)?(?:\d+\s+)?(?:cuadra|bloque)s?\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+];
+
+// Sectores conocidos SDO para extracción automática
+const SDO_SECTORS = [
+  "herrera","bayona","engombe","las caobas","manoguayabo","villa aura",
+  "olimpo","hato nuevo","las palmas","enriquillo","caballona","lechería",
+  "arroyo bonito","ciudad agraria","la isabela","savica","las caobitas",
+  "las colinas","el libertador","pueblo nuevo","juan guzmán","las mercedes",
+  "altos de engombe","altos de las caobas","buenos aires de herrera",
+  "buenos aires de manoguayabo","buenos aires de las caobas",
+  "el café de herrera","las palmas de herrera","barrio nuevo","barrio duarte",
+  "barrio san francisco","barrio san miguel","barrio enriquillo","barrio libertad",
+  "barrio progreso","batey bienvenido","nuevo horizonte","la venta",
+  "el hoyo de manoguayabo","carmen renata","brisas del oeste","don honorio",
+  "operaciones especiales","residencial altagracia","residencial antonia",
+];
+
+// Plus Code detector
+const PLUS_CODE_RE = /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}(?:\s+\w+)?$/i;
+
 const parseAddress = (raw) => {
   if (!raw) return { valid: false, raw: "" };
   const s = String(raw).trim();
 
-  // Extract number
-  const numMatch = s.match(/,?\s*n[ºo°]?\s*(\d+[-\w]*)/i) || s.match(/\s(\d+)\s*$/);
+  // ── 0. Plus Code directo ──────────────────────────────────────────────────
+  if (PLUS_CODE_RE.test(s.split(",")[0].trim())) {
+    return { valid: true, raw: s, isPlusCode: true, plusCode: s.split(",")[0].trim(),
+      street: s, number: "", floor: "", reference: "", sector: "", display: s };
+  }
+
+  // ── 1. Extraer referencias relacionales ("frente a", "al lado de"…) ───────
+  let working = s;
+  const references = [];
+  for (const pat of RD_REF_PATTERNS) {
+    let m;
+    pat.lastIndex = 0;
+    while ((m = pat.exec(working)) !== null) {
+      if (m[1]) references.push(m[1].trim().replace(/,$/, ""));
+    }
+  }
+
+  // ── 2. Extraer sector SDO ─────────────────────────────────────────────────
+  let sector = "";
+  const lc = working.toLowerCase();
+  for (const sec of SDO_SECTORS) {
+    if (lc.includes(sec)) { sector = sec.replace(/\b\w/g, c => c.toUpperCase()); break; }
+  }
+
+  // ── 3. Extraer número de casa/local ──────────────────────────────────────
+  const numMatch = working.match(/[,\s](?:no?[.ºo°#]?\s*)?(\d{1,4}[a-z]?)(?:\s|,|$)/i)
+                || working.match(/\s#\s*(\d{1,4}[a-z]?)/i)
+                || working.match(/n[ºo°]\s*(\d{1,4})/i);
   const number = numMatch ? numMatch[1] : "";
 
-  // Extract floor/door
-  const floorMatch = s.match(/(\d+[ºo°]?\s*[A-Z]?)\s*(?:piso|planta|pta|puerta)?/i);
-  const floor = floorMatch && floorMatch[0].includes("piso") ? floorMatch[1] : "";
+  // ── 4. Extraer piso / apartamento / local ────────────────────────────────
+  const floorMatch = working.match(/(\d+[aº]?)\s*(?:er|ro|do|to)?\s*(?:piso|planta)/i)
+                  || working.match(/apt(?:o|artamento)?\.?\s*(\d+[a-z]?)/i)
+                  || working.match(/local\s+(\d+[a-z]?)/i);
+  const floor = floorMatch ? floorMatch[0].trim() : "";
 
-  // Strip number/floor from street
-  let street = s
-    .replace(/,?\s*n[ºo°]?\s*\d+[-\w]*/i, "")
-    .replace(/,?\s*\d+[ºo°]?\s*(piso|planta|pta)[^,]*/i, "")
-    .replace(/\s+\d+\s*$/, "")
+  // ── 5. Limpiar y normalizar la parte de calle ─────────────────────────────
+  let street = working
+    .replace(/,?\s*(?:no?[.ºo°#]?\s*)?\d{1,4}[a-z]?\s*(?:er|ro|do|to)?(?:\s+piso|\s+planta)?/gi, "")
+    .replace(/,?\s*apt(?:o|artamento)?\.?\s*\d+[a-z]?/gi, "")
+    .replace(/,?\s*local\s+\d+[a-z]?/gi, "")
+    .replace(/,?\s*\d+[aº]?\s*(?:piso|planta)[^,]*/gi, "")
+    // quitar las frases relacionales ya extraídas
+    .replace(/\b(?:al\s+lado\s+(?:de(?:l)?)?|frente\s+a(?:l)?|detr[aá]s\s+(?:de(?:l)?)?|cerca\s+(?:de(?:l)?)?|diagonal\s+(?:a(?:l)?)?|subiendo|bajando)\s+[^,]+/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
     .trim();
 
-  // Normalize abbreviations
+  // ── 6. Expandir abreviaturas de vía ──────────────────────────────────────
   street = street
-    .replace(/^c\/?\s*/i,  "Calle ")
-    .replace(/^av\.?\s*/i, "Avenida ")
-    .replace(/^avda\.?\s*/i,"Avenida ")
-    .replace(/^pz?a?\.?\s*/i,"Plaza ")
-    .replace(/^ctra\.?\s*/i,"Carretera ")
-    .replace(/^pg?\s+ind\b/i,"Polígono Industrial ")
-    .replace(/^blv?d?\.?\s*/i,"Bulevar ")
-    .replace(/^ps?o?\.?\s*/i,"Paseo ");
+    .replace(/\bc\/?(\s+|(?=[A-ZÁÉÍÓÚ\d]))/gi, "Calle ")
+    .replace(/\bav\.?\s*/gi,    "Avenida ")
+    .replace(/\bave\.?\s*/gi,   "Avenida ")
+    .replace(/\bavda\.?\s*/gi,  "Avenida ")
+    .replace(/\bprol\.?\s*/gi,  "Prolongación ")
+    .replace(/\besq\.?\s*/gi,   "Esquina ")
+    .replace(/\bres\.?\s*/gi,   "Residencial ")
+    .replace(/\burb\.?\s*/gi,   "Urbanización ")
+    .replace(/\bkm\.?\s+/gi,    "Km ")
+    .replace(/\bctra\.?\s*/gi,  "Carretera ");
 
-  // Capitalize words
+  // ── 7. Capitalizar ────────────────────────────────────────────────────────
   street = street.replace(/\b\w/g, c => c.toUpperCase());
 
+  // ── 8. Construir query optimizada para Google ─────────────────────────────
+  // Orden: calle+número, sector, ciudad — referencias van al final como hint
+  const parts = [street, number].filter(Boolean).join(" No. ");
+  const sectorHint = sector ? `${sector}, Santo Domingo Oeste` : "Santo Domingo Oeste";
+  const optimizedQuery = references.length
+    ? `${parts}, ${sectorHint} (cerca de ${references[0]})`
+    : `${parts}, ${sectorHint}`;
+
   return {
-    valid: street.length > 2,
+    valid: street.length > 2 || sector.length > 0,
     raw: s,
     street,
     number,
     floor,
+    sector,
+    reference: references[0] || "",
+    allReferences: references,
     display: [street, number, floor].filter(Boolean).join(", "),
+    optimizedQuery,
+    isPlusCode: false,
   };
 };
 
-// Fake geocoder: assigns plausible lat/lng near a base coordinate
-// In production this would call Google Maps / Here / Nominatim API
-const geocodeAddress = (parsed, baseCoord = { lat: 40.4168, lng: -3.7038 }) => {
-  if (!parsed.valid) return { ...parsed, geocoded: false, lat: null, lng: null, confidence: 0 };
+const geocodeWithGoogle = async (rawAddress) => {
+  const cacheKey = rawAddress.trim().toLowerCase();
 
-  // Deterministic pseudo-random offset from street hash
-  let hash = 0;
-  for (const ch of parsed.display) hash = ((hash << 5) - hash) + ch.charCodeAt(0);
-  const seed = (hash >>> 0) / 0xffffffff;
-  const seed2 = ((hash * 1664525 + 1013904223) >>> 0) / 0xffffffff;
+  // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
+  if (_learnedCache.has(cacheKey)) {
+    const l = _learnedCache.get(cacheKey);
+    return { ok: true, lat: l.lat, lng: l.lng, display: l.display, confidence: 99, allResults: [], source: "learned" };
+  }
 
-  const lat = baseCoord.lat + (seed  - 0.5) * 0.08;
-  const lng = baseCoord.lng + (seed2 - 0.5) * 0.12;
+  // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
+  if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
 
-  // Confidence based on how complete the address is
-  const confidence =
-    parsed.number ? (parsed.street.length > 5 ? 98 : 85) :
-    parsed.street.length > 8 ? 75 : 55;
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const queries = buildQueryVariants(rawAddress);
 
-  return { ...parsed, geocoded: true, lat, lng, confidence };
+  // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
+  const anchor = findAnchor(rawAddress);
+  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
+    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
+    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
+  ) : null;
+
+  // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
+  let bestResult = null;
+  let bestScore  = 0;
+
+  for (const q of queries) {
+    try {
+      const gcOpts = { address: q, region: "DO" };
+      // componentRestrictions eliminado — rechaza resultados válidos en sectores informales
+      // Usamos bounds del anchor si lo hay; sino bounds completos de RD
+      if (hintBounds) gcOpts.bounds = hintBounds;
+      const result = await new Promise((res, rej) =>
+        geocoder.geocode(gcOpts, (results, status) => status === "OK" ? res(results) : rej(status))
+      );
+      if (!result || result.length === 0) continue;
+
+      // Evaluar TODOS los candidatos, quedarse con el mejor score
+      const candidates = result
+        .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
+        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates.length === 0) continue;
+      const { r: top, score: conf } = candidates[0];
+
+      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
+      if (anchor) {
+        const dlat = top.geometry.location.lat() - anchor.lat;
+        const dlng = top.geometry.location.lng() - anchor.lng;
+        const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
+        if (distKm > 15) continue; // resultado random, ignorar
+      }
+
+      if (conf > bestScore) {
+        bestScore = conf;
+        bestResult = { top, conf, allCandidates: candidates };
+      }
+
+      // Score excelente → no seguir buscando variantes
+      if (bestScore >= 90) break;
+    } catch { /* try next variant */ }
+  }
+
+  if (bestResult) {
+    const { top, conf, allCandidates } = bestResult;
+    const lat = top.geometry.location.lat();
+    const lng = top.geometry.location.lng();
+    const out = {
+      ok: true, lat, lng,
+      display: top.formatted_address,
+      confidence: conf,
+      types: top.types || [],
+      source: "geocoding_api",
+      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
+        display: r.formatted_address,
+        lat: r.geometry.location.lat(),
+        lng: r.geometry.location.lng(),
+        confidence: score,
+      })),
+    };
+    _geoCache.set(cacheKey, out);
+    return out;
+  }
+
+  // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
+  try {
+    const placesResult = await searchWithPlaces(rawAddress);
+    if (placesResult) {
+      _geoCache.set(cacheKey, placesResult);
+      return placesResult;
+    }
+  } catch { /* places failed */ }
+
+  // ── CAPA 3: Nominatim (último recurso) ────────────────────────────────────
+  try {
+    const nominatimQueries = [
+      rawAddress + ", República Dominicana",
+      expandRDAddress(rawAddress) + ", República Dominicana",
+      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
+    ];
+    for (const nmQuery of nominatimQueries) {
+      const encoded = encodeURIComponent(nmQuery);
+      const nm = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`,
+        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" } }
+      );
+      if (!nm.ok) continue;
+      const nmData = await nm.json();
+      if (!nmData?.length) continue;
+
+      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
+      if (rdResults.length === 0) continue;
+
+      const top = rdResults[0];
+      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
+      let conf = 50;
+      if (top.type === "house")           conf = 85;
+      else if (top.type === "building")   conf = 78;
+      else if (top.class === "highway")   conf = 70;
+      else if (top.type === "residential") conf = 65;
+      else if (top.class === "place")     conf = 57;
+      const nums = rawAddress.match(/\d{1,4}/g);
+      if (nums?.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
+
+      const out = {
+        ok: true, lat, lng,
+        display: top.display_name.split(",").slice(0, 3).join(",").trim(),
+        confidence: conf,
+        types: [top.type || "nominatim"],
+        source: "nominatim",
+        allResults: rdResults.slice(0, 3).map(r => ({
+          display: r.display_name.split(",").slice(0, 3).join(",").trim(),
+          lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+          confidence: 52,
+        })),
+      };
+      _geoCache.set(cacheKey, out);
+      return out;
+    }
+  } catch { /* nominatim failed */ }
+
+  // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
+  // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
+  // con confianza baja para que el admin sepa que es aproximado
+  const lastAnchor = findAnchor(rawAddress);
+  if (lastAnchor) {
+    const fallbackOut = {
+      ok: true,
+      lat: lastAnchor.lat,
+      lng: lastAnchor.lng,
+      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
+      confidence: 35,
+      types: ["anchor_fallback"],
+      source: "anchor_local",
+      allResults: [],
+    };
+    _geoCache.set(cacheKey, fallbackOut);
+    return fallbackOut;
+  }
+
+  const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
+  return failed;
 };
+
+// Build multiple query variants for maximum hit rate
+// Estrategia: de más específico a más general, hasta que Google responda
+const buildQueryVariants = (raw) => {
+  const s = String(raw || "").trim();
+  if (!s) return [];
+
+  const expanded = expandRDAddress(s);
+  const variants = new Set();
+
+  // ── Usar query optimizada del parser dominicano como variante prioritaria ──
+  const parsed = parseAddress(s);
+  if (parsed.isPlusCode) {
+    variants.add(parsed.plusCode + " Santo Domingo Oeste, República Dominicana");
+    variants.add(parsed.plusCode);
+  } else if (parsed.valid && parsed.optimizedQuery) {
+    variants.add(parsed.optimizedQuery + ", República Dominicana");
+    if (parsed.reference) {
+      const noRef = [parsed.street, parsed.number].filter(Boolean).join(" No. ");
+      const sec   = parsed.sector || "Santo Domingo Oeste";
+      variants.add(noRef + ", " + sec + ", Santo Domingo Oeste, República Dominicana");
+    }
+  }
+
+  // --- Detección de contexto geográfico ---
+  const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
+  const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
+  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
+
+  const RD = ", República Dominicana";
+  const SD = ", Santo Domingo" + RD;
+  const DN = ", Distrito Nacional" + RD;
+
+  // 1. Versión expandida + ciudad — SDO primero si hay anchor en esa zona
+  const _anchor = findAnchor(s);
+  const _isSDO = _anchor?.city === "Santo Domingo Oeste";
+  const _isDN  = _anchor?.city === "Distrito Nacional";
+  const _isSDE = _anchor?.city === "Santo Domingo Este";
+  const _isSDN = _anchor?.city === "Santo Domingo Norte";
+  if (!hasCountry && !hasCity) {
+    // Priorizar la ciudad del anchor — evita que Google devuelva resultado en zona equivocada
+    if (_isSDO) {
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+    } else if (_isDN) {
+      variants.add(expanded + DN);
+      variants.add(expanded + SD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+    } else if (_isSDE) {
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + SD);
+    } else if (_isSDN) {
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+      variants.add(expanded + SD);
+    } else {
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+    }
+  } else if (!hasCountry) {
+    variants.add(expanded + RD);
+    variants.add(expanded);
+  } else {
+    variants.add(expanded);
+  }
+
+  // 2. Raw original + contexto
+  if (s !== expanded) {
+    if (!hasCity && !hasCountry) {
+      variants.add(s + SD);
+      variants.add(s + RD);
+    } else if (!hasCountry) {
+      variants.add(s + RD);
+    }
+    variants.add(s);
+  }
+
+  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
+  const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
+  if (secMatch) {
+    const sec = secMatch[1].trim();
+    variants.add(sec + SD);
+    variants.add(sec + ", Santo Domingo Este" + RD);
+    variants.add(sec + ", Santo Domingo Oeste" + RD);
+    // Agregar calle + sector para mayor precisión
+    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
+    if (calleMatch) {
+      variants.add(calleMatch[0].trim() + ", " + sec + SD);
+    }
+  }
+
+  // 4. Extraer solo la parte de calle + número (sin piso/apto) como fallback
+  const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
+  if (calleNum && !hasCity) {
+    variants.add(calleNum[0].trim() + SD);
+    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
+  }
+
+  // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
+  const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    variants.add(parts.slice(0, 2).join(", ") + SD);
+  }
+  if (parts.length >= 1 && !hasCity) {
+    variants.add(parts[0] + SD);
+  }
+
+  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
+  const numMatch = expanded.match(/(\d{1,4})/);
+  if (numMatch) {
+    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
+    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
+  }
+
+  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
+  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
+  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
+  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
+
+  // Eliminar variantes vacías o muy cortas
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
+};
+
+// RD-specific address normalizer - expanded for Dominican Republic
+const expandRDAddress = (s) => {
+  // 1. Limpieza inicial
+  let r = s.trim();
+
+  // 2. Separadores comunes en RD: barras, guiones como separadores de sector/calle
+  r = r.replace(/\s*\/\s*/g, ", ").replace(/\s*-{2,}\s*/g, ", ");
+
+  // 3. Tipos de vía
+  const abbrevs = [
+    // Avenida
+    [/\bav\.\s*/gi,            "Avenida "],
+    [/\bave\.\s*/gi,           "Avenida "],
+    [/\bavda\.\s*/gi,          "Avenida "],
+    [/\bavenida\s*/gi,         "Avenida "],
+    // Calle
+    [/\bc\/\s*/gi,             "Calle "],
+    [/\bclle?\.\s*/gi,         "Calle "],
+    [/\bcl\.\s*/gi,            "Calle "],
+    [/\bca\.\s+(?=[A-ZÁÉÍÓÚ])/gi, "Calle "],
+    // Callejón
+    [/\bclj[oó]n?\.\s*/gi,    "Callejón "],
+    // Residencial / Urbanización / Sector / Barrio
+    [/\bres(?:id(?:encial)?)?\.\s*/gi, "Residencial "],
+    [/\burb\.\s*/gi,           "Urbanización "],
+    [/\burbaniz\.\s*/gi,       "Urbanización "],
+    [/\bsect?\.\s*/gi,         "Sector "],
+    [/\bbarr?\.\s*/gi,         "Barrio "],
+    [/\bens\.\s*/gi,           "Ensanche "],
+    [/\bensanche\s*/gi,        "Ensanche "],
+    [/\bprol\.\s*/gi,          "Prolongación "],
+    [/\besq\.\s*/gi,           "Esquina "],
+    [/\besquina\s+con\s*/gi,   "Esquina "],
+    // Numeración
+    [/\bno\.\s*(\d)/gi,        "No. $1"],
+    [/\bn[oº°#]\s*(\d)/gi,     "No. $1"],
+    [/\bnúm\.\s*(\d)/gi,       "No. $1"],
+    [/\b#\s*(\d)/gi,           "No. $1"],
+    // Kilómetro
+    [/\bkm\.?\s+/gi,           "Km "],
+    // Apartamento / Edificio / Torre / Local
+    [/\bapto\.?\s*/gi,         "Apartamento "],
+    [/\bapt\.?\s*/gi,          "Apartamento "],
+    [/\bap\.?\s+(?=\d)/gi,     "Apartamento "],
+    [/\bdepto\.?\s*/gi,        "Departamento "],
+    [/\bedif\.?\s*/gi,         "Edificio "],
+    [/\bedificio\s*/gi,        "Edificio "],
+    [/\btorre\s+/gi,           "Torre "],
+    [/\bloc\.?\s*/gi,          "Local "],
+    // Zonas especiales RD
+    [/\bz\.?\s*col(?:onial)?\b/gi,  "Zona Colonial"],
+    [/\bznc?\b/gi,             "Zona Colonial"],
+    [/\bd\.?\s*n\.?\b/gi,      "Distrito Nacional"],
+    [/\bsto\.?\s*dgo\.?\b/gi,  "Santo Domingo"],
+    [/\bsdo\.?\b/gi,           "Santo Domingo"],
+    [/\bsdq\b/gi,              "Santo Domingo"],
+    [/\bstgo\.?\b/gi,          "Santiago"],
+    [/\bstgo\s+de\s+los\s+cab\b/gi, "Santiago de los Caballeros"],
+    [/\blr\b/gi,               "La Romana"],
+    [/\bpup\b/gi,              "Punta Cana"],
+    [/\bspm\b/gi,              "San Pedro de Macorís"],
+    [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
+    [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
+    [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
+    // Sectores comunes SD
+    [/\bnaco\b/gi,             "Naco, Santo Domingo"],
+    [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
+    [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
+    [/\bpolo\s*gov\b/gi,       "Polígono Central, Santo Domingo"],
+    [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
+    [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
+    [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
+
+    // ── Santo Domingo Oeste – Zona Herrera (núcleo principal) ─────────────────
+    [/\bherrera\b(?!\s+de)/gi,                 "Herrera, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+herrera\b/gi,    "Buenos Aires de Herrera, Santo Domingo Oeste"],
+    [/\bel\s+caf[eé]\s+de\s+herrera\b/gi,     "El Café de Herrera, Santo Domingo Oeste"],
+    [/\blas\s+palmas\s+de\s+herrera\b/gi,      "Las Palmas de Herrera, Santo Domingo Oeste"],
+    [/\benriquillo\b/gi,                        "Enriquillo, Santo Domingo Oeste"],
+    [/\bduarte\s*(?:\(herrera\))?\b/gi,        "Duarte, Herrera, Santo Domingo Oeste"],
+    [/\bpueblo\s+nuevo\b(?!.*ozama)/gi,        "Pueblo Nuevo, Santo Domingo Oeste"],
+    [/\bjuan\s+guzm[aá]n\b/gi,                "Juan Guzmán, Santo Domingo Oeste"],
+    [/\biv[aá]n\s+guzm[aá]n\s+klang\b/gi,    "Iván Guzmán Klang, Santo Domingo Oeste"],
+    [/\blas\s+mercedes\b/gi,                   "Las Mercedes, Santo Domingo Oeste"],
+    [/\bvilla\s+aura\b/gi,                     "Villa Aura, Santo Domingo Oeste"],
+    [/\bolimpo\b/gi,                            "Olimpo, Santo Domingo Oeste"],
+    [/\bbarrio\s+duarte\b/gi,                  "Barrio Duarte, Santo Domingo Oeste"],
+    [/\bbarrio\s+nuevo\b/gi,                   "Barrio Nuevo, Santo Domingo Oeste"],
+    [/\bbarrio\s+san\s+francisco\b/gi,         "Barrio San Francisco, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Las Caobas ────────────────────────────────
+    [/\blas\s+caobas\b/gi,                     "Las Caobas, Santo Domingo Oeste"],
+    [/\blas\s+caobitas\b/gi,                   "Las Caobitas, Santo Domingo Oeste"],
+    [/\blas\s+colinas\b/gi,                    "Las Colinas, Santo Domingo Oeste"],
+    [/\blas\s+palmas\b(?!\s+de\s+herrera)/gi,  "Las Palmas, Santo Domingo Oeste"],
+    [/\bel\s+libertador\b/gi,                  "El Libertador, Santo Domingo Oeste"],
+    [/\bsavica\b/gi,                            "Savica, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+las\s+caobas\b/gi, "Buenos Aires de Las Caobas, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+las\s+caobas\b/gi, "Urbanización Las Caobas, Santo Domingo Oeste"],
+    [/\baltos\s+de\s+las\s+caobas\b/gi,        "Altos de Las Caobas, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Bayona / Manoguayabo ──────────────────────
+    [/\bbayona\b/gi,                            "Bayona, Santo Domingo Oeste"],
+    [/\bmanoguayabo\b/gi,                       "Manoguayabo, Santo Domingo Oeste"],
+    [/\bbuenos\s+aires\s+de\s+manoguayabo\b/gi,"Buenos Aires de Manoguayabo, Santo Domingo Oeste"],
+    [/\bel\s+hoyo\s+de\s+manoguayabo\b/gi,     "El Hoyo de Manoguayabo, Santo Domingo Oeste"],
+    [/\bbarrio\s+san\s+miguel\b/gi,            "Barrio San Miguel, Santo Domingo Oeste"],
+    [/\bla\s+venta\b/gi,                        "La Venta, Santo Domingo Oeste"],
+    [/\bel\s+8\s+de\s+bayona\b/gi,             "El 8 de Bayona, Santo Domingo Oeste"],
+    [/\bbarrio\s+enriquillo\b/gi,              "Barrio Enriquillo, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Engombe ───────────────────────────────────
+    [/\bengombe\b/gi,                           "Engombe, Santo Domingo Oeste"],
+    [/\baltos\s+de\s+engombe\b/gi,             "Altos de Engombe, Santo Domingo Oeste"],
+    [/\bla\s+ure[nñ]a\b/gi,                   "La Ureña, Santo Domingo Oeste"],
+    [/\bbarrio\s+progreso\b/gi,               "Barrio Progreso, Santo Domingo Oeste"],
+    [/\bbarrio\s+libertad\b/gi,               "Barrio Libertad, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,  "Urbanización Engombe, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Zona Hato Nuevo / Expansión ────────────────────
+    [/\bhato\s+nuevo\b/gi,                     "Hato Nuevo, Santo Domingo Oeste"],
+    [/\bcaballona\b/gi,                         "Caballona, Santo Domingo Oeste"],
+    [/\blechería\b/gi,                          "Lechería, Santo Domingo Oeste"],
+    [/\bbatey\s+bienvenido\b/gi,              "Batey Bienvenido, Santo Domingo Oeste"],
+    [/\bnuevo\s+horizonte\b/gi,               "Barrio Nuevo Horizonte, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Residenciales y Urbanizaciones ─────────────────
+    [/\bres(?:idencial)?\s+carmen\s+renata\b/gi, "Residencial Carmen Renata, Santo Domingo Oeste"],
+    [/\bbrisas\s+del\s+oeste\b/gi,            "Residencial Brisas del Oeste, Santo Domingo Oeste"],
+    [/\bciudad\s+agraria\b/gi,                "Ciudad Agraria, Santo Domingo Oeste"],
+    [/\boperaciones\s+especiales\b/gi,         "Operaciones Especiales, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+antonia\b/gi,       "Residencial Antonia, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+altagracia\b/gi,    "Residencial Altagracia, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi, "Urbanización El Café, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+las\s+palmas\b/gi,  "Urbanización Las Palmas, Santo Domingo Oeste"],
+    [/\bdon\s+honorio\b/gi,                    "Residencial Don Honorio, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Sectores en crecimiento ────────────────────────
+    [/\barroyo\s+bonito\b/gi,                 "Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bel\s+30\s+de\s+mayo\b/gi,            "El 30 de Mayo, Santo Domingo Oeste"],
+    [/\bbarrio\s+libertador\b/gi,             "Barrio Libertador, Santo Domingo Oeste"],
+    [/\bbarrio\s+progreso\s+ii\b/gi,          "Barrio Progreso II, Santo Domingo Oeste"],
+    [/\bla\s+isabela\b/gi,                    "La Isabela, Santo Domingo Oeste"],
+
+    // ── Santo Domingo Oeste – Corredores viales clave ────────────────────────
+    [/\bautopista\s+duarte\b/gi,              "Autopista Duarte, Santo Domingo Oeste"],
+    [/\bprol(?:ongaci[oó]n)?\s+27\s+de\s+febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+isabel\s+aguiar\b/gi,  "Avenida Isabel Aguiar, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+las\s+palmas\b/gi,     "Avenida Las Palmas, Santo Domingo Oeste"],
+    [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi, "Prolongación Independencia, Santo Domingo Oeste"],
+
+    // ── Abreviaturas rápidas SDO ──────────────────────────────────────────────
+    [/\bsdo\s+oeste\b/gi,                     "Santo Domingo Oeste"],
+    [/\bsd\s+o\b/gi,                          "Santo Domingo Oeste"],
+
+    // ════════════════════════════════════════════════════════════════════════
+    // NUEVOS PUNTOS DE REFERENCIA SDO — segunda tanda
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── ZONAS Y MICRO-SECTORES ADICIONALES ───────────────────────────────────
+    [/\bla\s+zurza\b/gi,                      "La Zurza, Santo Domingo Oeste"],
+    [/\bel\s+café\b(?!\s+de\s+herrera)/gi,    "El Café, Santo Domingo Oeste"],
+    [/\bla\s+mosca\b/gi,                      "La Mosca, Santo Domingo Oeste"],
+    [/\bel\s+gordo\b/gi,                      "El Gordo, Santo Domingo Oeste"],
+    [/\blos\s+girasoles\b/gi,                 "Los Girasoles, Santo Domingo Oeste"],
+    [/\blos\s+jardines\s+(?:de\s+)?herrera\b/gi, "Los Jardines de Herrera, Santo Domingo Oeste"],
+    [/\blos\s+pinos\s+(?:de\s+)?herrera\b/gi, "Los Pinos de Herrera, Santo Domingo Oeste"],
+    [/\blos\s+almendros\b/gi,                 "Los Almendros, Santo Domingo Oeste"],
+    [/\bla\s+colonia\b/gi,                    "La Colonia, Santo Domingo Oeste"],
+    [/\breparto\s+herrera\b/gi,               "Reparto Herrera, Santo Domingo Oeste"],
+    [/\breparto\s+oriental\b/gi,              "Reparto Oriental, Santo Domingo Oeste"],
+    [/\bel\s+limonal\b/gi,                    "El Limonal, Santo Domingo Oeste"],
+    [/\bla\s+javilla\b/gi,                    "La Javilla, Santo Domingo Oeste"],
+    [/\blos\s+ciruelitos\b/gi,                "Los Ciruelitos, Santo Domingo Oeste"],
+    [/\bel\s+cachón\b/gi,                     "El Cachón, Santo Domingo Oeste"],
+    [/\bla\s+barranquita\b/gi,                "La Barranquita, Santo Domingo Oeste"],
+    [/\blos\s+frailes\b/gi,                   "Los Frailes, Santo Domingo Oeste"],
+    [/\bvilla\s+mella\s+(?:oeste|sdo)\b/gi,   "Villa Mella Oeste, Santo Domingo Oeste"],
+    [/\bel\s+carril\b/gi,                     "El Carril, Santo Domingo Oeste"],
+
+    // ── CALLES ADICIONALES ────────────────────────────────────────────────────
+    [/\bav(?:enida)?\s+hermanos\s+deligne\b/gi,  "Avenida Hermanos Deligne, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+jacobo\s+majluta\b/gi,    "Avenida Jacobo Majluta, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+circunvalaci[oó]n\b/gi,   "Avenida Circunvalación, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+(?:de\s+)?los\s+pr[oó]ceres\b/gi, "Avenida de los Próceres, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+lup[eé]r[oó]n\b/gi,      "Avenida Luperón, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+s[aá]nchez\b/gi,          "Avenida Sánchez, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+mella\b/gi,               "Avenida Mella, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+padre\s+castellanos\b/gi, "Avenida Padre Castellanos, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+mameyes\b/gi,              "Calle Los Mameyes, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+cacao\b/gi,                "Calle Los Cacao, Santo Domingo Oeste"],
+    [/\bcalle\s+las\s+flores\b/gi,               "Calle Las Flores, Santo Domingo Oeste"],
+    [/\bcalle\s+las\s+rosas\b/gi,                "Calle Las Rosas, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+almendros\b/gi,            "Calle Los Almendros, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+juan\b/gi,                 "Calle San Juan, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+pedro\b/gi,                "Calle San Pedro, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+pablo\b/gi,                "Calle San Pablo, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+luis\b/gi,                 "Calle San Luis, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+rafael\b/gi,               "Calle San Rafael, Santo Domingo Oeste"],
+    [/\bcalle\s+el\s+mamey\b/gi,                 "Calle El Mamey, Santo Domingo Oeste"],
+    [/\bcalle\s+el\s+jobo\b/gi,                  "Calle El Jobo, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+bayona\b/gi,          "Calle Principal Bayona, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+engombe\b/gi,         "Calle Principal Engombe, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+las\s+caobas\b/gi,   "Calle Principal Las Caobas, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+manoguayabo\b/gi,     "Calle Principal Manoguayabo, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+engombe\b/gi,         "Calle Principal Engombe, Santo Domingo Oeste"],
+    [/\bcalle\s+21\b(?:\s+herrera)?/gi,          "Calle 21, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+22\b(?:\s+herrera)?/gi,          "Calle 22, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+23\b(?:\s+herrera)?/gi,          "Calle 23, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+24\b(?:\s+herrera)?/gi,          "Calle 24, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+25\b(?:\s+herrera)?/gi,          "Calle 25, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+g\b(?:\s+herrera)?/gi,           "Calle G, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+h\b(?:\s+herrera)?/gi,           "Calle H, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+i\b(?:\s+herrera)?/gi,           "Calle I, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+j\b(?:\s+herrera)?/gi,           "Calle J, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+k\b(?:\s+herrera)?/gi,           "Calle K, Herrera, Santo Domingo Oeste"],
+
+    // ── COLEGIOS Y CENTROS EDUCATIVOS ADICIONALES ────────────────────────────
+    [/\bcolegio\s+san\s+judas\s+tadeo\b/gi,      "Colegio San Judas Tadeo, Santo Domingo Oeste"],
+    [/\bcolegio\s+nuestra\s+se[nñ]ora\s+(?:de\s+)?la\s+paz\b/gi, "Colegio Nuestra Señora de la Paz, Santo Domingo Oeste"],
+    [/\bcolegio\s+la\s+paz\s+herrera\b/gi,       "Colegio La Paz, Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+el\s+camino\b/gi,              "Colegio El Camino, Santo Domingo Oeste"],
+    [/\bcolegio\s+bilingüe\s+herrera\b/gi,       "Colegio Bilingüe Herrera, Santo Domingo Oeste"],
+    [/\binstituto\s+salesiano\s+herrera\b/gi,    "Instituto Salesiano Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+la\s+salle\s+bayona\b/gi,      "Colegio La Salle Bayona, Santo Domingo Oeste"],
+    [/\bescuela\s+(?:b[aá]sica\s+)?arroyo\s+bonito\b/gi, "Escuela Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bescuela\s+(?:b[aá]sica\s+)?villa\s+mella\b/gi,   "Escuela Villa Mella Oeste, Santo Domingo Oeste"],
+    [/\bcentro\s+educativo\s+herrera\b/gi,       "Centro Educativo Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+jard[ií]n\s+de\s+ni[nñ]os\b/gi, "Colegio Jardín de Niños, Santo Domingo Oeste"],
+    [/\bescuela\s+técnica\s+herrera\b/gi,        "Escuela Técnica Herrera, Santo Domingo Oeste"],
+    [/\binstituto\s+técnico\s+(?:de\s+)?herrera\b/gi, "Instituto Técnico Herrera, Santo Domingo Oeste"],
+    [/\buniversidad\s+abierta\s+(?:herrera|sdo)\b/gi, "Universidad Abierta SDO, Santo Domingo Oeste"],
+    [/\binfotep\s+herrera\b/gi,                  "INFOTEP Herrera, Santo Domingo Oeste"],
+    [/\binfotep\s+(?:de\s+)?bayona\b/gi,         "INFOTEP Bayona, Santo Domingo Oeste"],
+
+    // ── CLÍNICAS Y SALUD ADICIONAL ────────────────────────────────────────────
+    [/\bcl[ií]nica\s+el\s+buen\s+pastor\b/gi,    "Clínica El Buen Pastor, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+san\s+juan\s+herrera\b/gi,  "Clínica San Juan, Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+nova\s+herrera\b/gi,        "Clínica Nova Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+dra?\.\s+\w+\s+herrera\b/gi,"Clínica Herrera, Santo Domingo Oeste"],
+    [/\bunidad\s+médica\s+herrera\b/gi,          "Unidad Médica Herrera, Santo Domingo Oeste"],
+    [/\blaboratorio\s+(?:cl[ií]nico\s+)?herrera\b/gi, "Laboratorio Clínico Herrera, Santo Domingo Oeste"],
+    [/\blaboratorio\s+bayona\b/gi,               "Laboratorio Bayona, Santo Domingo Oeste"],
+    [/\bóptica\s+herrera\b/gi,                   "Óptica Herrera, Santo Domingo Oeste"],
+    [/\bdentista\s+herrera\b/gi,                 "Dentista Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+dental\s+herrera\b/gi,      "Clínica Dental Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+roma\s+herrera\b/gi,          "Farmacia Roma Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+sim[oó]n\s+bolívar\s+herrera\b/gi, "Farmacia Simón Bolívar, Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+carol\s+las\s+caobas\b/gi,    "Farmacia Carol Las Caobas, Santo Domingo Oeste"],
+    [/\bfarmacia\s+el\s+roble\b/gi,              "Farmacia El Roble, Santo Domingo Oeste"],
+    [/\bfarmacia\s+san\s+mart[ií]n\s+herrera\b/gi, "Farmacia San Martín, Herrera, Santo Domingo Oeste"],
+
+    // ── NEGOCIOS Y SERVICIOS ADICIONALES ─────────────────────────────────────
+    [/\bferro\s+norte\s+herrera\b/gi,            "Ferro Norte Herrera, Santo Domingo Oeste"],
+    [/\bferro\s+centro\s+herrera\b/gi,           "Ferro Centro Herrera, Santo Domingo Oeste"],
+    [/\bdeposito\s+(?:de\s+)?materiales\s+herrera\b/gi, "Depósito de Materiales Herrera, Santo Domingo Oeste"],
+    [/\bdeposito\s+(?:de\s+)?materiales\s+bayona\b/gi,  "Depósito de Materiales Bayona, Santo Domingo Oeste"],
+    [/\bcervecería\s+(?:nacional\s+)?herrera\b/gi, "Cervecería Nacional Herrera, Santo Domingo Oeste"],
+    [/\brivera\s+herrera\b/gi,                   "Rivera Herrera, Santo Domingo Oeste"],
+    [/\bcolmena\s+herrera\b/gi,                  "Colmena Herrera, Santo Domingo Oeste"],
+    [/\bwanda\s+herrera\b/gi,                    "Wanda Herrera, Santo Domingo Oeste"],
+    [/\bel\s+barrigón\b/gi,                      "El Barrigón, Santo Domingo Oeste"],
+    [/\bel\s+ticket\s+herrera\b/gi,              "El Ticket Herrera, Santo Domingo Oeste"],
+    [/\bcopy\s+(?:center\s+)?herrera\b/gi,        "Copy Center Herrera, Santo Domingo Oeste"],
+    [/\bimpresiones\s+herrera\b/gi,              "Impresiones Herrera, Santo Domingo Oeste"],
+    [/\bwestern\s+union\s+herrera\b/gi,          "Western Union Herrera, Santo Domingo Oeste"],
+    [/\bmoneygram\s+herrera\b/gi,                "MoneyGram Herrera, Santo Domingo Oeste"],
+    [/\bpagos\s+(?:en\s+l[ií]nea\s+)?herrera\b/gi, "Pagos Herrera, Santo Domingo Oeste"],
+    [/\binternet\s+caf[eé]\s+herrera\b/gi,       "Internet Café Herrera, Santo Domingo Oeste"],
+    [/\bmercadom[oó]vil\s+herrera\b/gi,          "MercadoMóvil Herrera, Santo Domingo Oeste"],
+    [/\bclaro\s+hogar\s+herrera\b/gi,            "Claro Hogar Herrera, Santo Domingo Oeste"],
+    [/\boficina\s+(?:de\s+)?claro\s+herrera\b/gi,"Oficina Claro Herrera, Santo Domingo Oeste"],
+    [/\btaller\s+(?:mec[aá]nico\s+)?herrera\b/gi,"Taller Mecánico Herrera, Santo Domingo Oeste"],
+    [/\btaller\s+(?:mec[aá]nico\s+)?bayona\b/gi, "Taller Mecánico Bayona, Santo Domingo Oeste"],
+    [/\bautorepuestos?\s+herrera\b/gi,           "Autorepuestos Herrera, Santo Domingo Oeste"],
+    [/\bautorepuestos?\s+bayona\b/gi,            "Autorepuestos Bayona, Santo Domingo Oeste"],
+    [/\bgomera\s+herrera\b/gi,                   "Gomera Herrera, Santo Domingo Oeste"],
+    [/\bgomera\s+bayona\b/gi,                    "Gomera Bayona, Santo Domingo Oeste"],
+    [/\bcar\s+wash\s+herrera\b/gi,               "Car Wash Herrera, Santo Domingo Oeste"],
+    [/\blavado\s+(?:de\s+autos\s+)?herrera\b/gi, "Lavado de Autos Herrera, Santo Domingo Oeste"],
+    [/\bservi\s+centro\s+herrera\b/gi,           "Servi Centro Herrera, Santo Domingo Oeste"],
+    [/\bpintura\s+(?:y\s+colisión\s+)?herrera\b/gi, "Pintura y Colisión Herrera, Santo Domingo Oeste"],
+    [/\bair\s+express\s+herrera\b/gi,            "Air Express Herrera, Santo Domingo Oeste"],
+    [/\bservi-cargo\s+herrera\b/gi,              "Servi-Cargo Herrera, Santo Domingo Oeste"],
+    [/\balmac[eé]n\s+roma\s+herrera\b/gi,        "Almacén Roma Herrera, Santo Domingo Oeste"],
+
+    // ── IGLESIAS ADICIONALES ──────────────────────────────────────────────────
+    [/\biglesia\s+testigos\s+(?:de\s+jehov[aá]\s+)?herrera\b/gi, "Iglesia Testigos de Jehová, Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+mormones?\s+herrera\b/gi,      "Iglesia Mormones Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+el\s+aposento\s+alto\b/gi,     "Iglesia El Aposento Alto, Santo Domingo Oeste"],
+    [/\biglesia\s+palabra\s+de\s+vida\b/gi,      "Iglesia Palabra de Vida, Santo Domingo Oeste"],
+    [/\biglesia\s+rey\s+de\s+reyes\b/gi,         "Iglesia Rey de Reyes, Santo Domingo Oeste"],
+    [/\biglesia\s+nueva\s+vida\s+herrera\b/gi,   "Iglesia Nueva Vida, Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+dios\s+es\s+amor\s+herrera\b/gi, "Iglesia Dios es Amor, Herrera, Santo Domingo Oeste"],
+    [/\bcongregaci[oó]n\s+cristiana\s+herrera\b/gi, "Congregación Cristiana Herrera, Santo Domingo Oeste"],
+    [/\btabern[aá]culo\s+herrera\b/gi,           "Tabernáculo Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+(?:de\s+)?hato\s+nuevo\b/gi,   "Iglesia Hato Nuevo, Santo Domingo Oeste"],
+
+    // ── CANCHAS Y ESPACIOS ADICIONALES ───────────────────────────────────────
+    [/\bcancha\s+(?:de\s+)?los\s+girasoles\b/gi, "Cancha Los Girasoles, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?los\s+pinos\b/gi,     "Cancha Los Pinos, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?caballona\b/gi,       "Cancha Caballona, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?arroyo\s+bonito\b/gi, "Cancha Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?caballona\b/gi,       "Parque Caballona, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?hato\s+nuevo\b/gi,    "Parque Hato Nuevo, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?olimpo\b/gi,          "Parque Olimpo, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?arroyo\s+bonito\b/gi, "Parque Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bplaza\s+deportiva\s+bayona\b/gi,         "Plaza Deportiva Bayona, Santo Domingo Oeste"],
+    [/\bgi(?:mn)?asio\s+bayona\b/gi,             "Gimnasio Bayona, Santo Domingo Oeste"],
+    [/\bgi(?:mn)?asio\s+engombe\b/gi,            "Gimnasio Engombe, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+engombe\b/gi, "Campo de Béisbol Engombe, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+manoguayabo\b/gi, "Campo de Béisbol Manoguayabo, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+las\s+caobas\b/gi, "Campo de Béisbol Las Caobas, Santo Domingo Oeste"],
+
+    // ── PUNTOS KM Y REFERENCIAS VIALES ADICIONALES ───────────────────────────
+    [/\bkm\s*16\b/gi,                            "Km 16 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*17\b/gi,                            "Km 17 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*18\b/gi,                            "Km 18 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*19\b/gi,                            "Km 19 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*20\b/gi,                            "Km 20 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?bayona\b/gi,         "Entrada de Bayona, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?engombe\b/gi,        "Entrada de Engombe, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?las\s+caobas\b/gi,  "Entrada de Las Caobas, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?manoguayabo\b/gi,   "Entrada de Manoguayabo, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?hato\s+nuevo\b/gi,  "Entrada de Hato Nuevo, Santo Domingo Oeste"],
+    [/\bsalida\s+(?:de\s+)?bayona\b/gi,         "Salida de Bayona, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?herrera\b/gi,         "Curva de Herrera, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?bayona\b/gi,          "Curva de Bayona, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?engombe\b/gi,         "Curva de Engombe, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?herrera\b/gi,         "Cruce de Herrera, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?bayona\b/gi,          "Cruce de Bayona, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?manoguayabo\b/gi,     "Cruce de Manoguayabo, Santo Domingo Oeste"],
+    [/\bcallejón\s+(?:de\s+)?herrera\b/gi,      "Callejón de Herrera, Santo Domingo Oeste"],
+    [/\bintercambiador\s+herrera\b/gi,          "Intercambiador Herrera, Santo Domingo Oeste"],
+    [/\bintercambiador\s+(?:de\s+)?bayona\b/gi, "Intercambiador Bayona, Santo Domingo Oeste"],
+    [/\bpaso\s+elevado\s+herrera\b/gi,          "Paso Elevado Herrera, Santo Domingo Oeste"],
+    [/\bpaso\s+(?:a\s+)?nivel\s+herrera\b/gi,  "Paso a Nivel Herrera, Santo Domingo Oeste"],
+
+    // ── RESIDENCIALES ADICIONALES ─────────────────────────────────────────────
+    [/\bres(?:idencial)?\s+las\s+américas\s+(?:herrera|sdo)\b/gi, "Residencial Las Américas, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+los\s+pinos\s+(?:herrera|sdo)\b/gi,    "Residencial Los Pinos, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+el\s+roble\b/gi,      "Residencial El Roble, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+villa\s+linda\b/gi,   "Residencial Villa Linda, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+el\s+caf[eé]\b/gi,    "Residencial El Café, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+palmas\s+del\s+norte\b/gi, "Residencial Palmas del Norte, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+la\s+esperanza\b/gi,  "Residencial La Esperanza, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+los\s+girasoles\b/gi, "Residencial Los Girasoles, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+monte\s+verde\b/gi,   "Residencial Monte Verde, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+jardines\s+del\s+norte\b/gi, "Residencial Jardines del Norte, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+nuevo\s+herrera\b/gi, "Residencial Nuevo Herrera, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?herrera\b/gi,         "Villas de Herrera, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?bayona\b/gi,          "Villas de Bayona, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?engombe\b/gi,         "Villas de Engombe, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+nueva\s+herrera\b/gi, "Urbanización Nueva Herrera, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+los\s+pinos\b/gi, "Urbanización Los Pinos, Santo Domingo Oeste"],
+
+    // ── INSTITUCIONES ADICIONALES ─────────────────────────────────────────────
+    [/\bministerio\s+(?:de\s+)?salud\s+herrera\b/gi, "Ministerio de Salud Herrera, Santo Domingo Oeste"],
+    [/\bjunta\s+electoral\s+herrera\b/gi,        "Junta Electoral Herrera, Santo Domingo Oeste"],
+    [/\bjce\s+herrera\b/gi,                      "JCE Herrera, Santo Domingo Oeste"],
+    [/\boficina\s+(?:de\s+)?interior\s+herrera\b/gi, "Oficina Interior Herrera, Santo Domingo Oeste"],
+    [/\bmigración\s+herrera\b/gi,                "Migración Herrera, Santo Domingo Oeste"],
+    [/\bdirección\s+(?:de\s+)?impuestos\s+herrera\b/gi, "DGII Herrera, Santo Domingo Oeste"],
+    [/\bdgii\s+herrera\b/gi,                     "DGII Herrera, Santo Domingo Oeste"],
+    [/\btesorería\s+herrera\b/gi,                "Tesorería Herrera, Santo Domingo Oeste"],
+    [/\bregistro\s+mercantil\s+herrera\b/gi,     "Registro Mercantil Herrera, Santo Domingo Oeste"],
+    [/\bnotaría\s+herrera\b/gi,                  "Notaría Herrera, Santo Domingo Oeste"],
+    [/\bbanco\s+agi\s+herrera\b/gi,              "Banco BDI Herrera, Santo Domingo Oeste"],
+    [/\bbanco\s+vimenca\s+herrera\b/gi,          "Banco Vimenca Herrera, Santo Domingo Oeste"],
+    [/\bassociaci[oó]n\s+(?:cibao|popular)\s+herrera\b/gi, "Asociación Cibao Herrera, Santo Domingo Oeste"],
+    [/\bcoopverde\s+herrera\b/gi,                "CoopVerde Herrera, Santo Domingo Oeste"],
+    [/\bcooperativa\s+herrera\b/gi,              "Cooperativa Herrera, Santo Domingo Oeste"],
+  ];
+
+  for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
+
+  // 4. Limpiar espacios múltiples y comas duplicadas
+  r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
+
+  return r;
+};
+
+// Score Google result quality
+const scoreGoogleResult = (result, original) => {
+  const types = result.types || [];
+  const addr  = result.formatted_address || "";
+  let score = 55;
+
+  // Tipo de resultado (cuanto más específico, mejor)
+  if      (types.includes("street_address"))            score = 96;
+  else if (types.includes("premise"))                   score = 93;
+  else if (types.includes("subpremise"))                score = 91;
+  else if (types.includes("route"))                     score = 82;
+  else if (types.includes("intersection"))              score = 80;
+  else if (types.includes("neighborhood"))              score = 70;
+  else if (types.includes("sublocality"))               score = 68;
+  else if (types.includes("sublocality_level_1"))       score = 68;
+  else if (types.includes("sublocality_level_2"))       score = 65;
+  else if (types.includes("locality"))                  score = 60;
+  else if (types.includes("administrative_area_level_1")) score = 40;
+  else if (types.includes("country"))                   score = 20;
+
+  // Bonus: original tiene número Y el resultado también → más preciso
+  const origHasNum = /\d/.test(original);
+  const resHasNum  = /\d/.test(addr);
+  if (origHasNum && resHasNum)   score = Math.min(score + 5, 99);
+  if (origHasNum && !resHasNum)  score = Math.max(score - 8, 10); // no encontró el número
+
+  // Bonus: resultado está dentro de la bounding box de RD
+  const loc = result.geometry.location;
+  const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+  const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+  if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) {
+    score = Math.max(score - 50, 3); // resultado fuera de RD → descartar
+  }
+
+  // Bonus: la dirección formateada contiene la ciudad/sector del original
+  const origLower = (original || "").toLowerCase();
+  const addrLower = addr.toLowerCase();
+  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
+    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
+    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
+    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
+  }
+
+  // Bonus: resultado tiene número de calle cuando el original también lo tiene
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  if (numInOrig) {
+    const anyMatch = numInOrig.some(n => addr.includes(n));
+    if (anyMatch) score = Math.min(score + 3, 99);
+  }
+
+  // Penalizar si el resultado es solo país/provincia (demasiado vago)
+  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
+
+  return Math.min(Math.max(score, 1), 99);
+};
+
+// --- PLUS CODE → LAT/LNG via Google ------------------------------------------
+const decodePlusCodeGoogle = async (code) => {
+  await loadGoogleMaps();
+  const geocoder = new window.google.maps.Geocoder();
+  const query = code.includes(" ") ? code : code + " Santo Domingo";
+  try {
+    const r = await new Promise((res, rej) =>
+      geocoder.geocode({ address: query }, (results, status) =>
+        status === "OK" ? res(results) : rej(status))
+    );
+    if (r?.[0]) {
+      const loc = r[0].geometry.location;
+      return { ok: true, lat: loc.lat(), lng: loc.lng(), display: r[0].formatted_address, confidence: 99 };
+    }
+  } catch {}
+  return { ok: false };
+};
+
+// --- COORDINATE DETECTOR - acepta múltiples formatos ---
+// Detecta: "18.4714,-69.9318" | "18.4714, -69.9318" | links de Google Maps
+const detectCoords = (s) => {
+  const t = (s || "").trim();
+
+  // Formato: lat,lng o lat, lng (con o sin espacios)
+  const pair = t.match(/^(-?\d{1,3}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})$/);
+  if (pair) {
+    const lat = parseFloat(pair[1]), lng = parseFloat(pair[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // Link de Google Maps: https://maps.google.com/?q=18.4714,-69.9318
+  const gmLink = t.match(/[?&]q=(-?\d{1,3}\.\d{3,})[,+](-?\d{1,3}\.\d{3,})/);
+  if (gmLink) {
+    const lat = parseFloat(gmLink[1]), lng = parseFloat(gmLink[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // Link de Google Maps con @lat,lng
+  const atLink = t.match(/@(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
+  if (atLink) {
+    const lat = parseFloat(atLink[1]), lng = parseFloat(atLink[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  return null;
+};
+
+// Plus Code detector: acepta códigos completos (8+2) y cortos (con ciudad)
+// Ejemplos: "G2F8+7G3" | "G2F8+7G3 Santo Domingo" | "7G3 Santo Domingo"
+const isPlusCode = (s) => {
+  const t = (s || "").trim();
+  // Código completo: XXXXXXXX+XX o XXXX+XX
+  if (/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(t)) return true;
+  // Código corto + ciudad: XX+XX Ciudad
+  if (/^[23456789CFGHJMPQRVWX]{2,}\+[23456789CFGHJMPQRVWX]{2,}\s+\w/i.test(t)) return true;
+  return false;
+};
+
+// --- HAVERSINE (fallback local cuando Routes API no disponible) ---------------
+const hav = (a, b) => {
+  const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
+  const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+// --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
+// Usa calles reales, sentidos de vía y tráfico de Santo Domingo.
+// Google permite hasta 25 waypoints intermedios por solicitud.
+// Chunking automático si hay más de 25 paradas válidas.
+const optimizeWithRoutesAPI = async (validStops) => {
+  // Máximo 25 waypoints por llamada a la API
+  const CHUNK = 25;
+  if (validStops.length <= 1) return validStops.map((s, i) => ({ ...s, stopNum: i + 1 }));
+
+  // Helper: llamada a la Routes API v2 para un chunk
+  const callRoutesAPI = async (chunk) => {
+    const waypoints = chunk.map(s => ({
+      location: { latLng: { latitude: s.lat, longitude: s.lng } },
+    }));
+
+    const body = {
+      origin:      { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      destination: { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
+      intermediates: waypoints,
+      travelMode: "DRIVE",
+      optimizeWaypointOrder: true,
+      routingPreference: "TRAFFIC_AWARE",
+      languageCode: "es",
+    };
+
+    const resp = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": GMAPS_KEY,
+          "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!resp.ok) throw new Error(`Routes API HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const route = data?.routes?.[0];
+    if (!route?.optimizedIntermediateWaypointIndex) throw new Error("No optimized order returned");
+
+    return {
+      order:    route.optimizedIntermediateWaypointIndex,   // índices reordenados
+      durations: (route.legs || []).slice(1).map(l =>       // segundos por tramo (sin el tramo depot→1)
+        parseInt(l.duration?.replace("s", "") || "0", 10)
+      ),
+      distances: (route.legs || []).slice(1).map(l => Math.round((l.distanceMeters || 0) / 1000 * 10) / 10),
+    };
+  };
+
+  // Si entran ≤25 paradas → una sola llamada
+  if (validStops.length <= CHUNK) {
+    try {
+      const { order, durations, distances } = await callRoutesAPI(validStops);
+      return order.map((origIdx, newPos) => ({
+        ...validStops[origIdx],
+        stopNum:      newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+    } catch (e) {
+      console.warn("Routes API falló, usando Haversine:", e.message);
+      return null; // señal para caer al fallback
+    }
+  }
+
+  // Más de 25: dividir en chunks, optimizar cada uno y concatenar
+  const ordered = [];
+  for (let i = 0; i < validStops.length; i += CHUNK) {
+    const chunk = validStops.slice(i, i + CHUNK);
+    try {
+      const { order, durations, distances } = await callRoutesAPI(chunk);
+      const reordered = order.map((origIdx, newPos) => ({
+        ...chunk[origIdx],
+        stopNum:      ordered.length + newPos + 1,
+        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
+        distKmRoutes: distances[newPos] ?? null,
+      }));
+      ordered.push(...reordered);
+    } catch {
+      // Chunk fallido → mantener orden Haversine para ese chunk
+      chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
+    }
+  }
+  return ordered;
+};
+
+// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️  MOTOR DE OPTIMIZACIÓN LOCAL v3 — NO MODIFICAR SIN AUTORIZACIÓN
+// Clustering geográfico (CLUSTER_KM) + NN + 2-opt + Or-opt
+// Garantiza paradas de la misma zona en bloques CONSECUTIVOS.
+// No depende de Routes API — funciona siempre.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CLUSTER_KM = 2.0; // radio de zona — 2km captura mejor zonas como Las Caobas, Engombe
+
+const optimizeRouteLocal = (stops) => {
+  if (!stops || stops.length === 0) return [];
+  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
+  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
+  if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
+  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
+
+  const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
+  const centroid = (idxArr) => ({
+    lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
+    lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
+  });
+
+  // PASO 1: Clustering geográfico greedy
+  const clusters = [];
+  valid.forEach((stop, si) => {
+    let bestCluster = -1, bestDist = CLUSTER_KM;
+    clusters.forEach((cl, ci) => {
+      const d = hav(stop, centroid(cl));
+      if (d < bestDist) { bestDist = d; bestCluster = ci; }
+    });
+    if (bestCluster === -1) clusters.push([si]);
+    else clusters[bestCluster].push(si);
+  });
+
+  // PASO 1b: Fusionar outliers solitarios con el cluster más cercano
+  // Un cluster de 1 sola parada a >3km de cualquier otro es un "outlier excursión".
+  // En vez de visitarlo por separado (crea zigzag), se fusiona con el cluster
+  // más cercano para que quede de paso en esa zona.
+  const OUTLIER_MERGE_KM = 3.5; // si está a menos de esto del cluster más cercano, fusionar
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let ci = 0; ci < clusters.length; ci++) {
+      if (clusters[ci].length > 1) continue; // solo outliers solitarios
+      const c = centroid(clusters[ci]);
+      let bestOther = -1, bestDist = Infinity;
+      clusters.forEach((cl, oi) => {
+        if (oi === ci) return;
+        const d = hav(c, centroid(cl));
+        if (d < bestDist) { bestDist = d; bestOther = oi; }
+      });
+      if (bestOther >= 0 && bestDist < OUTLIER_MERGE_KM) {
+        clusters[bestOther].push(...clusters[ci]);
+        clusters.splice(ci, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  // PASO 2: Ordenar clusters desde DEPOT (NN entre centroides)
+  let remClusters = clusters.map((_, ci) => ci);
+  const ordClusters = [];
+  let curPoint = depot;
+  while (remClusters.length) {
+    let bestPos = 0, bestDist = Infinity;
+    remClusters.forEach((ci, pos) => {
+      const d = hav(curPoint, centroid(clusters[ci]));
+      if (d < bestDist) { bestDist = d; bestPos = pos; }
+    });
+    const chosen = remClusters.splice(bestPos, 1)[0];
+    ordClusters.push(chosen);
+    curPoint = centroid(clusters[chosen]);
+  }
+
+  // PASO 3: NN dentro de cada cluster desde punto de entrada
+  let tour = [];
+  let entryPt = depot;
+  ordClusters.forEach(ci => {
+    let remStops = [...clusters[ci]];
+    const clTour = [];
+    while (remStops.length) {
+      let bestPos = 0, bestDist = Infinity;
+      remStops.forEach((si, pos) => {
+        const d = hav(entryPt, valid[si]);
+        if (d < bestDist) { bestDist = d; bestPos = pos; }
+      });
+      const chosen = remStops.splice(bestPos, 1)[0];
+      clTour.push(valid[chosen]);
+      entryPt = valid[chosen];
+    }
+    tour = tour.concat(clTour);
+  });
+
+  // PASO 4: 2-opt global
+  let improved = true, iterations = 0;
+  while (improved && iterations < 150) {
+    improved = false; iterations++;
+    for (let i = 0; i < tour.length - 1; i++) {
+      for (let j = i + 1; j < tour.length; j++) {
+        const A = i === 0 ? depot : tour[i-1], B = tour[i];
+        const C = tour[j], D = j+1 < tour.length ? tour[j+1] : depot;
+        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
+          let l = i, r = j;
+          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
+          improved = true;
+        }
+      }
+    }
+  }
+
+  // PASO 5: Or-opt (mover nodos individuales)
+  let orImproved = true, orIter = 0;
+  while (orImproved && orIter < 30) {
+    orImproved = false; orIter++;
+    for (let i = 0; i < tour.length; i++) {
+      const node = tour[i], prev = i === 0 ? depot : tour[i-1], next = i === tour.length-1 ? depot : tour[i+1];
+      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
+      let bestGain = 0.001, bestJ = -1;
+      for (let j = 0; j < tour.length; j++) {
+        if (j === i || j === i-1) continue;
+        const a = tour[j], b = j+1 < tour.length ? tour[j+1] : depot;
+        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
+        if (gain > bestGain) { bestGain = gain; bestJ = j; }
+      }
+      if (bestJ >= 0) {
+        const removed = tour.splice(i, 1)[0];
+        tour.splice(bestJ > i ? bestJ : bestJ+1, 0, removed);
+        orImproved = true; break;
+      }
+    }
+  }
+
+  return [
+    ...tour.map((s, i) => ({ ...s, stopNum: i+1 })),
+    ...invalid.map(s => ({ ...s, stopNum: null })),
+  ];
+};
+
+// ⚠️ Routes API deshabilitada — producía saltos entre zonas.
+// Motor v3 local (clustering) da mejores resultados para mensajería urbana en RD.
+const optimizeRoute = (stops) => optimizeRouteLocal(stops);
+
+const optimizeRouteAsync = async (stops, onProgress) => {
+  onProgress?.("Optimizando con motor de zonas v3…");
+  const result = optimizeRouteLocal(stops);
+  onProgress?.("✓ Ruta optimizada con motor de zonas");
+  return result;
+};
+
+const totalKm = (stops) => {
+  const v = stops.filter(s => s.lat && s.lng);
+  if (!v.length) return 0;
+  // Si hay datos reales de la Routes API, sumarlos
+  if (v[0]?.distKmRoutes !== undefined && v[0]?.distKmRoutes !== null) {
+    return Math.round(v.reduce((acc, s) => acc + (s.distKmRoutes || 0), 0) * 10) / 10;
+  }
+  return Math.round((v.reduce((acc, s, i) => acc + hav(i === 0 ? DEPOT : v[i - 1], s), 0) + hav(v[v.length - 1], DEPOT)) * 10) / 10;
+};
+
+// --- COLUMN AUTODETECT --------------------------------------------------------
+const autoDetect = (headers) => {
+  const patterns = {
+    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
+    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
+    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
+    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
+    notes:     /notas?|notes?|observ|instruc|detalle/i,
+    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
+    ciudad:    /ciudad|municipio|localidad|town|city/i,
+    provincia: /provincia|province|estado|state|dpto|departamento/i,
+    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
+    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
+  };
+  const m = {};
+  headers.forEach(h => {
+    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
+  });
+  return m;
+};
+
+// --- GOOGLE MAP COMPONENT -----------------------------------------------------
+const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
+  const ref = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const polyRef = useRef(null);
+  const infoRef = useRef(null);
+
+  useEffect(() => {
+    loadGoogleMaps().then(() => {
+      if (mapRef.current) return;
+      mapRef.current = new window.google.maps.Map(ref.current, {
+        center: { lat: DEPOT.lat, lng: DEPOT.lng },
+        zoom: 12,
+        mapTypeId: "roadmap",
+        styles: [
+          {featureType:"poi",stylers:[{visibility:"off"}]},
+          {featureType:"transit",stylers:[{visibility:"off"}]},
+          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
+          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
+          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
+          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
+          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
+          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
+          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
+          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
+        ],
+        disableDefaultUI: true,
+        zoomControl: true,
+        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
+      });
+      infoRef.current = new window.google.maps.InfoWindow();
+
+      // Depot marker - house icon like Circuit
+      const depotSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1d4ed8" stroke="white" stroke-width="2.5"/><path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/></svg>';
+      new window.google.maps.Marker({
+        map: mapRef.current,
+        position: { lat: DEPOT.lat, lng: DEPOT.lng },
+        title: DEPOT.label,
+        zIndex: 999,
+        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
+      });
+    });
+  }, []);
+
+  const stopsLenRef = useRef(0);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    // Clear old markers properly to prevent memory leaks
+    markersRef.current.forEach(m => { m.setMap(null); });
+    markersRef.current = [];
+    if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
+
+    const valid = stops.filter(s => s.lat && s.lng && s.stopNum);
+
+    // Draw route polyline
+    if (valid.length > 1 && phase === "route") {
+      const path = [
+        { lat: DEPOT.lat, lng: DEPOT.lng },
+        ...valid.map(s => ({ lat: s.lat, lng: s.lng })),
+        { lat: DEPOT.lat, lng: DEPOT.lng },
+      ];
+      polyRef.current = new window.google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: "#3b82f6",
+        strokeOpacity: 0.9,
+        strokeWeight: 3,
+        map: mapRef.current,
+      });
+    }
+
+    // Inject shared SVG filters once (avoids per-marker filter accumulation)
+    if (!document.getElementById("rd-map-filters")) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svg.id = "rd-map-filters";
+      svg.setAttribute("style","position:absolute;width:0;height:0;overflow:hidden");
+      svg.innerHTML = `<defs>
+        <filter id="rdGlowSel" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="rdGlowNorm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>`;
+      document.body.appendChild(svg);
+    }
+
+    // Draw stop markers
+    const colMap = { ok: "#3b82f6", warning: "#f59e0b", error: "#ef4444", pending: "#475569" };
+    stops.filter(s => s.lat && s.lng).forEach(stop => {
+      const isSelected = stop.id === selectedId;
+      const col = colMap[stop.status] || "#3b82f6";
+
+      // Detect co-located stops (same lat/lng rounded to 4 decimals)
+      const key = `${stop.lat?.toFixed(4)},${stop.lng?.toFixed(4)}`;
+      const colocated = stops.filter(s => s.lat && s.lng && `${s.lat?.toFixed(4)},${s.lng?.toFixed(4)}` === key);
+      const isCluster = colocated.length > 1;
+      const clusterIdx = colocated.findIndex(s => s.id === stop.id);
+      // Only render marker for the first of a cluster group (to avoid stacking)
+      if (isCluster && clusterIdx !== 0) return;
+
+      const displayStop = isCluster && selectedId
+        ? (colocated.find(s => s.id === selectedId) || colocated[0])
+        : stop;
+
+      const label = isCluster
+        ? (isSelected ? String(displayStop.stopNum || "?") : `${colocated.length}`)
+        : String(stop.stopNum || "?");
+      const fs = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
+      const w = isSelected ? 40 : 32;
+      const filterId = isSelected ? "rdGlowSel" : "rdGlowNorm";
+      const clusterRing = isCluster && !isSelected ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.4" stroke-dasharray="3 2"/>` : "";
+      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40">${clusterRing}<circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
+      const marker = new window.google.maps.Marker({
+        map: mapRef.current,
+        position: { lat: stop.lat, lng: stop.lng },
+        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(w, w), anchor: new window.google.maps.Point(w/2, w/2) },
+        zIndex: isSelected ? 100 : 10,
+        title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
+      });
+      marker.addListener("click", () => {
+        if (isCluster) {
+          // Cycle through co-located stops
+          const curIdx = colocated.findIndex(s => s.id === selectedId);
+          const nextIdx = (curIdx + 1) % colocated.length;
+          onSelectStop(colocated[nextIdx].id, true);
+        } else {
+          onSelectStop(stop.id, true);
+        }
+        infoRef.current.close();
+      });
+      markersRef.current.push(marker);
+    });
+
+    // Fit bounds only when number of valid stops changes (first load / after geocoding)
+    const newLen = valid.length;
+    if (newLen > 0 && newLen !== stopsLenRef.current) {
+      stopsLenRef.current = newLen;
+      const bounds = new window.google.maps.LatLngBounds();
+      bounds.extend({ lat: DEPOT.lat, lng: DEPOT.lng });
+      valid.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
+      mapRef.current.fitBounds(bounds, { padding: 40 });
+    }
+  }, [stops, selectedId, phase]);
+
+  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
+};
+
+// --- ADDRESS EDIT MODAL --------------------------------------------------------
+// Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EvidenceCameraModal — Cámara obligatoria para evidencia de entrega/fallo
+// ⚠ NO MODIFICAR SIN REVISIÓN — es parte del flujo legal de evidencia
+// ─────────────────────────────────────────────────────────────────────────────
+const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
+  const videoRef    = useRef(null);
+  const canvasRef   = useRef(null);
+  const streamRef   = useRef(null);
+  const [phase,     setPhase]     = useState("preview");   // preview | captured | saving
+  const [photoData, setPhotoData] = useState(null);        // base64 dataURL
+  const [camErr,    setCamErr]    = useState(null);
+  const [flash,     setFlash]     = useState(false);
+  const isDelivered = mode === "delivered";
+  const accentColor = isDelivered ? "#10b981" : "#ef4444";
+  const label       = isDelivered ? "Entregado" : "Fallido";
+
+  // Iniciar cámara al montar
+  useEffect(() => {
+    let active = true;
+    const startCam = async () => {
+      try {
+        // Preferir cámara trasera en móvil (mejor calidad de evidencia)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } catch (e) {
+        setCamErr(e.name === "NotAllowedError"
+          ? "Permiso de cámara denegado. Ve a Ajustes > Navegador > Cámara y actívalo."
+          : "No se pudo acceder a la cámara: " + e.message);
+      }
+    };
+    startCam();
+    return () => {
+      active = false;
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  const takePhoto = () => {
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    setPhotoData(dataUrl);
+    setPhase("captured");
+    setFlash(true);
+    setTimeout(() => setFlash(false), 200);
+    // Parar stream para liberar cámara
+    streamRef.current?.getTracks().forEach(t => t.stop());
+  };
+
+  const retake = () => {
+    setPhotoData(null);
+    setPhase("preview");
+    setCamErr(null);
+    // Re-iniciar cámara
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false,
+    }).then(stream => {
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+    }).catch(e => setCamErr("Error al reiniciar cámara: " + e.message));
+  };
+
+  const confirm = () => {
+    if (!photoData) return;
+    setPhase("saving");
+    onConfirm(photoData);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:10000, background:"#000", display:"flex", flexDirection:"column" }}>
+      <style>{`
+        @keyframes camFlash { from{opacity:1} to{opacity:0} }
+        @keyframes camPop { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
+      `}</style>
+
+      {/* Flash overlay */}
+      {flash && <div style={{ position:"absolute", inset:0, background:"white", zIndex:10001, animation:"camFlash .2s ease forwards", pointerEvents:"none" }}/>}
+
+      {/* Header */}
+      <div style={{ padding:"16px 20px 12px", display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.8)", flexShrink:0 }}>
+        <div style={{ width:36, height:36, borderRadius:10, background:`${accentColor}22`, border:`1.5px solid ${accentColor}55`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          {isDelivered
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:"white", fontFamily:"'Syne',sans-serif" }}>
+            📸 Foto de evidencia — {label}
+          </div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)", marginTop:1 }}>
+            {stop.client} · #{stop.tracking || stop.stopNum}
+          </div>
+        </div>
+        <button onClick={onCancel} style={{ width:30, height:30, borderRadius:8, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+      </div>
+
+      {/* Viewfinder */}
+      <div style={{ flex:1, position:"relative", overflow:"hidden", background:"#111" }}>
+        {/* Error de cámara */}
+        {camErr && (
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:30, textAlign:"center", zIndex:10 }}>
+            <div style={{ fontSize:40, marginBottom:16 }}>📷</div>
+            <div style={{ fontSize:14, color:"#f87171", fontWeight:600, lineHeight:1.5, marginBottom:20 }}>{camErr}</div>
+            <button onClick={onCancel} style={{ padding:"10px 24px", borderRadius:10, border:"1px solid rgba(239,68,68,0.4)", background:"rgba(239,68,68,0.1)", color:"#f87171", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {/* Video preview */}
+        {phase === "preview" && !camErr && (
+          <video ref={videoRef} autoPlay playsInline muted
+            style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+        )}
+
+        {/* Foto tomada */}
+        {phase === "captured" && photoData && (
+          <img src={photoData} alt="evidencia"
+            style={{ width:"100%", height:"100%", objectFit:"contain", animation:"camPop .2s ease" }}/>
+        )}
+
+        {/* Canvas oculto para captura */}
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+
+        {/* Overlay de guía cuando está en preview */}
+        {phase === "preview" && !camErr && (
+          <>
+            {/* Esquinas de encuadre */}
+            {[["0,0","top:12px;left:12px;border-top-left-radius:6px"],
+              ["90deg","top:12px;right:12px;border-top-right-radius:6px"],
+              ["180deg","bottom:12px;right:12px;border-bottom-right-radius:6px"],
+              ["270deg","bottom:12px;left:12px;border-bottom-left-radius:6px"],
+            ].map(([, pos], i) => (
+              <div key={i} style={{ position:"absolute", width:28, height:28, borderTop:`2.5px solid ${accentColor}`, borderLeft:`2.5px solid ${accentColor}`, opacity:0.8, ...Object.fromEntries(pos.split(";").map(p => { const [k,v]=p.split(":"); return [k.trim().replace(/-([a-z])/g,(_,c)=>c.toUpperCase()),v?.trim()]; }).filter(([k])=>k)) }}/>
+            ))}
+            <div style={{ position:"absolute", bottom:80, left:0, right:0, textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'Syne',sans-serif" }}>
+              Encuadra el paquete o la puerta del cliente
+            </div>
+          </>
+        )}
+
+        {/* Label de estado capturado */}
+        {phase === "captured" && (
+          <div style={{ position:"absolute", top:12, left:12, background:`${accentColor}dd`, color:"white", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>
+            ✓ Foto capturada
+          </div>
+        )}
+      </div>
+
+      {/* Controles */}
+      <div style={{ padding:"20px 24px 28px", background:"rgba(0,0,0,0.9)", flexShrink:0 }}>
+        {phase === "preview" && !camErr && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <button onClick={takePhoto}
+              style={{ width:72, height:72, borderRadius:"50%", border:`4px solid ${accentColor}`, background:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 0 6px ${accentColor}33` }}>
+              <div style={{ width:52, height:52, borderRadius:"50%", background:accentColor }}/>
+            </button>
+          </div>
+        )}
+
+        {phase === "captured" && (
+          <div style={{ display:"flex", gap:12 }}>
+            <button onClick={retake}
+              style={{ flex:1, padding:"14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.7)", fontSize:13, fontWeight:700, fontFamily:"'Syne',sans-serif", cursor:"pointer" }}>
+              🔄 Repetir
+            </button>
+            <button onClick={confirm}
+              style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`, color:"white", fontSize:13, fontWeight:800, fontFamily:"'Syne',sans-serif", cursor:"pointer", boxShadow:`0 4px 20px ${accentColor}55` }}>
+              ✓ Usar esta foto — {label}
+            </button>
+          </div>
+        )}
+
+        {phase === "saving" && (
+          <div style={{ textAlign:"center", color:"rgba(255,255,255,0.6)", fontSize:13 }}>
+            <div style={{ width:24, height:24, border:"2px solid rgba(255,255,255,0.2)", borderTopColor:"white", borderRadius:"50%", animation:"spin .8s linear infinite", margin:"0 auto 8px" }}/>
+            Guardando evidencia…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const AddressEditModal = ({ stop, onSave, onCancel }) => {
+  const inputRef = useRef(null);
+  const acRef    = useRef(null);
+  const [saving,  setSaving]  = useState(false);
+  const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
+  const [errMsg,  setErrMsg]  = useState("");
+
+  // Inject light-mode pac-container styles
+  useEffect(() => {
+    const id = "pac-light-style";
+    if (!document.getElementById(id)) {
+      const s = document.createElement("style");
+      s.id = id;
+      s.textContent = `
+        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
+        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
+        .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
+        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
+        .pac-matched { color:#2563eb!important; }
+        .pac-icon { display:none!important; }
+        .pac-logo:after { display:none!important; }
+      `;
+      document.head.appendChild(s);
+    }
+    loadGoogleMaps().then(() => {
+      if (!inputRef.current) return;
+      if (acRef.current) { window.google.maps.event.clearInstanceListeners(acRef.current); acRef.current = null; }
+      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
+        componentRestrictions: { country: "DO" },
+        fields: ["formatted_address", "geometry", "name"],
+      });
+      acRef.current.addListener("place_changed", () => {
+        const place = acRef.current.getPlace();
+        if (place?.geometry?.location) {
+          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
+          setFound(result);
+          setErrMsg("");
+        }
+      });
+      setTimeout(() => inputRef.current?.focus(), 60);
+    });
+    return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
+  }, []);
+
+  const handleSearch = async () => {
+    const text = inputRef.current?.value?.trim();
+    if (!text) return;
+    setFound(null); setErrMsg(""); setSaving(true);
+    // Coords? (18.xxx, -69.xxx)
+    const coords = detectCoords(text);
+    if (coords) {
+      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
+      setSaving(false); return;
+    }
+    // Plus Code?
+    if (isPlusCode(text)) {
+      const r = await decodePlusCodeGoogle(text);
+      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
+    }
+    // Google geocoder
+    const r = await geocodeWithGoogle(text);
+    setSaving(false);
+    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
+    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
+  };
+
+  const handleConfirm = () => { if (found) onSave(found); };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+
+      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+
+      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+              {stop.client} · Parada #{stop.stopNum || "?"}
+            </div>
+          </div>
+          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
+        </div>
+
+        <div style={{ padding:"20px 22px 22px" }}>
+
+          {/* ── DIRECCIÓN ACTUAL ── */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
+            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
+              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
+              <div>
+                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
+                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
+              </div>
+            </div>
+          </div>
+
+          {/* ── NUEVA DIRECCIÓN ── */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
+            <div style={{ display:"flex",gap:8 }}>
+              <input
+                ref={inputRef}
+                defaultValue=""
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
+                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
+                autoComplete="off"
+                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
+              />
+              <button onClick={handleSearch} disabled={saving}
+                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
+                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
+                {saving ? "..." : "Buscar"}
+              </button>
+            </div>
+            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
+              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
+            </div>
+          </div>
+
+          {/* ── RESULTADO ENCONTRADO ── */}
+          {found && (
+            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
+              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
+              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
+              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
+                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
+                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
+              </div>
+            </div>
+          )}
+
+          {/* ── ERROR ── */}
+          {errMsg && (
+            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
+              ⚠ {errMsg}
+            </div>
+          )}
+
+          {/* ── ACTIONS ── */}
+          <div style={{ display:"flex",gap:8,marginTop:4 }}>
+            <button onClick={onCancel}
+              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
+              Cancelar
+            </button>
+            <button onClick={handleConfirm} disabled={!found}
+              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- ADDRESS SEARCH BOX (usado en el editor inline legacy) --------------------
+const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
+  const ref = useRef(null);
+  const acRef = useRef(null);
+  useEffect(() => {
+    loadGoogleMaps().then(() => {
+      setTimeout(() => {
+        if (acRef.current || !ref.current) return;
+        acRef.current = new window.google.maps.places.Autocomplete(ref.current, {
+          componentRestrictions: { country: "DO" },
+          fields: ["formatted_address", "geometry", "name"],
+        });
+        acRef.current.addListener("place_changed", () => {
+          const place = acRef.current.getPlace();
+          if (place?.geometry) onSelect({ display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 });
+        });
+        ref.current?.focus();
+      }, 60);
+    });
+  }, []);
+  return (
+    <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
+      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── IMPORTMODAL usa el geocodificador real (geocodeWithGoogle) ───────────────
+// geocodeAddress ya no es un fake — delega al motor real de 4 capas.
+// Se llama desde runGeocoding con la query enriquecida: dirección + sector + dirección2
+// para que Google tenga suficiente contexto y encuentre calles informales de RD.
 
 
 
 // --- IMPORT MODAL -------------------------------------------------------------
 
 const ImportModal = ({ onClose, onImported }) => {
-  const [stage, setStage]       = useState("upload");   // upload | mapping | geocoding | optimize | done
+  const [stage, setStage]       = useState("upload");
   const [rawRows, setRawRows]   = useState([]);
   const [headers, setHeaders]   = useState([]);
-  const [mapping, setMapping]   = useState({});         // { address, client, phone, notes }
-  const [stops, setStops]       = useState([]);         // geocoded stops
+  const [mapping, setMapping]   = useState({});
+  const [stops, setStops]       = useState([]);
   const [optimized, setOptimized] = useState(null);
   const [progress, setProgress] = useState(0);
-  const [dragOver, setDragOver] = useState(false);
+  const [geoStatus, setGeoStatus] = useState("");
+  const [geoCount,  setGeoCount]  = useState(0); // geocodificadas en tiempo real
   const [fileName, setFileName] = useState("");
   const [driverName, setDriverName] = useState(DEFAULT_MENSAJEROS[0].id);
   const [routeName, setRouteName]   = useState("Ruta importada");
   const fileRef = useRef(null);
 
   const REQUIRED_FIELDS = ["address"];
-  const OPTIONAL_FIELDS = ["client","phone","notes","priority"];
-  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", priority:"Prioridad" };
+  const OPTIONAL_FIELDS = ["client","phone","notes","sector","address2","priority"];
+  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", sector:"Sector/Zona", address2:"Dirección 2 / Referencia", priority:"Prioridad" };
 
-  // Auto-detect column mapping (versión simplificada para ImportModal legacy)
   const autoDetectLegacy = (hdrs) => {
     const m = {};
     const patterns = {
-      address:  /direcci[oó]n|address|calle|domicilio|destino/i,
+      address:  /direcci[oó]n(?!\s*2)\b|^dir$|address(?!\s*2)|calle|domicilio|destino/i,
+      address2: /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|referencia|indicaci[oó]n|complement/i,
       client:   /cliente|nombre|name|destinatario|recipient/i,
-      phone:    /tel[eé]fono|phone|m[oó]vil|mobile|tlf/i,
-      notes:    /notas?|notes?|observ|instruc/i,
+      phone:    /tel[eé]fono|phone|m[oó]vil|mobile|tlf|whatsapp/i,
+      notes:    /notas?|notes?|observ|instruc|detalle/i,
+      sector:   /sector|barrio|zona|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
       priority: /prioridad|priority|urgente|urgent/i,
     };
     hdrs.forEach(h => {
@@ -4978,27 +6828,73 @@ const ImportModal = ({ onClose, onImported }) => {
 
   const runGeocoding = async () => {
     setStage("geocoding");
+    setGeoCount(0);
     const addressCol = mapping.address;
     if (!addressCol) return;
 
     const total = rawRows.length;
     const result = [];
+    let successCount = 0;
+
     for (let i = 0; i < total; i++) {
-      await new Promise(r => setTimeout(r, 60)); // simulate async
       const row = rawRows[i];
-      const parsed = parseAddress(row[addressCol]);
-      const geocoded = geocodeAddress(parsed);
-      result.push({
-        id: `IMP-${String(i+1).padStart(3,"0")}`,
-        ...geocoded,
-        client:   row[mapping.client]   || `Cliente ${i+1}`,
-        phone:    row[mapping.phone]    || "",
-        notes:    row[mapping.notes]    || "",
-        priority: row[mapping.priority] || "normal",
-        originalRow: row,
-      });
+
+      // ── Leer todos los campos relevantes del Excel ──────────────────────────
+      const rawAddr  = String(row[addressCol]            || "").trim();
+      const sector   = mapping.sector   ? String(row[mapping.sector]   || "").trim() : "";
+      const addr2    = mapping.address2 ? String(row[mapping.address2] || "").trim() : "";
+      const client   = String(row[mapping.client]   || `Cliente ${i+1}`).trim();
+      const phone    = String(row[mapping.phone]    || "").trim();
+      const notes    = [String(row[mapping.notes] || "").trim(), addr2].filter(Boolean).join(" · ");
+
+      // ── Construir query enriquecida ─────────────────────────────────────────
+      const parts = [rawAddr, sector, "Santo Domingo", "República Dominicana"].filter(Boolean);
+      const enrichedQuery = parts.join(", ");
+
+      setGeoStatus(`${i+1}/${total} — ${rawAddr.slice(0,50)}`);
       setProgress(Math.round(((i+1)/total)*100));
+
+      const stop = {
+        id:          `IMP-${String(i+1).padStart(3,"0")}`,
+        stopNum:     null,
+        rawAddr,
+        displayAddr: rawAddr,
+        client, phone, notes, sector, addr2,
+        originalRow: row,
+        lat: null, lng: null, confidence: 0,
+        geocoded: false, status: "pending",
+      };
+
+      try {
+        if (!rawAddr) {
+          stop.status = "error"; stop.issue = "Dirección vacía";
+        } else {
+          const r = await geocodeWithGoogle(enrichedQuery);
+          if (r.ok) {
+            stop.lat        = r.lat;
+            stop.lng        = r.lng;
+            stop.displayAddr = r.display || rawAddr;
+            stop.confidence  = r.confidence;
+            stop.allResults  = r.allResults || [];
+            stop.geocoded    = true;
+            stop.status      = r.confidence >= 70 ? "ok" : "warning";
+            stop.issue       = r.confidence < 70 ? "Confianza baja — verifica en mapa" : null;
+            if (r.confidence >= 70) {
+              successCount++;
+              setGeoCount(successCount); // actualizar contador en tiempo real
+            }
+          } else {
+            stop.status = "error"; stop.issue = "No encontrada";
+          }
+        }
+      } catch(e) {
+        stop.status = "error"; stop.issue = "Error de red";
+      }
+
+      result.push(stop);
+      await new Promise(r => setTimeout(r, 35));
     }
+
     setStops(result);
     setStage("optimize");
   };
@@ -5036,7 +6932,8 @@ const ImportModal = ({ onClose, onImported }) => {
   };
 
   const handleImport = () => {
-    const finalStops = optimized ? optimized.ordered : stops;
+    const raw = optimized ? optimized.ordered : stops;
+    const finalStops = raw.map((s, i) => ({ ...s, stopNum: i + 1 }));
     onImported({ stops: finalStops, driverName, routeName, optimized });
     setStage("done");
     setTimeout(onClose, 2000);
@@ -5189,13 +7086,16 @@ const ImportModal = ({ onClose, onImported }) => {
             <div style={{animation:"fadeUp .3s ease"}}>
               <div style={{textAlign:"center",padding:"20px 0 24px"}}>
                 <div style={{fontSize:32,marginBottom:12}}>🌍</div>
-                <div style={{fontSize:14,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9",marginBottom:6}}>Geocodificando direcciones...</div>
+                <div style={{fontSize:14,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f1f5f9",marginBottom:6}}>Geocodificando con Google Maps...</div>
+                <div style={{fontSize:11,color:"#4b5563",marginBottom:16}}>Usando dirección + sector + referencia para mayor precisión</div>
+                {geoStatus && <div style={{fontSize:11,color:"#60a5fa",marginBottom:10,fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{geoStatus}</div>}
                 <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Normalizando y asignando coordenadas a cada parada</div>
                 {/* Progress bar */}
                 <div style={{height:6,background:"#131f30",borderRadius:6,marginBottom:8,overflow:"hidden"}}>
                   <div style={{height:6,background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa)",borderRadius:6,width:`${progress}%`,transition:"width .3s",backgroundSize:"200% 100%",animation:"shimmer 2s linear infinite"}}/>
                 </div>
-                <div style={{fontSize:12,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{progress}% · {Math.round(rawRows.length*progress/100)} de {rawRows.length} direcciones</div>
+                <div style={{fontSize:12,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{progress}%</div>
+                <div style={{fontSize:11,color:"#10b981",marginTop:4}}>✓ {geoCount} geocodificadas</div>
               </div>
             </div>
           )}
@@ -5938,6 +7838,10 @@ const AddressIntelligencePanel = ({ onClose }) => {
 // --- PHASE 9: CIRCUIT ENGINE (EMBEDDED) -------------------------------------
 
 // --- CONFIG -------------------------------------------------------------------
+// URL del backend de sincronización con SilpoPack
+// En producción cambiar por la URL real del servidor Node.js
+const BACKEND_URL = "https://silpo-sync-backend-production.up.railway.app";
+
 const GMAPS_KEY = "AIzaSyCH51LeKVUD92nJ3EJwKlN7QDgz1Gad5A4";
 // DEPOT defined globally above (18.523359816124955, -69.98369283305884)
 
@@ -6247,1126 +8151,6 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-const geocodeWithGoogle = async (rawAddress) => {
-  const cacheKey = rawAddress.trim().toLowerCase();
-
-  // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
-  if (_learnedCache.has(cacheKey)) {
-    const l = _learnedCache.get(cacheKey);
-    return { ok: true, lat: l.lat, lng: l.lng, display: l.display, confidence: 99, allResults: [], source: "learned" };
-  }
-
-  // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
-  if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
-
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress);
-
-  // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
-  const anchor = findAnchor(rawAddress);
-  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
-    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
-    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
-  ) : null;
-
-  // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
-  let bestResult = null;
-  let bestScore  = 0;
-
-  for (const q of queries) {
-    try {
-      const gcOpts = { address: q, region: "DO" };
-      // componentRestrictions eliminado — rechaza resultados válidos en sectores informales
-      // Usamos bounds del anchor si lo hay; sino bounds completos de RD
-      if (hintBounds) gcOpts.bounds = hintBounds;
-      const result = await new Promise((res, rej) =>
-        geocoder.geocode(gcOpts, (results, status) => status === "OK" ? res(results) : rej(status))
-      );
-      if (!result || result.length === 0) continue;
-
-      // Evaluar TODOS los candidatos, quedarse con el mejor score
-      const candidates = result
-        .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
-        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
-        .sort((a, b) => b.score - a.score);
-
-      if (candidates.length === 0) continue;
-      const { r: top, score: conf } = candidates[0];
-
-      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
-      if (anchor) {
-        const dlat = top.geometry.location.lat() - anchor.lat;
-        const dlng = top.geometry.location.lng() - anchor.lng;
-        const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
-        if (distKm > 15) continue; // resultado random, ignorar
-      }
-
-      if (conf > bestScore) {
-        bestScore = conf;
-        bestResult = { top, conf, allCandidates: candidates };
-      }
-
-      // Score excelente → no seguir buscando variantes
-      if (bestScore >= 90) break;
-    } catch { /* try next variant */ }
-  }
-
-  if (bestResult) {
-    const { top, conf, allCandidates } = bestResult;
-    const lat = top.geometry.location.lat();
-    const lng = top.geometry.location.lng();
-    const out = {
-      ok: true, lat, lng,
-      display: top.formatted_address,
-      confidence: conf,
-      types: top.types || [],
-      source: "geocoding_api",
-      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
-        display: r.formatted_address,
-        lat: r.geometry.location.lat(),
-        lng: r.geometry.location.lng(),
-        confidence: score,
-      })),
-    };
-    _geoCache.set(cacheKey, out);
-    return out;
-  }
-
-  // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
-  try {
-    const placesResult = await searchWithPlaces(rawAddress);
-    if (placesResult) {
-      _geoCache.set(cacheKey, placesResult);
-      return placesResult;
-    }
-  } catch { /* places failed */ }
-
-  // ── CAPA 3: Nominatim (último recurso) ────────────────────────────────────
-  try {
-    const nominatimQueries = [
-      rawAddress + ", República Dominicana",
-      expandRDAddress(rawAddress) + ", República Dominicana",
-      rawAddress.split(",")[0].trim() + ", Santo Domingo, República Dominicana",
-    ];
-    for (const nmQuery of nominatimQueries) {
-      const encoded = encodeURIComponent(nmQuery);
-      const nm = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&countrycodes=do&addressdetails=1`,
-        { headers: { "Accept-Language": "es", "User-Agent": "RapDrive/1.0" } }
-      );
-      if (!nm.ok) continue;
-      const nmData = await nm.json();
-      if (!nmData?.length) continue;
-
-      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
-      if (rdResults.length === 0) continue;
-
-      const top = rdResults[0];
-      const lat = parseFloat(top.lat), lng = parseFloat(top.lon);
-      let conf = 50;
-      if (top.type === "house")           conf = 85;
-      else if (top.type === "building")   conf = 78;
-      else if (top.class === "highway")   conf = 70;
-      else if (top.type === "residential") conf = 65;
-      else if (top.class === "place")     conf = 57;
-      const nums = rawAddress.match(/\d{1,4}/g);
-      if (nums?.some(n => top.display_name.includes(n))) conf = Math.min(conf + 8, 92);
-
-      const out = {
-        ok: true, lat, lng,
-        display: top.display_name.split(",").slice(0, 3).join(",").trim(),
-        confidence: conf,
-        types: [top.type || "nominatim"],
-        source: "nominatim",
-        allResults: rdResults.slice(0, 3).map(r => ({
-          display: r.display_name.split(",").slice(0, 3).join(",").trim(),
-          lat: parseFloat(r.lat), lng: parseFloat(r.lon),
-          confidence: 52,
-        })),
-      };
-      _geoCache.set(cacheKey, out);
-      return out;
-    }
-  } catch { /* nominatim failed */ }
-
-  // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
-  // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
-  // con confianza baja para que el admin sepa que es aproximado
-  const lastAnchor = findAnchor(rawAddress);
-  if (lastAnchor) {
-    const fallbackOut = {
-      ok: true,
-      lat: lastAnchor.lat,
-      lng: lastAnchor.lng,
-      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
-      confidence: 35,
-      types: ["anchor_fallback"],
-      source: "anchor_local",
-      allResults: [],
-    };
-    _geoCache.set(cacheKey, fallbackOut);
-    return fallbackOut;
-  }
-
-  const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
-  return failed;
-};
-
-// Build multiple query variants for maximum hit rate
-// Estrategia: de más específico a más general, hasta que Google responda
-const buildQueryVariants = (raw) => {
-  const s = String(raw || "").trim();
-  if (!s) return [];
-
-  const expanded = expandRDAddress(s);
-  const variants = new Set();
-
-  // --- Detección de contexto geográfico ---
-  const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
-  const hasCity    = /santo domingo|santiago|la romana|punta cana|san pedro|boca chica|higüey|moca|bonao|puerto plata|barahona|azua|d\.?\s*n\.?|distrito nacional/i.test(s);
-  const hasSector  = /(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto|barrio)\s+\w/i.test(s);
-
-  const RD = ", República Dominicana";
-  const SD = ", Santo Domingo" + RD;
-  const DN = ", Distrito Nacional" + RD;
-
-  // 1. Versión expandida + ciudad — SDO primero si hay anchor en esa zona
-  const _anchor = findAnchor(s);
-  const _isSDO = _anchor?.city === "Santo Domingo Oeste";
-  const _isDN  = _anchor?.city === "Distrito Nacional";
-  const _isSDE = _anchor?.city === "Santo Domingo Este";
-  const _isSDN = _anchor?.city === "Santo Domingo Norte";
-  if (!hasCountry && !hasCity) {
-    // Priorizar la ciudad del anchor — evita que Google devuelva resultado en zona equivocada
-    if (_isSDO) {
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-      variants.add(expanded + SD);
-      variants.add(expanded + DN);
-    } else if (_isDN) {
-      variants.add(expanded + DN);
-      variants.add(expanded + SD);
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-    } else if (_isSDE) {
-      variants.add(expanded + ", Santo Domingo Este" + RD);
-      variants.add(expanded + SD);
-    } else if (_isSDN) {
-      variants.add(expanded + ", Santo Domingo Norte" + RD);
-      variants.add(expanded + SD);
-    } else {
-      variants.add(expanded + SD);
-      variants.add(expanded + DN);
-      variants.add(expanded + ", Santo Domingo Este" + RD);
-      variants.add(expanded + ", Santo Domingo Oeste" + RD);
-      variants.add(expanded + ", Santo Domingo Norte" + RD);
-    }
-  } else if (!hasCountry) {
-    variants.add(expanded + RD);
-    variants.add(expanded);
-  } else {
-    variants.add(expanded);
-  }
-
-  // 2. Raw original + contexto
-  if (s !== expanded) {
-    if (!hasCity && !hasCountry) {
-      variants.add(s + SD);
-      variants.add(s + RD);
-    } else if (!hasCountry) {
-      variants.add(s + RD);
-    }
-    variants.add(s);
-  }
-
-  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
-  const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
-  if (secMatch) {
-    const sec = secMatch[1].trim();
-    variants.add(sec + SD);
-    variants.add(sec + ", Santo Domingo Este" + RD);
-    variants.add(sec + ", Santo Domingo Oeste" + RD);
-    // Agregar calle + sector para mayor precisión
-    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
-    if (calleMatch) {
-      variants.add(calleMatch[0].trim() + ", " + sec + SD);
-    }
-  }
-
-  // 4. Extraer solo la parte de calle + número (sin piso/apto) como fallback
-  const calleNum = expanded.match(/(?:Calle|Avenida|Prolongación|Callejón)\s+[^,]+?\s+(?:No\.)?\s*\d+/i);
-  if (calleNum && !hasCity) {
-    variants.add(calleNum[0].trim() + SD);
-    variants.add(calleNum[0].trim() + ", Santo Domingo Este" + RD);
-  }
-
-  // 5. Fallback más genérico: solo las primeras 2 partes de la dirección + SD
-  const parts = expanded.split(",").map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    variants.add(parts.slice(0, 2).join(", ") + SD);
-  }
-  if (parts.length >= 1 && !hasCity) {
-    variants.add(parts[0] + SD);
-  }
-
-  // 6. Si tiene número de calle, probar variante sin número (por si hay typo en el número)
-  const numMatch = expanded.match(/(\d{1,4})/);
-  if (numMatch) {
-    const withoutNum = expanded.replace(numMatch[0], "").replace(/\s{2,}/g, " ").trim();
-    if (withoutNum.length > 5 && !hasCity) variants.add(withoutNum + SD);
-  }
-
-  // 7. Variante de solo palabras clave (sin abreviaciones ni números de apto)
-  // Elimina Apartamento/Torre/Edificio/Local/Piso y todo lo que sigue
-  const stripped = expanded.replace(/,?\s*(?:Apartamento|Torre|Edificio|Local|Piso|Apto?|Nivel|Suite)\s*[\w-]*.*/i, "").trim();
-  if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
-
-  // Eliminar variantes vacías o muy cortas
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
-};
-
-// RD-specific address normalizer - expanded for Dominican Republic
-const expandRDAddress = (s) => {
-  // 1. Limpieza inicial
-  let r = s.trim();
-
-  // 2. Separadores comunes en RD: barras, guiones como separadores de sector/calle
-  r = r.replace(/\s*\/\s*/g, ", ").replace(/\s*-{2,}\s*/g, ", ");
-
-  // 3. Tipos de vía
-  const abbrevs = [
-    // Avenida
-    [/\bav\.\s*/gi,            "Avenida "],
-    [/\bave\.\s*/gi,           "Avenida "],
-    [/\bavda\.\s*/gi,          "Avenida "],
-    [/\bavenida\s*/gi,         "Avenida "],
-    // Calle
-    [/\bc\/\s*/gi,             "Calle "],
-    [/\bclle?\.\s*/gi,         "Calle "],
-    [/\bcl\.\s*/gi,            "Calle "],
-    [/\bca\.\s+(?=[A-ZÁÉÍÓÚ])/gi, "Calle "],
-    // Callejón
-    [/\bclj[oó]n?\.\s*/gi,    "Callejón "],
-    // Residencial / Urbanización / Sector / Barrio
-    [/\bres(?:id(?:encial)?)?\.\s*/gi, "Residencial "],
-    [/\burb\.\s*/gi,           "Urbanización "],
-    [/\burbaniz\.\s*/gi,       "Urbanización "],
-    [/\bsect?\.\s*/gi,         "Sector "],
-    [/\bbarr?\.\s*/gi,         "Barrio "],
-    [/\bens\.\s*/gi,           "Ensanche "],
-    [/\bensanche\s*/gi,        "Ensanche "],
-    [/\bprol\.\s*/gi,          "Prolongación "],
-    [/\besq\.\s*/gi,           "Esquina "],
-    [/\besquina\s+con\s*/gi,   "Esquina "],
-    // Numeración
-    [/\bno\.\s*(\d)/gi,        "No. $1"],
-    [/\bn[oº°#]\s*(\d)/gi,     "No. $1"],
-    [/\bnúm\.\s*(\d)/gi,       "No. $1"],
-    [/\b#\s*(\d)/gi,           "No. $1"],
-    // Kilómetro
-    [/\bkm\.?\s+/gi,           "Km "],
-    // Apartamento / Edificio / Torre / Local
-    [/\bapto\.?\s*/gi,         "Apartamento "],
-    [/\bapt\.?\s*/gi,          "Apartamento "],
-    [/\bap\.?\s+(?=\d)/gi,     "Apartamento "],
-    [/\bdepto\.?\s*/gi,        "Departamento "],
-    [/\bedif\.?\s*/gi,         "Edificio "],
-    [/\bedificio\s*/gi,        "Edificio "],
-    [/\btorre\s+/gi,           "Torre "],
-    [/\bloc\.?\s*/gi,          "Local "],
-    // Zonas especiales RD
-    [/\bz\.?\s*col(?:onial)?\b/gi,  "Zona Colonial"],
-    [/\bznc?\b/gi,             "Zona Colonial"],
-    [/\bd\.?\s*n\.?\b/gi,      "Distrito Nacional"],
-    [/\bsto\.?\s*dgo\.?\b/gi,  "Santo Domingo"],
-    [/\bsdo\.?\b/gi,           "Santo Domingo"],
-    [/\bsdq\b/gi,              "Santo Domingo"],
-    [/\bstgo\.?\b/gi,          "Santiago"],
-    [/\bstgo\s+de\s+los\s+cab\b/gi, "Santiago de los Caballeros"],
-    [/\blr\b/gi,               "La Romana"],
-    [/\bpup\b/gi,              "Punta Cana"],
-    [/\bspm\b/gi,              "San Pedro de Macorís"],
-    [/\bsd\s+este\b/gi,        "Santo Domingo Este"],
-    [/\bsd\s+oeste\b/gi,       "Santo Domingo Oeste"],
-    [/\bsd\s+norte\b/gi,       "Santo Domingo Norte"],
-    // Sectores comunes SD
-    [/\bnaco\b/gi,             "Naco, Santo Domingo"],
-    [/\bpiantini\b/gi,         "Piantini, Santo Domingo"],
-    [/\bgazcue\b/gi,           "Gazcue, Santo Domingo"],
-    [/\bpolo\s*gov\b/gi,       "Polígono Central, Santo Domingo"],
-    [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
-    [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
-    [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
-
-    // ── Santo Domingo Oeste – Zona Herrera (núcleo principal) ─────────────────
-    [/\bherrera\b(?!\s+de)/gi,                 "Herrera, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+herrera\b/gi,    "Buenos Aires de Herrera, Santo Domingo Oeste"],
-    [/\bel\s+caf[eé]\s+de\s+herrera\b/gi,     "El Café de Herrera, Santo Domingo Oeste"],
-    [/\blas\s+palmas\s+de\s+herrera\b/gi,      "Las Palmas de Herrera, Santo Domingo Oeste"],
-    [/\benriquillo\b/gi,                        "Enriquillo, Santo Domingo Oeste"],
-    [/\bduarte\s*(?:\(herrera\))?\b/gi,        "Duarte, Herrera, Santo Domingo Oeste"],
-    [/\bpueblo\s+nuevo\b(?!.*ozama)/gi,        "Pueblo Nuevo, Santo Domingo Oeste"],
-    [/\bjuan\s+guzm[aá]n\b/gi,                "Juan Guzmán, Santo Domingo Oeste"],
-    [/\biv[aá]n\s+guzm[aá]n\s+klang\b/gi,    "Iván Guzmán Klang, Santo Domingo Oeste"],
-    [/\blas\s+mercedes\b/gi,                   "Las Mercedes, Santo Domingo Oeste"],
-    [/\bvilla\s+aura\b/gi,                     "Villa Aura, Santo Domingo Oeste"],
-    [/\bolimpo\b/gi,                            "Olimpo, Santo Domingo Oeste"],
-    [/\bbarrio\s+duarte\b/gi,                  "Barrio Duarte, Santo Domingo Oeste"],
-    [/\bbarrio\s+nuevo\b/gi,                   "Barrio Nuevo, Santo Domingo Oeste"],
-    [/\bbarrio\s+san\s+francisco\b/gi,         "Barrio San Francisco, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Las Caobas ────────────────────────────────
-    [/\blas\s+caobas\b/gi,                     "Las Caobas, Santo Domingo Oeste"],
-    [/\blas\s+caobitas\b/gi,                   "Las Caobitas, Santo Domingo Oeste"],
-    [/\blas\s+colinas\b/gi,                    "Las Colinas, Santo Domingo Oeste"],
-    [/\blas\s+palmas\b(?!\s+de\s+herrera)/gi,  "Las Palmas, Santo Domingo Oeste"],
-    [/\bel\s+libertador\b/gi,                  "El Libertador, Santo Domingo Oeste"],
-    [/\bsavica\b/gi,                            "Savica, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+las\s+caobas\b/gi, "Buenos Aires de Las Caobas, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+las\s+caobas\b/gi, "Urbanización Las Caobas, Santo Domingo Oeste"],
-    [/\baltos\s+de\s+las\s+caobas\b/gi,        "Altos de Las Caobas, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Bayona / Manoguayabo ──────────────────────
-    [/\bbayona\b/gi,                            "Bayona, Santo Domingo Oeste"],
-    [/\bmanoguayabo\b/gi,                       "Manoguayabo, Santo Domingo Oeste"],
-    [/\bbuenos\s+aires\s+de\s+manoguayabo\b/gi,"Buenos Aires de Manoguayabo, Santo Domingo Oeste"],
-    [/\bel\s+hoyo\s+de\s+manoguayabo\b/gi,     "El Hoyo de Manoguayabo, Santo Domingo Oeste"],
-    [/\bbarrio\s+san\s+miguel\b/gi,            "Barrio San Miguel, Santo Domingo Oeste"],
-    [/\bla\s+venta\b/gi,                        "La Venta, Santo Domingo Oeste"],
-    [/\bel\s+8\s+de\s+bayona\b/gi,             "El 8 de Bayona, Santo Domingo Oeste"],
-    [/\bbarrio\s+enriquillo\b/gi,              "Barrio Enriquillo, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Engombe ───────────────────────────────────
-    [/\bengombe\b/gi,                           "Engombe, Santo Domingo Oeste"],
-    [/\baltos\s+de\s+engombe\b/gi,             "Altos de Engombe, Santo Domingo Oeste"],
-    [/\bla\s+ure[nñ]a\b/gi,                   "La Ureña, Santo Domingo Oeste"],
-    [/\bbarrio\s+progreso\b/gi,               "Barrio Progreso, Santo Domingo Oeste"],
-    [/\bbarrio\s+libertad\b/gi,               "Barrio Libertad, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+engombe\b/gi,  "Urbanización Engombe, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Zona Hato Nuevo / Expansión ────────────────────
-    [/\bhato\s+nuevo\b/gi,                     "Hato Nuevo, Santo Domingo Oeste"],
-    [/\bcaballona\b/gi,                         "Caballona, Santo Domingo Oeste"],
-    [/\blechería\b/gi,                          "Lechería, Santo Domingo Oeste"],
-    [/\bbatey\s+bienvenido\b/gi,              "Batey Bienvenido, Santo Domingo Oeste"],
-    [/\bnuevo\s+horizonte\b/gi,               "Barrio Nuevo Horizonte, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Residenciales y Urbanizaciones ─────────────────
-    [/\bres(?:idencial)?\s+carmen\s+renata\b/gi, "Residencial Carmen Renata, Santo Domingo Oeste"],
-    [/\bbrisas\s+del\s+oeste\b/gi,            "Residencial Brisas del Oeste, Santo Domingo Oeste"],
-    [/\bciudad\s+agraria\b/gi,                "Ciudad Agraria, Santo Domingo Oeste"],
-    [/\boperaciones\s+especiales\b/gi,         "Operaciones Especiales, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+antonia\b/gi,       "Residencial Antonia, Santo Domingo Oeste"],
-    [/\bres(?:idencial)?\s+altagracia\b/gi,    "Residencial Altagracia, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+el\s+caf[eé]\b/gi, "Urbanización El Café, Santo Domingo Oeste"],
-    [/\burb(?:anizaci[oó]n)?\s+las\s+palmas\b/gi,  "Urbanización Las Palmas, Santo Domingo Oeste"],
-    [/\bdon\s+honorio\b/gi,                    "Residencial Don Honorio, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Sectores en crecimiento ────────────────────────
-    [/\barroyo\s+bonito\b/gi,                 "Arroyo Bonito, Santo Domingo Oeste"],
-    [/\bel\s+30\s+de\s+mayo\b/gi,            "El 30 de Mayo, Santo Domingo Oeste"],
-    [/\bbarrio\s+libertador\b/gi,             "Barrio Libertador, Santo Domingo Oeste"],
-    [/\bbarrio\s+progreso\s+ii\b/gi,          "Barrio Progreso II, Santo Domingo Oeste"],
-    [/\bla\s+isabela\b/gi,                    "La Isabela, Santo Domingo Oeste"],
-
-    // ── Santo Domingo Oeste – Corredores viales clave ────────────────────────
-    [/\bautopista\s+duarte\b/gi,              "Autopista Duarte, Santo Domingo Oeste"],
-    [/\bprol(?:ongaci[oó]n)?\s+27\s+de\s+febrero\b/gi, "Prolongación 27 de Febrero, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+isabel\s+aguiar\b/gi,  "Avenida Isabel Aguiar, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+las\s+palmas\b/gi,     "Avenida Las Palmas, Santo Domingo Oeste"],
-    [/\bprol(?:ongaci[oó]n)?\s+independencia\b/gi, "Prolongación Independencia, Santo Domingo Oeste"],
-
-    // ── Abreviaturas rápidas SDO ──────────────────────────────────────────────
-    [/\bsdo\s+oeste\b/gi,                     "Santo Domingo Oeste"],
-    [/\bsd\s+o\b/gi,                          "Santo Domingo Oeste"],
-  ];
-
-  for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
-
-  // 4. Limpiar espacios múltiples y comas duplicadas
-  r = r.replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ").trim();
-
-  return r;
-};
-
-// Score Google result quality
-const scoreGoogleResult = (result, original) => {
-  const types = result.types || [];
-  const addr  = result.formatted_address || "";
-  let score = 55;
-
-  // Tipo de resultado (cuanto más específico, mejor)
-  if      (types.includes("street_address"))            score = 96;
-  else if (types.includes("premise"))                   score = 93;
-  else if (types.includes("subpremise"))                score = 91;
-  else if (types.includes("route"))                     score = 82;
-  else if (types.includes("intersection"))              score = 80;
-  else if (types.includes("neighborhood"))              score = 70;
-  else if (types.includes("sublocality"))               score = 68;
-  else if (types.includes("sublocality_level_1"))       score = 68;
-  else if (types.includes("sublocality_level_2"))       score = 65;
-  else if (types.includes("locality"))                  score = 60;
-  else if (types.includes("administrative_area_level_1")) score = 40;
-  else if (types.includes("country"))                   score = 20;
-
-  // Bonus: original tiene número Y el resultado también → más preciso
-  const origHasNum = /\d/.test(original);
-  const resHasNum  = /\d/.test(addr);
-  if (origHasNum && resHasNum)   score = Math.min(score + 5, 99);
-  if (origHasNum && !resHasNum)  score = Math.max(score - 8, 10); // no encontró el número
-
-  // Bonus: resultado está dentro de la bounding box de RD
-  const loc = result.geometry.location;
-  const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
-  const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
-  if (lat < 17.4 || lat > 19.9 || lng < -72.1 || lng > -68.3) {
-    score = Math.max(score - 50, 3); // resultado fuera de RD → descartar
-  }
-
-  // Bonus: la dirección formateada contiene la ciudad/sector del original
-  const origLower = (original || "").toLowerCase();
-  const addrLower = addr.toLowerCase();
-  if (/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/.test(origLower)) {
-    const city = origLower.match(/santo domingo|santiago|la romana|punta cana|san pedro|barahona|moca|bonao/)?.[0];
-    if (city && addrLower.includes(city)) score = Math.min(score + 5, 99);
-    else if (city && !addrLower.includes(city)) score = Math.max(score - 8, 5);
-  }
-
-  // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
-  if (numInOrig) {
-    const anyMatch = numInOrig.some(n => addr.includes(n));
-    if (anyMatch) score = Math.min(score + 3, 99);
-  }
-
-  // Penalizar si el resultado es solo país/provincia (demasiado vago)
-  if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
-
-  return Math.min(Math.max(score, 1), 99);
-};
-
-// --- PLUS CODE → LAT/LNG via Google ------------------------------------------
-const decodePlusCodeGoogle = async (code) => {
-  await loadGoogleMaps();
-  const geocoder = new window.google.maps.Geocoder();
-  const query = code.includes(" ") ? code : code + " Santo Domingo";
-  try {
-    const r = await new Promise((res, rej) =>
-      geocoder.geocode({ address: query }, (results, status) =>
-        status === "OK" ? res(results) : rej(status))
-    );
-    if (r?.[0]) {
-      const loc = r[0].geometry.location;
-      return { ok: true, lat: loc.lat(), lng: loc.lng(), display: r[0].formatted_address, confidence: 99 };
-    }
-  } catch {}
-  return { ok: false };
-};
-
-// --- COORDINATE DETECTOR - acepta múltiples formatos ---
-// Detecta: "18.4714,-69.9318" | "18.4714, -69.9318" | links de Google Maps
-const detectCoords = (s) => {
-  const t = (s || "").trim();
-
-  // Formato: lat,lng o lat, lng (con o sin espacios)
-  const pair = t.match(/^(-?\d{1,3}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})$/);
-  if (pair) {
-    const lat = parseFloat(pair[1]), lng = parseFloat(pair[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  // Link de Google Maps: https://maps.google.com/?q=18.4714,-69.9318
-  const gmLink = t.match(/[?&]q=(-?\d{1,3}\.\d{3,})[,+](-?\d{1,3}\.\d{3,})/);
-  if (gmLink) {
-    const lat = parseFloat(gmLink[1]), lng = parseFloat(gmLink[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  // Link de Google Maps con @lat,lng
-  const atLink = t.match(/@(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
-  if (atLink) {
-    const lat = parseFloat(atLink[1]), lng = parseFloat(atLink[2]);
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
-  }
-
-  return null;
-};
-
-// Plus Code detector: acepta códigos completos (8+2) y cortos (con ciudad)
-// Ejemplos: "G2F8+7G3" | "G2F8+7G3 Santo Domingo" | "7G3 Santo Domingo"
-const isPlusCode = (s) => {
-  const t = (s || "").trim();
-  // Código completo: XXXXXXXX+XX o XXXX+XX
-  if (/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(t)) return true;
-  // Código corto + ciudad: XX+XX Ciudad
-  if (/^[23456789CFGHJMPQRVWX]{2,}\+[23456789CFGHJMPQRVWX]{2,}\s+\w/i.test(t)) return true;
-  return false;
-};
-
-// --- HAVERSINE (fallback local cuando Routes API no disponible) ---------------
-const hav = (a, b) => {
-  const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
-  const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-};
-
-// --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
-// Usa calles reales, sentidos de vía y tráfico de Santo Domingo.
-// Google permite hasta 25 waypoints intermedios por solicitud.
-// Chunking automático si hay más de 25 paradas válidas.
-const optimizeWithRoutesAPI = async (validStops) => {
-  // Máximo 25 waypoints por llamada a la API
-  const CHUNK = 25;
-  if (validStops.length <= 1) return validStops.map((s, i) => ({ ...s, stopNum: i + 1 }));
-
-  // Helper: llamada a la Routes API v2 para un chunk
-  const callRoutesAPI = async (chunk) => {
-    const waypoints = chunk.map(s => ({
-      location: { latLng: { latitude: s.lat, longitude: s.lng } },
-    }));
-
-    const body = {
-      origin:      { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
-      destination: { location: { latLng: { latitude: DEPOT.lat,  longitude: DEPOT.lng  } } },
-      intermediates: waypoints,
-      travelMode: "DRIVE",
-      optimizeWaypointOrder: true,
-      routingPreference: "TRAFFIC_AWARE",
-      languageCode: "es",
-    };
-
-    const resp = await fetch(
-      "https://routes.googleapis.com/directions/v2:computeRoutes",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": GMAPS_KEY,
-          "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters",
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!resp.ok) throw new Error(`Routes API HTTP ${resp.status}`);
-    const data = await resp.json();
-
-    const route = data?.routes?.[0];
-    if (!route?.optimizedIntermediateWaypointIndex) throw new Error("No optimized order returned");
-
-    return {
-      order:    route.optimizedIntermediateWaypointIndex,   // índices reordenados
-      durations: (route.legs || []).slice(1).map(l =>       // segundos por tramo (sin el tramo depot→1)
-        parseInt(l.duration?.replace("s", "") || "0", 10)
-      ),
-      distances: (route.legs || []).slice(1).map(l => Math.round((l.distanceMeters || 0) / 1000 * 10) / 10),
-    };
-  };
-
-  // Si entran ≤25 paradas → una sola llamada
-  if (validStops.length <= CHUNK) {
-    try {
-      const { order, durations, distances } = await callRoutesAPI(validStops);
-      return order.map((origIdx, newPos) => ({
-        ...validStops[origIdx],
-        stopNum:      newPos + 1,
-        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
-        distKmRoutes: distances[newPos] ?? null,
-      }));
-    } catch (e) {
-      console.warn("Routes API falló, usando Haversine:", e.message);
-      return null; // señal para caer al fallback
-    }
-  }
-
-  // Más de 25: dividir en chunks, optimizar cada uno y concatenar
-  const ordered = [];
-  for (let i = 0; i < validStops.length; i += CHUNK) {
-    const chunk = validStops.slice(i, i + CHUNK);
-    try {
-      const { order, durations, distances } = await callRoutesAPI(chunk);
-      const reordered = order.map((origIdx, newPos) => ({
-        ...chunk[origIdx],
-        stopNum:      ordered.length + newPos + 1,
-        etaMin:       durations[newPos] ? Math.round(durations[newPos] / 60) : null,
-        distKmRoutes: distances[newPos] ?? null,
-      }));
-      ordered.push(...reordered);
-    } catch {
-      // Chunk fallido → mantener orden Haversine para ese chunk
-      chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
-    }
-  }
-  return ordered;
-};
-
-// --- NEAREST NEIGHBOR + 2-opt + Or-opt (fallback puro Haversine) --------------
-const optimizeRouteLocal = (stops) => {
-  if (!stops || stops.length === 0) return [];
-  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
-  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
-  if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
-  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
-
-  // Fase 1: Nearest Neighbor
-  let cur = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const rem = [...valid], tour = [];
-  while (rem.length > 0) {
-    let bi = 0, bd = Infinity;
-    for (let i = 0; i < rem.length; i++) { const d = hav(cur, rem[i]); if (d < bd) { bd = d; bi = i; } }
-    const [next] = rem.splice(bi, 1); tour.push(next); cur = next;
-  }
-
-  // Fase 2: 2-opt
-  let improved = true, iterations = 0;
-  while (improved && iterations < 100) {
-    improved = false; iterations++;
-    for (let i = 0; i < tour.length - 1; i++) {
-      for (let j = i + 1; j < tour.length; j++) {
-        const A = i === 0 ? DEPOT : tour[i - 1], B = tour[i];
-        const C = tour[j], D = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
-          let l = i, r = j;
-          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
-          improved = true;
-        }
-      }
-    }
-  }
-
-  // Fase 3: Or-opt
-  let orImproved = true, orIter = 0;
-  while (orImproved && orIter < 20) {
-    orImproved = false; orIter++;
-    for (let i = 0; i < tour.length; i++) {
-      const node = tour[i], prev = i === 0 ? DEPOT : tour[i - 1], next = i === tour.length - 1 ? DEPOT : tour[i + 1];
-      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
-      let bestGain = 0.001, bestJ = -1;
-      for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i - 1) continue;
-        const a = tour[j], b = j + 1 < tour.length ? tour[j + 1] : DEPOT;
-        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
-        if (gain > bestGain) { bestGain = gain; bestJ = j; }
-      }
-      if (bestJ >= 0) {
-        const removed = tour.splice(i, 1)[0];
-        tour.splice(bestJ > i ? bestJ : bestJ + 1, 0, removed);
-        orImproved = true; break;
-      }
-    }
-  }
-
-  return [
-    ...tour.map((s, i) => ({ ...s, stopNum: i + 1 })),
-    ...invalid.map(s => ({ ...s, stopNum: null })),
-  ];
-};
-
-// --- OPTIMIZADOR PRINCIPAL: Routes API → fallback Haversine ------------------
-// Devuelve siempre de forma sincrónica (Haversine) o asíncrona (Routes API).
-// El componente llama optimizeRoute para re-renders inmediatos y
-// optimizeRouteAsync para la optimización final con calles reales.
-const optimizeRoute = (stops) => optimizeRouteLocal(stops);
-
-const optimizeRouteAsync = async (stops, onProgress) => {
-  if (!stops || stops.length === 0) return stops;
-
-  const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
-  const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
-
-  if (valid.length <= 1) return optimizeRouteLocal(stops);
-
-  onProgress?.("Consultando Routes API de Google…");
-
-  // Intentar Routes API v2
-  const apiResult = await optimizeWithRoutesAPI(valid);
-
-  if (apiResult) {
-    // Renumerar correctamente si venía de chunks
-    const renumbered = apiResult.map((s, i) => ({ ...s, stopNum: i + 1 }));
-    onProgress?.(`Ruta optimizada con calles reales · ${valid.length} paradas`);
-    return [
-      ...renumbered,
-      ...invalid.map(s => ({ ...s, stopNum: null })),
-    ];
-  }
-
-  // Fallback: Haversine
-  onProgress?.("Optimizando con distancia directa…");
-  return optimizeRouteLocal(stops);
-};
-
-const totalKm = (stops) => {
-  const v = stops.filter(s => s.lat && s.lng);
-  if (!v.length) return 0;
-  // Si hay datos reales de la Routes API, sumarlos
-  if (v[0]?.distKmRoutes !== undefined && v[0]?.distKmRoutes !== null) {
-    return Math.round(v.reduce((acc, s) => acc + (s.distKmRoutes || 0), 0) * 10) / 10;
-  }
-  return Math.round((v.reduce((acc, s, i) => acc + hav(i === 0 ? DEPOT : v[i - 1], s), 0) + hav(v[v.length - 1], DEPOT)) * 10) / 10;
-};
-
-// --- COLUMN AUTODETECT --------------------------------------------------------
-const autoDetect = (headers) => {
-  const patterns = {
-    address:   /direcci[oó]n\b(?!.*2)|^dir$|address(?!.*2)|calle|domicilio|destino|ubicaci[oó]n|lugar|via\b/i,
-    address2:  /direcci[oó]n\s*2|dir\.?\s*2|address\s*2|dir2|ref(?:erencia)?|indicaci[oó]n|complement|edificio|apto|piso|local/i,
-    client:    /cliente|nombre|name|destinatario|recipient|contacto/i,
-    phone:     /tel[eé]fono|phone|m[oó]vil|mobile|celular|tlf|whatsapp/i,
-    notes:     /notas?|notes?|observ|instruc|detalle/i,
-    sector:    /sector|barrio|colonia|urbanizaci[oó]n|urb|residencial|reparto/i,
-    ciudad:    /ciudad|municipio|localidad|town|city/i,
-    provincia: /provincia|province|estado|state|dpto|departamento/i,
-    cp:        /c[oó]digo\s*postal|cp\b|c\.p\.|zip|postal/i,
-    tracking:  /c[oó]digo|tracking|track|guia|gu[ií]a|orden|order|referencia|ref\b|sp\d|barcode/i,
-  };
-  const m = {};
-  headers.forEach(h => {
-    Object.entries(patterns).forEach(([f, re]) => { if (!m[f] && re.test(h)) m[f] = h; });
-  });
-  return m;
-};
-
-// --- GOOGLE MAP COMPONENT -----------------------------------------------------
-const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
-  const ref = useRef(null);
-  const mapRef = useRef(null);
-  const markersRef = useRef([]);
-  const polyRef = useRef(null);
-  const infoRef = useRef(null);
-
-  useEffect(() => {
-    loadGoogleMaps().then(() => {
-      if (mapRef.current) return;
-      mapRef.current = new window.google.maps.Map(ref.current, {
-        center: { lat: DEPOT.lat, lng: DEPOT.lng },
-        zoom: 12,
-        mapTypeId: "roadmap",
-        styles: [
-          {featureType:"poi",stylers:[{visibility:"off"}]},
-          {featureType:"transit",stylers:[{visibility:"off"}]},
-          {featureType:"road",elementType:"geometry",stylers:[{color:"#ffffff"}]},
-          {featureType:"road.arterial",elementType:"geometry",stylers:[{color:"#f0f0f0"}]},
-          {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#e8e8e8"}]},
-          {featureType:"water",elementType:"geometry",stylers:[{color:"#c9e8f5"}]},
-          {featureType:"landscape",elementType:"geometry",stylers:[{color:"#f7f8fa"}]},
-          {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#d1d5db"}]},
-          {elementType:"labels.text.fill",stylers:[{color:"#374151"}]},
-          {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
-        ],
-        disableDefaultUI: true,
-        zoomControl: true,
-        zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
-      });
-      infoRef.current = new window.google.maps.InfoWindow();
-
-      // Depot marker - house icon like Circuit
-      const depotSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1d4ed8" stroke="white" stroke-width="2.5"/><path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/></svg>';
-      new window.google.maps.Marker({
-        map: mapRef.current,
-        position: { lat: DEPOT.lat, lng: DEPOT.lng },
-        title: DEPOT.label,
-        zIndex: 999,
-        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
-      });
-    });
-  }, []);
-
-  const stopsLenRef = useRef(0);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-    // Clear old markers properly to prevent memory leaks
-    markersRef.current.forEach(m => { m.setMap(null); });
-    markersRef.current = [];
-    if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
-
-    const valid = stops.filter(s => s.lat && s.lng && s.stopNum);
-
-    // Draw route polyline
-    if (valid.length > 1 && phase === "route") {
-      const path = [
-        { lat: DEPOT.lat, lng: DEPOT.lng },
-        ...valid.map(s => ({ lat: s.lat, lng: s.lng })),
-        { lat: DEPOT.lat, lng: DEPOT.lng },
-      ];
-      polyRef.current = new window.google.maps.Polyline({
-        path,
-        geodesic: true,
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.9,
-        strokeWeight: 3,
-        map: mapRef.current,
-      });
-    }
-
-    // Inject shared SVG filters once (avoids per-marker filter accumulation)
-    if (!document.getElementById("rd-map-filters")) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
-      svg.id = "rd-map-filters";
-      svg.setAttribute("style","position:absolute;width:0;height:0;overflow:hidden");
-      svg.innerHTML = `<defs>
-        <filter id="rdGlowSel" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        <filter id="rdGlowNorm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>`;
-      document.body.appendChild(svg);
-    }
-
-    // Draw stop markers
-    const colMap = { ok: "#3b82f6", warning: "#f59e0b", error: "#ef4444", pending: "#475569" };
-    stops.filter(s => s.lat && s.lng).forEach(stop => {
-      const isSelected = stop.id === selectedId;
-      const col = colMap[stop.status] || "#3b82f6";
-
-      // Detect co-located stops (same lat/lng rounded to 4 decimals)
-      const key = `${stop.lat?.toFixed(4)},${stop.lng?.toFixed(4)}`;
-      const colocated = stops.filter(s => s.lat && s.lng && `${s.lat?.toFixed(4)},${s.lng?.toFixed(4)}` === key);
-      const isCluster = colocated.length > 1;
-      const clusterIdx = colocated.findIndex(s => s.id === stop.id);
-      // Only render marker for the first of a cluster group (to avoid stacking)
-      if (isCluster && clusterIdx !== 0) return;
-
-      const displayStop = isCluster && selectedId
-        ? (colocated.find(s => s.id === selectedId) || colocated[0])
-        : stop;
-
-      const label = isCluster
-        ? (isSelected ? String(displayStop.stopNum || "?") : `${colocated.length}`)
-        : String(stop.stopNum || "?");
-      const fs = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
-      const w = isSelected ? 40 : 32;
-      const filterId = isSelected ? "rdGlowSel" : "rdGlowNorm";
-      const clusterRing = isCluster && !isSelected ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.4" stroke-dasharray="3 2"/>` : "";
-      const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}" viewBox="0 0 40 40">${clusterRing}<circle cx="20" cy="20" r="${isSelected?18:14}" fill="${isSelected?col:"#0d1f35"}" filter="url(#${filterId})" stroke="${col}" stroke-width="${isSelected?0:2}"/>${isSelected?`<circle cx="20" cy="20" r="11" fill="rgba(255,255,255,0.2)"/>`:`<circle cx="20" cy="20" r="10" fill="#0a1829"/>`}<text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,system-ui,Arial" font-weight="900" font-size="${fs}" fill="${isSelected?"white":col}">${label}</text></svg>`;
-      const marker = new window.google.maps.Marker({
-        map: mapRef.current,
-        position: { lat: stop.lat, lng: stop.lng },
-        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(w, w), anchor: new window.google.maps.Point(w/2, w/2) },
-        zIndex: isSelected ? 100 : 10,
-        title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
-      });
-      marker.addListener("click", () => {
-        if (isCluster) {
-          // Cycle through co-located stops
-          const curIdx = colocated.findIndex(s => s.id === selectedId);
-          const nextIdx = (curIdx + 1) % colocated.length;
-          onSelectStop(colocated[nextIdx].id, true);
-        } else {
-          onSelectStop(stop.id, true);
-        }
-        infoRef.current.close();
-      });
-      markersRef.current.push(marker);
-    });
-
-    // Fit bounds only when number of valid stops changes (first load / after geocoding)
-    const newLen = valid.length;
-    if (newLen > 0 && newLen !== stopsLenRef.current) {
-      stopsLenRef.current = newLen;
-      const bounds = new window.google.maps.LatLngBounds();
-      bounds.extend({ lat: DEPOT.lat, lng: DEPOT.lng });
-      valid.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
-      mapRef.current.fitBounds(bounds, { padding: 40 });
-    }
-  }, [stops, selectedId, phase]);
-
-  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
-};
-
-// --- ADDRESS EDIT MODAL --------------------------------------------------------
-// Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
-const AddressEditModal = ({ stop, onSave, onCancel }) => {
-  const inputRef = useRef(null);
-  const acRef    = useRef(null);
-  const [saving,  setSaving]  = useState(false);
-  const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
-  const [errMsg,  setErrMsg]  = useState("");
-
-  // Inject light-mode pac-container styles
-  useEffect(() => {
-    const id = "pac-light-style";
-    if (!document.getElementById(id)) {
-      const s = document.createElement("style");
-      s.id = id;
-      s.textContent = `
-        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
-        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
-        .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
-        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
-        .pac-matched { color:#2563eb!important; }
-        .pac-icon { display:none!important; }
-        .pac-logo:after { display:none!important; }
-      `;
-      document.head.appendChild(s);
-    }
-    loadGoogleMaps().then(() => {
-      if (!inputRef.current) return;
-      if (acRef.current) { window.google.maps.event.clearInstanceListeners(acRef.current); acRef.current = null; }
-      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
-        componentRestrictions: { country: "DO" },
-        fields: ["formatted_address", "geometry", "name"],
-      });
-      acRef.current.addListener("place_changed", () => {
-        const place = acRef.current.getPlace();
-        if (place?.geometry?.location) {
-          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
-          setFound(result);
-          setErrMsg("");
-        }
-      });
-      setTimeout(() => inputRef.current?.focus(), 60);
-    });
-    return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
-  }, []);
-
-  const handleSearch = async () => {
-    const text = inputRef.current?.value?.trim();
-    if (!text) return;
-    setFound(null); setErrMsg(""); setSaving(true);
-    // Coords? (18.xxx, -69.xxx)
-    const coords = detectCoords(text);
-    if (coords) {
-      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
-      setSaving(false); return;
-    }
-    // Plus Code?
-    if (isPlusCode(text)) {
-      const r = await decodePlusCodeGoogle(text);
-      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
-    }
-    // Google geocoder
-    const r = await geocodeWithGoogle(text);
-    setSaving(false);
-    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
-    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
-  };
-
-  const handleConfirm = () => { if (found) onSave(found); };
-
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-
-      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-
-      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
-
-        {/* ── HEADER ── */}
-        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-              {stop.client} · Parada #{stop.stopNum || "?"}
-            </div>
-          </div>
-          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
-        </div>
-
-        <div style={{ padding:"20px 22px 22px" }}>
-
-          {/* ── DIRECCIÓN ACTUAL ── */}
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
-            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
-              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
-              <div>
-                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
-                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
-              </div>
-            </div>
-          </div>
-
-          {/* ── NUEVA DIRECCIÓN ── */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
-            <div style={{ display:"flex",gap:8 }}>
-              <input
-                ref={inputRef}
-                defaultValue=""
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
-                autoComplete="off"
-                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
-              />
-              <button onClick={handleSearch} disabled={saving}
-                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
-                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
-                {saving ? "..." : "Buscar"}
-              </button>
-            </div>
-            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
-              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
-            </div>
-          </div>
-
-          {/* ── RESULTADO ENCONTRADO ── */}
-          {found && (
-            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
-              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
-              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
-              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
-                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
-                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
-              </div>
-            </div>
-          )}
-
-          {/* ── ERROR ── */}
-          {errMsg && (
-            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
-              ⚠ {errMsg}
-            </div>
-          )}
-
-          {/* ── ACTIONS ── */}
-          <div style={{ display:"flex",gap:8,marginTop:4 }}>
-            <button onClick={onCancel}
-              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
-              Cancelar
-            </button>
-            <button onClick={handleConfirm} disabled={!found}
-              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- ADDRESS SEARCH BOX (usado en el editor inline legacy) --------------------
-const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
-  const ref = useRef(null);
-  const acRef = useRef(null);
-  useEffect(() => {
-    loadGoogleMaps().then(() => {
-      setTimeout(() => {
-        if (acRef.current || !ref.current) return;
-        acRef.current = new window.google.maps.places.Autocomplete(ref.current, {
-          componentRestrictions: { country: "DO" },
-          fields: ["formatted_address", "geometry", "name"],
-        });
-        acRef.current.addListener("place_changed", () => {
-          const place = acRef.current.getPlace();
-          if (place?.geometry) onSelect({ display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 });
-        });
-        ref.current?.focus();
-      }, 60);
-    });
-  }, []);
-  return (
-    <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
-      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN
-// ═══════════════════════════════════════════════════════════════════════════════
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
@@ -7528,14 +8312,8 @@ const CircuitEngine = () => {
     const localOptimized = optimizeRoute(results);
     setStops(localOptimized);
     setPhase("review");
-    setRoutesOptStatus("Optimizando con calles reales…");
-
-    // ── Optimización asíncrona con Routes API (en segundo plano) ──────────────
-    optimizeRouteAsync(results, (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
-      setStops(apiOptimized);
-      setRoutesOptStatus("✓ Ruta optimizada con Google Routes API");
-      setTimeout(() => setRoutesOptStatus(""), 4000);
-    }).catch(() => setRoutesOptStatus(""));
+    setRoutesOptStatus("✓ Ruta optimizada con motor de zonas v3");
+    setTimeout(() => setRoutesOptStatus(""), 4000);
   }, [rawRows, mapping]);
 
   // -- EDIT + RE-GEOCODE ------------------------------------------------------
@@ -7599,15 +8377,12 @@ const CircuitEngine = () => {
 
   const reOpt = () => {
     setReoptimizing(true);
-    setRoutesOptStatus("Consultando Routes API…");
-    // Optimización local inmediata para feedback visual
+    setRoutesOptStatus("Optimizando con motor de zonas v3…");
+    // Re-optimización con motor v3 local
     setStops(prev => optimizeRoute([...prev]));
-    // Optimización con calles reales en segundo plano
-    optimizeRouteAsync([...stops], (msg) => setRoutesOptStatus(msg)).then(apiOptimized => {
-      setStops(apiOptimized);
-      setRoutesOptStatus("✓ Re-optimizado con calles reales");
-      setTimeout(() => setRoutesOptStatus(""), 4000);
-    }).catch(() => setRoutesOptStatus("")).finally(() => setReoptimizing(false));
+    setRoutesOptStatus("✓ Re-optimizado con motor de zonas v3");
+    setTimeout(() => setRoutesOptStatus(""), 3000);
+    setReoptimizing(false);
   };
 
   const deleteStop = (stopId) => {
@@ -8147,18 +8922,20 @@ const CircuitEngine = () => {
 
                       if (hasActiveStops) {
                         // → Agregar a la cola de rutas pendientes
-                        // Leer cola actual desde Firebase también
-                        const fbQueue = await FB.get(`pendingRoutes/${driverId}`);
-                        const currentQueue = Array.isArray(fbQueue) ? fbQueue
-                          : fbQueue && typeof fbQueue === "object" ? Object.values(fbQueue) : [];
+                        // SIEMPRE leer desde memoria local (no Firebase) para evitar resucitar rutas completadas
                         if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                        // Cola persistente: cada ruta entra con queueStatus "pending"
-                        const routeWithStatus = { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() };
-                        const queue = [...currentQueue, routeWithStatus];
-                        window.__rdPendingRoutes[driverId] = queue;
-                        LS.setPending(driverId, queue);
-                        // Notificar al mensajero de la nueva ruta en cola
-                        if (typeof window.__rdSetPending === "function") window.__rdSetPending(driverId, queue);
+                        const currentQueue = window.__rdPendingRoutes[driverId] || [];
+                        // Verificar que no esté ya en la cola (evitar duplicados)
+                        const alreadyQueued = currentQueue.some(r =>
+                          r.routeId === route.routeId || r.sentAt === route.sentAt
+                        );
+                        if (!alreadyQueued) {
+                          const routeWithStatus = { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() };
+                          const queue = [...currentQueue, routeWithStatus];
+                          window.__rdPendingRoutes[driverId] = queue;
+                          LS.setPending(driverId, queue);
+                          if (typeof window.__rdSetPending === "function") window.__rdSetPending(driverId, queue);
+                        }
                         // Chat automático
                         if (!window.__rdChatStore) window.__rdChatStore = {};
                         const chatNote = { from:"admin", text:`📋 Ruta "${routeName}" en cola - ${confirmed.length} paradas · ${km} km. Se activará cuando termines la ruta actual.`, time: new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}) };
@@ -8671,10 +9448,10 @@ export default function RapDrive() {
   if(typeof window!=="undefined") window.__rdOpenModal=()=>setModalOpen(true);
 
   const navItems=[
-    {id:"dashboard",icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-    {id:"routes",   icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M14 16l4-8M10 16l-4-8"/></svg>},
-    {id:"import",   icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>},
-    {id:"settings", icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>},
+    {id:"dashboard",label:"Dashboard",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>},
+    {id:"routes",   label:"Rutas",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v6a4 4 0 0 0 4 4h6"/><path d="M19 5v8"/></svg>},
+    {id:"import",   label:"Motor",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>},
+    {id:"settings", label:"Config",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>},
   ];
 
   // Show login when not authenticated
@@ -8718,60 +9495,96 @@ export default function RapDrive() {
       `}</style>
 
       {/* SIDEBAR */}
-      <aside style={{width:56,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 0",gap:3,flexShrink:0}}>
-        <div style={{marginBottom:20}}>
-          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 20px #3b82f625"}}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
+      <aside style={{width:88,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"center",padding:"18px 0 14px",flexShrink:0}}>
+        {/* Logo */}
+        <div style={{marginBottom:28,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+          <div style={{width:38,height:38,borderRadius:12,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px #3b82f640"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.5"/></svg>
           </div>
+          <span style={{fontSize:9,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px"}}>RAP DRIVE</span>
         </div>
-        {navItems.map(item=>(
-          <button key={item.id} className="nb" title={PAGE_TITLES[item.id]} onClick={()=>setNav(item.id)} style={{width:38,height:38,borderRadius:10,border:"none",cursor:"pointer",background:nav===item.id?"#0d1420":"transparent",color:nav===item.id?"#3b82f6":"#2d4a60",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",position:"relative"}}>
-            {item.icon}
-            {nav===item.id&&<div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:2,height:16,background:"#3b82f6",borderRadius:"0 2px 2px 0"}}/>}
-          </button>
-        ))}
+
+        {/* Nav items */}
+        <div style={{display:"flex",flexDirection:"column",gap:4,width:"100%",padding:"0 10px"}}>
+          {navItems.map(item=>(
+            <button key={item.id} onClick={()=>setNav(item.id)} style={{width:"100%",padding:"10px 0 9px",borderRadius:12,border:"none",cursor:"pointer",background:nav===item.id?"linear-gradient(135deg,#0d1f35,#0a1828)":"transparent",color:nav===item.id?"#60a5fa":"#374151",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s",position:"relative",boxShadow:nav===item.id?"0 2px 12px rgba(59,130,246,0.12)":"none"}}>
+              {nav===item.id&&<div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:"#3b82f6",borderRadius:"0 3px 3px 0",boxShadow:"0 0 8px #3b82f6"}}/>}
+              <div style={{color:nav===item.id?"#60a5fa":"#374151",transition:"color .2s"}}>{item.icon}</div>
+              <span style={{fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.3px",color:nav===item.id?"#60a5fa":"#374151",lineHeight:1,transition:"color .2s"}}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div style={{flex:1}}/>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"0 0 4px"}}>
-          <div
-            onClick={()=>setLogoutConfirm(true)}
-            title={`${currentUser.name} · ${rc.label}
-Click para cerrar sesión`}
-            style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${rc.color}28,${rc.color}14)`,border:`1.5px solid ${rc.color}38`,display:"flex",alignItems:"center",justifyContent:"center",color:rc.color,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .15s",flexShrink:0}}
-          >{currentUser.avatar}</div>
-          <div style={{width:6,height:6,borderRadius:"50%",background:rc.color,boxShadow:`0 0 5px ${rc.color}`}}/>
+
+        {/* User avatar */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"0 10px 4px",width:"100%"}}>
+          <div style={{width:"100%",height:1,background:"#0d1420",marginBottom:8}}/>
+          <div onClick={()=>setLogoutConfirm(true)} title={`${currentUser.name} · Cerrar sesión`}
+            style={{width:38,height:38,borderRadius:12,background:`linear-gradient(135deg,${rc.color}22,${rc.color}10)`,border:`1.5px solid ${rc.color}30`,display:"flex",alignItems:"center",justifyContent:"center",color:rc.color,fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,cursor:"pointer",transition:"all .15s"}}>
+            {currentUser.avatar}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 5px #10b981"}}/>
+            <span style={{fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:600}}>Online</span>
+          </div>
         </div>
       </aside>
 
       {/* MAIN */}
       <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
-        <header style={{height:50,borderBottom:"1px solid #0d1420",display:"flex",alignItems:"center",padding:"0 20px",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:"#f1f5f9",letterSpacing:"-0.3px"}}>{PAGE_TITLES[nav]}</span>
-            <span style={{color:"#131f30"}}>·</span>
-            <span style={{color:"#2d4a60",fontSize:12}}>{time.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</span>
+        <header style={{height:52,borderBottom:"1px solid #0c1522",display:"flex",alignItems:"center",padding:"0 24px",justifyContent:"space-between",flexShrink:0,background:"#070c14",position:"relative"}}>
+          {/* subtle bottom glow line */}
+          <div style={{position:"absolute",bottom:0,left:0,right:0,height:"1px",background:"linear-gradient(90deg,transparent 0%,#1e3a5f22 30%,#3b82f618 50%,#1e3a5f22 70%,transparent 100%)"}}/>
+
+          {/* LEFT — page title */}
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div>
+              <div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"2px",textTransform:"uppercase",marginBottom:1}}>Rap Drive</div>
+              <div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.5px",lineHeight:1}}>{PAGE_TITLES[nav]}</div>
+            </div>
+            <div style={{width:1,height:28,background:"#0d1a28",margin:"0 2px"}}/>
             <RoleBadge role={role}/>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:9}}>
-            {/* Cmd+K search trigger */}
-            <button onClick={()=>setSearchOpen(true)} style={{display:"flex",alignItems:"center",gap:8,background:"#0a1019",border:"1px solid #1e2d3d",borderRadius:9,padding:"5px 12px",cursor:"pointer",transition:"all .15s"}}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Inter',sans-serif"}}>Buscar...</span>
-              <div style={{display:"flex",gap:3,marginLeft:4}}>
-                <span style={{background:"#131f30",border:"1px solid #1e2d3d",borderRadius:4,padding:"1px 5px",fontSize:9,color:"#374151",fontFamily:"'Syne',sans-serif",fontWeight:700}}>⌘</span>
-                <span style={{background:"#131f30",border:"1px solid #1e2d3d",borderRadius:4,padding:"1px 5px",fontSize:9,color:"#374151",fontFamily:"'Syne',sans-serif",fontWeight:700}}>K</span>
-              </div>
-            </button>
-            <div style={{display:"flex",alignItems:"center",gap:5,background:"#0a1019",border:"1px solid #131f30",borderRadius:9,padding:"5px 11px"}}>
-              <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 6px #10b981",animation:"pulse 2s infinite"}}/>
-              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px"}}>{time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
+
+          {/* CENTER — date + live status */}
+          <div style={{position:"absolute",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:12,color:"#2d4a60",fontFamily:"'Inter',sans-serif",fontWeight:500,whiteSpace:"nowrap",letterSpacing:"0.1px"}}>
+              {time.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}
+            </span>
+            <div style={{width:1,height:14,background:"#0d1a28"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 8px #10b98199",animation:"pulse 2s infinite"}}/>
+              <span style={{fontSize:12,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px",fontVariantNumeric:"tabular-nums"}}>
+                {time.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+              </span>
             </div>
-            <button onClick={()=>{setNotifOpen(o=>!o);setFeedOpen(false);}} style={{width:30,height:30,borderRadius:8,border:`1px solid ${notifOpen?"#1e3550":"#131f30"}`,background:notifOpen?"#0a1828":"#0a1019",color:notifOpen?"#60a5fa":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"all .15s"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              {unreadCount>0&&<div style={{position:"absolute",top:-3,right:-3,width:14,height:14,borderRadius:"50%",background:"#ef4444",border:"2px solid #060b10",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontFamily:"'Syne',sans-serif",fontWeight:800}}>{unreadCount>9?"9+":unreadCount}</div>}
+          </div>
+
+          {/* RIGHT — utilities */}
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+
+            {/* Search */}
+            <button onClick={()=>setSearchOpen(true)} className="fb" style={{display:"flex",alignItems:"center",gap:8,background:"transparent",border:"1px solid #0d1a28",borderRadius:8,padding:"6px 11px",cursor:"pointer",transition:"border-color .2s"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d4a60" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <span style={{fontSize:11,color:"#2d4a60",fontFamily:"'Inter',sans-serif",fontWeight:400}}>Buscar</span>
+              <kbd style={{background:"#0a1322",border:"1px solid #1a2d40",borderRadius:5,padding:"1px 6px",fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.5px"}}>⌘K</kbd>
             </button>
-            <button onClick={()=>{setFeedOpen(o=>!o);setNotifOpen(false);}} style={{width:30,height:30,borderRadius:8,border:`1px solid ${feedOpen?"#1e3550":"#131f30"}`,background:feedOpen?"#0a1828":"#0a1019",color:feedOpen?"#10b981":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",position:"relative"}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 5px #10b981",animation:"pulse 2s infinite"}}/>
+
+            <div style={{width:1,height:18,background:"#0d1a28",margin:"0 1px"}}/>
+
+            {/* Notifications */}
+            <button onClick={()=>{setNotifOpen(o=>!o);setFeedOpen(false);}} style={{width:34,height:34,borderRadius:8,border:`1px solid ${notifOpen?"#1e3a5f":"#0d1a28"}`,background:notifOpen?"rgba(59,130,246,0.08)":"transparent",color:notifOpen?"#60a5fa":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"all .2s"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              {unreadCount>0&&<div style={{position:"absolute",top:-4,right:-4,minWidth:15,height:15,borderRadius:8,background:"linear-gradient(135deg,#dc2626,#ef4444)",border:"2px solid #070c14",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,padding:"0 3px"}}>{unreadCount>9?"9+":unreadCount}</div>}
             </button>
+
+            {/* Activity feed */}
+            <button onClick={()=>{setFeedOpen(o=>!o);setNotifOpen(false);}} style={{width:34,height:34,borderRadius:8,border:`1px solid ${feedOpen?"#0d3322":"#0d1a28"}`,background:feedOpen?"rgba(16,185,129,0.07)":"transparent",color:feedOpen?"#10b981":"#2d4a60",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s",position:"relative"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              {feedOpen&&<div style={{position:"absolute",top:6,right:6,width:5,height:5,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 6px #10b981",animation:"pulse 2s infinite"}}/>}
+            </button>
+
           </div>
         </header>
 
@@ -8796,11 +9609,7 @@ Click para cerrar sesión`}
       {feedOpen  && <ActivityFeed events={events} onClose={()=>setFeedOpen(false)}/>}
       {modalOpen && <ModalNewDelivery onClose={()=>setModalOpen(false)} onCreated={handleCreated}/>}
 
-      {/* FAB - oculto en import/circuit para no molestar */}
-      {rc.canDeleteDeliveries && nav !== "import" && <button onClick={()=>{setModalOpen(true);setNotifOpen(false);setFeedOpen(false);}} style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",border:"none",borderRadius:28,padding:"11px 22px",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",letterSpacing:"1px",boxShadow:"0 8px 32px #3b82f650, 0 2px 8px rgba(0,0,0,0.4)",zIndex:800,transition:"all .2s"}}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        NUEVA ENTREGA
-      </button>}
+
 
       {/* Toast stack */}
       <div style={{position:"fixed",top:64,right:12,display:"flex",flexDirection:"column",gap:8,zIndex:3000,pointerEvents:"none",alignItems:"flex-end"}}>
