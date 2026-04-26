@@ -5951,6 +5951,199 @@ const DEPOT = { lat: 18.523359816124955, lng: -69.98369283305884, label: "CD Dis
 // --- GEOCODER CACHE (in-memory, evita llamadas repetidas a Google) ------------
 const _geoCache = new Map();
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NIVEL 2: DICCIONARIO DE COORDENADAS ANCLA (SDO_ANCHORS)
+// Coordenadas GPS verificadas de sectores, comercios, residenciales y puntos
+// clave de la zona de operación. Usadas para:
+//   1) Sesgar el query de Google hacia la zona correcta (hintCoords)
+//   2) Fallback cuando Google falla completamente
+//   3) Validar que el resultado de Google está cerca del sector correcto
+//
+// Para añadir más: { lat, lng, city } — city para el fallback display
+// ─────────────────────────────────────────────────────────────────────────────
+const SDO_ANCHORS = {
+  // ══ ZONA HERRERA (núcleo) ══════════════════════════════════════════════════
+  "herrera":                         { lat: 18.4890, lng: -70.0023, city: "Santo Domingo Oeste" },
+  "buenos aires de herrera":         { lat: 18.4865, lng: -70.0105, city: "Santo Domingo Oeste" },
+  "el café de herrera":              { lat: 18.4820, lng: -70.0180, city: "Santo Domingo Oeste" },
+  "el cafe de herrera":              { lat: 18.4820, lng: -70.0180, city: "Santo Domingo Oeste" },
+  "las palmas de herrera":           { lat: 18.4840, lng: -70.0060, city: "Santo Domingo Oeste" },
+  "enriquillo":                      { lat: 18.4902, lng: -70.0041, city: "Santo Domingo Oeste" },
+  "barrio enriquillo":               { lat: 18.4902, lng: -70.0041, city: "Santo Domingo Oeste" },
+  "duarte herrera":                  { lat: 18.4878, lng: -70.0035, city: "Santo Domingo Oeste" },
+  "barrio duarte":                   { lat: 18.4878, lng: -70.0035, city: "Santo Domingo Oeste" },
+  "pueblo nuevo":                    { lat: 18.4911, lng: -70.0012, city: "Santo Domingo Oeste" },
+  "juan guzman":                     { lat: 18.4855, lng: -70.0090, city: "Santo Domingo Oeste" },
+  "ivan guzman klang":               { lat: 18.4862, lng: -70.0070, city: "Santo Domingo Oeste" },
+  "las mercedes":                    { lat: 18.4930, lng: -69.9980, city: "Santo Domingo Oeste" },
+  "villa aura":                      { lat: 18.4920, lng: -70.0050, city: "Santo Domingo Oeste" },
+  "olimpo":                          { lat: 18.4870, lng: -70.0030, city: "Santo Domingo Oeste" },
+  "barrio nuevo":                    { lat: 18.4895, lng: -70.0015, city: "Santo Domingo Oeste" },
+  "barrio san francisco":            { lat: 18.4860, lng: -70.0080, city: "Santo Domingo Oeste" },
+  "zona industrial herrera":         { lat: 18.4830, lng: -70.0200, city: "Santo Domingo Oeste" },
+  "urb el cafe":                     { lat: 18.4815, lng: -70.0190, city: "Santo Domingo Oeste" },
+  "urbanizacion el cafe":            { lat: 18.4815, lng: -70.0190, city: "Santo Domingo Oeste" },
+  "res carmen renata":               { lat: 18.4910, lng: -70.0060, city: "Santo Domingo Oeste" },
+  "residencial carmen renata":       { lat: 18.4910, lng: -70.0060, city: "Santo Domingo Oeste" },
+  "residencial pablo mella":         { lat: 18.4900, lng: -70.0040, city: "Santo Domingo Oeste" },
+  "residencial santo domingo":       { lat: 18.4885, lng: -70.0025, city: "Santo Domingo Oeste" },
+  "residencial altagracia":          { lat: 18.4875, lng: -70.0055, city: "Santo Domingo Oeste" },
+  "residencial antonia":             { lat: 18.4868, lng: -70.0045, city: "Santo Domingo Oeste" },
+  "brisas del oeste":                { lat: 18.4835, lng: -70.0120, city: "Santo Domingo Oeste" },
+  "residencial brisas del oeste":    { lat: 18.4835, lng: -70.0120, city: "Santo Domingo Oeste" },
+  "operaciones especiales":          { lat: 18.4842, lng: -70.0130, city: "Santo Domingo Oeste" },
+  "residencial don honorio":         { lat: 18.4750, lng: -69.9950, city: "Santo Domingo Oeste" },
+
+  // ══ ZONA LAS CAOBAS ════════════════════════════════════════════════════════
+  "las caobas":                      { lat: 18.5020, lng: -70.0180, city: "Santo Domingo Oeste" },
+  "las caobitas":                    { lat: 18.5040, lng: -70.0200, city: "Santo Domingo Oeste" },
+  "las colinas":                     { lat: 18.5010, lng: -70.0160, city: "Santo Domingo Oeste" },
+  "el libertador":                   { lat: 18.5030, lng: -70.0170, city: "Santo Domingo Oeste" },
+  "savica":                          { lat: 18.5000, lng: -70.0190, city: "Santo Domingo Oeste" },
+  "buenos aires de las caobas":      { lat: 18.5015, lng: -70.0210, city: "Santo Domingo Oeste" },
+  "urbanizacion las caobas":         { lat: 18.5025, lng: -70.0175, city: "Santo Domingo Oeste" },
+  "altos de las caobas":             { lat: 18.5050, lng: -70.0220, city: "Santo Domingo Oeste" },
+  "las palmas":                      { lat: 18.4840, lng: -70.0060, city: "Santo Domingo Oeste" },
+
+  // ══ ZONA BAYONA / MANOGUAYABO ═════════════════════════════════════════════
+  "bayona":                          { lat: 18.5120, lng: -70.0320, city: "Santo Domingo Oeste" },
+  "manoguayabo":                     { lat: 18.5200, lng: -70.0450, city: "Santo Domingo Oeste" },
+  "buenos aires de manoguayabo":     { lat: 18.5180, lng: -70.0470, city: "Santo Domingo Oeste" },
+  "el hoyo de manoguayabo":         { lat: 18.5160, lng: -70.0420, city: "Santo Domingo Oeste" },
+  "barrio san miguel":               { lat: 18.5130, lng: -70.0350, city: "Santo Domingo Oeste" },
+  "la venta":                        { lat: 18.5100, lng: -70.0300, city: "Santo Domingo Oeste" },
+  "el 8 de bayona":                  { lat: 18.5110, lng: -70.0330, city: "Santo Domingo Oeste" },
+  "barrio libertad":                 { lat: 18.5090, lng: -70.0310, city: "Santo Domingo Oeste" },
+
+  // ══ ZONA ENGOMBE ══════════════════════════════════════════════════════════
+  "engombe":                         { lat: 18.5250, lng: -70.0600, city: "Santo Domingo Oeste" },
+  "altos de engombe":                { lat: 18.5280, lng: -70.0630, city: "Santo Domingo Oeste" },
+  "la urena":                        { lat: 18.5230, lng: -70.0580, city: "Santo Domingo Oeste" },
+  "barrio progreso":                 { lat: 18.5240, lng: -70.0610, city: "Santo Domingo Oeste" },
+  "barrio progreso ii":              { lat: 18.5260, lng: -70.0620, city: "Santo Domingo Oeste" },
+  "urbanizacion engombe":            { lat: 18.5255, lng: -70.0595, city: "Santo Domingo Oeste" },
+  "barrio libertador":               { lat: 18.5235, lng: -70.0570, city: "Santo Domingo Oeste" },
+
+  // ══ ZONA HATO NUEVO / EXPANSIÓN ════════════════════════════════════════════
+  "hato nuevo":                      { lat: 18.5350, lng: -70.0750, city: "Santo Domingo Oeste" },
+  "caballona":                       { lat: 18.5380, lng: -70.0780, city: "Santo Domingo Oeste" },
+  "lecheria":                        { lat: 18.5320, lng: -70.0720, city: "Santo Domingo Oeste" },
+  "batey bienvenido":                { lat: 18.5400, lng: -70.0800, city: "Santo Domingo Oeste" },
+  "la cuaba":                        { lat: 18.5420, lng: -70.0830, city: "Santo Domingo Oeste" },
+  "barrio nuevo horizonte":          { lat: 18.5360, lng: -70.0760, city: "Santo Domingo Oeste" },
+  "ciudad agraria":                  { lat: 18.5300, lng: -70.0700, city: "Santo Domingo Oeste" },
+
+  // ══ ZONA LOS ALCARRIZOS / PEDRO BRAND ═════════════════════════════════════
+  "los alcarrizos":                  { lat: 18.5450, lng: -70.1050, city: "Santo Domingo Oeste" },
+  "pedro brand":                     { lat: 18.5600, lng: -70.1200, city: "Santo Domingo Oeste" },
+  "manoguayabo":                     { lat: 18.5200, lng: -70.0450, city: "Santo Domingo Oeste" },
+  "la isabela":                      { lat: 18.5500, lng: -70.0900, city: "Santo Domingo Oeste" },
+  "arroyo bonito":                   { lat: 18.5050, lng: -70.0250, city: "Santo Domingo Oeste" },
+  "el 30 de mayo":                   { lat: 18.4960, lng: -70.0150, city: "Santo Domingo Oeste" },
+
+  // ══ CORREDORES VIALES CLAVE ════════════════════════════════════════════════
+  "autopista duarte":                { lat: 18.5100, lng: -70.0500, city: "Santo Domingo Oeste" },
+  "prolongacion 27 de febrero":      { lat: 18.4780, lng: -70.0050, city: "Santo Domingo Oeste" },
+  "avenida isabel aguiar":           { lat: 18.5050, lng: -70.0280, city: "Santo Domingo Oeste" },
+  "avenida las palmas":              { lat: 18.4840, lng: -70.0060, city: "Santo Domingo Oeste" },
+  "prolongacion independencia":      { lat: 18.4720, lng: -69.9980, city: "Santo Domingo Oeste" },
+
+  // ══ DISTRITO NACIONAL (sectores frecuentes) ════════════════════════════════
+  "naco":                            { lat: 18.4796, lng: -69.9273, city: "Distrito Nacional" },
+  "piantini":                        { lat: 18.4745, lng: -69.9312, city: "Distrito Nacional" },
+  "gazcue":                          { lat: 18.4768, lng: -69.9115, city: "Distrito Nacional" },
+  "bella vista":                     { lat: 18.4680, lng: -69.9340, city: "Distrito Nacional" },
+  "evaristo morales":                { lat: 18.4820, lng: -69.9340, city: "Distrito Nacional" },
+  "arroyo hondo":                    { lat: 18.4910, lng: -69.9650, city: "Distrito Nacional" },
+  "mirador sur":                     { lat: 18.4630, lng: -69.9510, city: "Distrito Nacional" },
+  "mirador norte":                   { lat: 18.4760, lng: -69.9490, city: "Distrito Nacional" },
+  "los cacicazgos":                  { lat: 18.4590, lng: -69.9440, city: "Distrito Nacional" },
+  "palma real":                      { lat: 18.5234, lng: -69.9837, city: "Distrito Nacional" },
+  "poligono central":                { lat: 18.4870, lng: -69.9490, city: "Distrito Nacional" },
+  "cristo rey":                      { lat: 18.4960, lng: -69.9530, city: "Distrito Nacional" },
+  "capotillo":                       { lat: 18.5040, lng: -69.9360, city: "Distrito Nacional" },
+  "villa consuelo":                  { lat: 18.4895, lng: -69.9200, city: "Distrito Nacional" },
+  "villa francisca":                 { lat: 18.4880, lng: -69.9110, city: "Distrito Nacional" },
+  "ciudad nueva":                    { lat: 18.4810, lng: -69.9040, city: "Distrito Nacional" },
+  "zona colonial":                   { lat: 18.4740, lng: -69.8930, city: "Distrito Nacional" },
+  "gualey":                          { lat: 18.5010, lng: -69.9280, city: "Distrito Nacional" },
+  "guachupita":                      { lat: 18.5050, lng: -69.9200, city: "Distrito Nacional" },
+  "ensanche peravia":                { lat: 18.4920, lng: -69.9420, city: "Distrito Nacional" },
+  "ensanche ozama":                  { lat: 18.4780, lng: -69.8800, city: "Distrito Nacional" },
+  "ensanche isabelita":              { lat: 18.4830, lng: -69.9550, city: "Distrito Nacional" },
+  "ensanche luperon":                { lat: 18.5030, lng: -69.9600, city: "Distrito Nacional" },
+  "ensanche espaillat":              { lat: 18.4840, lng: -69.9450, city: "Distrito Nacional" },
+  "30 de mayo":                      { lat: 18.4900, lng: -69.9500, city: "Distrito Nacional" },
+  "la julia":                        { lat: 18.4930, lng: -69.9430, city: "Distrito Nacional" },
+  "los prados":                      { lat: 18.5100, lng: -69.9600, city: "Distrito Nacional" },
+
+  // ══ SANTO DOMINGO ESTE ════════════════════════════════════════════════════
+  "villa duarte":                    { lat: 18.5010, lng: -69.8400, city: "Santo Domingo Este" },
+  "los mina":                        { lat: 18.5080, lng: -69.8280, city: "Santo Domingo Este" },
+  "alma rosa":                       { lat: 18.4940, lng: -69.8100, city: "Santo Domingo Este" },
+  "la victoria":                     { lat: 18.5160, lng: -69.8600, city: "Santo Domingo Este" },
+  "bonavista":                       { lat: 18.4880, lng: -69.7950, city: "Santo Domingo Este" },
+  "san isidro":                      { lat: 18.5050, lng: -69.7800, city: "Santo Domingo Este" },
+  "las americas":                    { lat: 18.4790, lng: -69.7700, city: "Santo Domingo Este" },
+
+  // ══ SANTO DOMINGO NORTE ════════════════════════════════════════════════════
+  "villa mella":                     { lat: 18.5850, lng: -69.9650, city: "Santo Domingo Norte" },
+  "los girasoles":                   { lat: 18.5700, lng: -69.9700, city: "Santo Domingo Norte" },
+  "el almirante":                    { lat: 18.5750, lng: -69.9600, city: "Santo Domingo Norte" },
+  "sabana perdida":                  { lat: 18.6000, lng: -69.9400, city: "Santo Domingo Norte" },
+  "guaricano":                       { lat: 18.5550, lng: -69.9800, city: "Santo Domingo Norte" },
+  "pantoja":                         { lat: 18.5500, lng: -70.0100, city: "Santo Domingo Norte" },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NIVEL 3: CACHE DE APRENDIZAJE PERSISTENTE
+// Cuando el admin corrige manualmente una dirección, la corrección se guarda
+// en Firebase y se usa en futuras geocodificaciones de la misma dirección.
+// Esto es lo que Circuit hace — aprende de tus correcciones.
+// ─────────────────────────────────────────────────────────────────────────────
+const _learnedCache = new Map(); // runtime: key → { lat, lng, display, confidence }
+
+// Cargar cache aprendido desde Firebase al iniciar
+const _loadLearnedCache = async () => {
+  try {
+    const data = await FB.get("geoCache");
+    if (data && typeof data === "object") {
+      Object.entries(data).forEach(([k, v]) => {
+        if (v?.lat && v?.lng) _learnedCache.set(k, v);
+      });
+    }
+  } catch(e) { /* silencioso */ }
+};
+if (typeof window !== "undefined") _loadLearnedCache();
+
+// Guardar una corrección manual en Firebase + cache local
+const learnGeoCorrection = (rawAddress, lat, lng, display) => {
+  const key = rawAddress.trim().toLowerCase();
+  const entry = { lat, lng, display, confidence: 99, learnedAt: Date.now() };
+  _learnedCache.set(key, entry);
+  // Persistir en Firebase (nodo geoCache)
+  const fbKey = key.replace(/[.#$/[\]]/g, "_").slice(0, 120);
+  FB.set(`geoCache/${fbKey}`, entry).catch(() => {});
+  // También guardar en el cache en-memoria inmediato
+  _geoCache.set(key, { ok: true, lat, lng, display, confidence: 99, allResults: [], source: "learned" });
+};
+
+// Detectar el anchor más relevante para una dirección dada
+// Retorna { lat, lng } o null
+const findAnchor = (rawAddress) => {
+  const t = rawAddress.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // quitar acentos para comparar
+    .replace(/\s+/g, " ").trim();
+  // Buscar de más específico a más general (mayor longitud de clave = más específico)
+  const keys = Object.keys(SDO_ANCHORS).sort((a, b) => b.length - a.length);
+  for (const k of keys) {
+    const kn = k.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (t.includes(kn)) return SDO_ANCHORS[k];
+  }
+  return null;
+};
+
 // --- RD bounding box para filtrar resultados fuera del país ------------------
 const RD_BOUNDS = {
   north: 19.93, south: 17.36, east: -68.32, west: -72.01,
@@ -6034,49 +6227,89 @@ const searchWithPlaces = async (rawAddress) => {
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
 const geocodeWithGoogle = async (rawAddress) => {
-  // ── Cache hit ──────────────────────────────────────────────────────────────
   const cacheKey = rawAddress.trim().toLowerCase();
+
+  // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
+  if (_learnedCache.has(cacheKey)) {
+    const l = _learnedCache.get(cacheKey);
+    return { ok: true, lat: l.lat, lng: l.lng, display: l.display, confidence: 99, allResults: [], source: "learned" };
+  }
+
+  // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
   if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
 
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
   const queries = buildQueryVariants(rawAddress);
 
+  // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
+  const anchor = findAnchor(rawAddress);
+  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
+    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
+    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
+  ) : null;
+
   // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
+  let bestResult = null;
+  let bestScore  = 0;
+
   for (const q of queries) {
     try {
+      const gcOpts = { address: q, region: "DO" };
+      // componentRestrictions eliminado — rechaza resultados válidos en sectores informales
+      // Usamos bounds del anchor si lo hay; sino bounds completos de RD
+      if (hintBounds) gcOpts.bounds = hintBounds;
       const result = await new Promise((res, rej) =>
-        geocoder.geocode({ address: q, region: "DO", componentRestrictions: { country: "DO" } },
-          (results, status) => status === "OK" ? res(results) : rej(status))
+        geocoder.geocode(gcOpts, (results, status) => status === "OK" ? res(results) : rej(status))
       );
-      if (result && result.length > 0) {
-        const top = result[0];
-        const loc = top.geometry.location;
-        const lat = loc.lat(), lng = loc.lng();
+      if (!result || result.length === 0) continue;
 
-        // Descartar resultados fuera de RD
-        if (!inRD(lat, lng)) continue;
+      // Evaluar TODOS los candidatos, quedarse con el mejor score
+      const candidates = result
+        .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
+        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
+        .sort((a, b) => b.score - a.score);
 
-        const conf = scoreGoogleResult(top, rawAddress);
-        const out = {
-          ok: true, lat, lng,
-          display: top.formatted_address,
-          confidence: conf,
-          types: top.types || [],
-          source: "geocoding_api",
-          allResults: result.slice(0, 3)
-            .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
-            .map(r => ({
-              display: r.formatted_address,
-              lat: r.geometry.location.lat(),
-              lng: r.geometry.location.lng(),
-              confidence: scoreGoogleResult(r, rawAddress),
-            })),
-        };
-        _geoCache.set(cacheKey, out);
-        return out;
+      if (candidates.length === 0) continue;
+      const { r: top, score: conf } = candidates[0];
+
+      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
+      if (anchor) {
+        const dlat = top.geometry.location.lat() - anchor.lat;
+        const dlng = top.geometry.location.lng() - anchor.lng;
+        const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
+        if (distKm > 15) continue; // resultado random, ignorar
       }
+
+      if (conf > bestScore) {
+        bestScore = conf;
+        bestResult = { top, conf, allCandidates: candidates };
+      }
+
+      // Score excelente → no seguir buscando variantes
+      if (bestScore >= 90) break;
     } catch { /* try next variant */ }
+  }
+
+  if (bestResult) {
+    const { top, conf, allCandidates } = bestResult;
+    const lat = top.geometry.location.lat();
+    const lng = top.geometry.location.lng();
+    const out = {
+      ok: true, lat, lng,
+      display: top.formatted_address,
+      confidence: conf,
+      types: top.types || [],
+      source: "geocoding_api",
+      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
+        display: r.formatted_address,
+        lat: r.geometry.location.lat(),
+        lng: r.geometry.location.lng(),
+        confidence: score,
+      })),
+    };
+    _geoCache.set(cacheKey, out);
+    return out;
   }
 
   // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
@@ -6136,6 +6369,25 @@ const geocodeWithGoogle = async (rawAddress) => {
     }
   } catch { /* nominatim failed */ }
 
+  // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
+  // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
+  // con confianza baja para que el admin sepa que es aproximado
+  const lastAnchor = findAnchor(rawAddress);
+  if (lastAnchor) {
+    const fallbackOut = {
+      ok: true,
+      lat: lastAnchor.lat,
+      lng: lastAnchor.lng,
+      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
+      confidence: 35,
+      types: ["anchor_fallback"],
+      source: "anchor_local",
+      allResults: [],
+    };
+    _geoCache.set(cacheKey, fallbackOut);
+    return fallbackOut;
+  }
+
   const failed = { ok: false, lat: null, lng: null, display: null, confidence: 0, allResults: [] };
   return failed;
 };
@@ -6158,13 +6410,35 @@ const buildQueryVariants = (raw) => {
   const SD = ", Santo Domingo" + RD;
   const DN = ", Distrito Nacional" + RD;
 
-  // 1. Versión expandida + ciudad más completa (más precisa primero)
+  // 1. Versión expandida + ciudad — SDO primero si hay anchor en esa zona
+  const _anchor = findAnchor(s);
+  const _isSDO = _anchor?.city === "Santo Domingo Oeste";
+  const _isDN  = _anchor?.city === "Distrito Nacional";
+  const _isSDE = _anchor?.city === "Santo Domingo Este";
+  const _isSDN = _anchor?.city === "Santo Domingo Norte";
   if (!hasCountry && !hasCity) {
-    variants.add(expanded + SD);
-    variants.add(expanded + DN);
-    variants.add(expanded + ", Santo Domingo Este" + RD);
-    variants.add(expanded + ", Santo Domingo Oeste" + RD);
-    variants.add(expanded + ", Santo Domingo Norte" + RD);
+    // Priorizar la ciudad del anchor — evita que Google devuelva resultado en zona equivocada
+    if (_isSDO) {
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+    } else if (_isDN) {
+      variants.add(expanded + DN);
+      variants.add(expanded + SD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+    } else if (_isSDE) {
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + SD);
+    } else if (_isSDN) {
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+      variants.add(expanded + SD);
+    } else {
+      variants.add(expanded + SD);
+      variants.add(expanded + DN);
+      variants.add(expanded + ", Santo Domingo Este" + RD);
+      variants.add(expanded + ", Santo Domingo Oeste" + RD);
+      variants.add(expanded + ", Santo Domingo Norte" + RD);
+    }
   } else if (!hasCountry) {
     variants.add(expanded + RD);
     variants.add(expanded);
@@ -7289,6 +7563,10 @@ const CircuitEngine = () => {
   };
 
   const pickAlt = (stopId, alt) => {
+    // ── Nivel 3: aprender cuando admin elige una alternativa ─────────────────
+    const correctedStop = stops.find(s => s.id === stopId);
+    if (correctedStop?.rawAddr) learnGeoCorrection(correctedStop.rawAddr, alt.lat, alt.lng, alt.display);
+    learnGeoCorrection(alt.display, alt.lat, alt.lng, alt.display);
     setStops(prev => {
       const updated = prev.map(s => s.id !== stopId ? s : {
         ...s, lat: alt.lat, lng: alt.lng, displayAddr: alt.display,
@@ -7319,6 +7597,10 @@ const CircuitEngine = () => {
   const handleModalSave = (stopId, placeResult, rawText) => {
     setAddrEditStop(null);
     if (placeResult) {
+      // ── Nivel 3: aprender corrección manual ───────────────────────────────
+      const correctedStop = stops.find(s => s.id === stopId);
+      if (correctedStop?.rawAddr) learnGeoCorrection(correctedStop.rawAddr, placeResult.lat, placeResult.lng, placeResult.display);
+      learnGeoCorrection(placeResult.display, placeResult.lat, placeResult.lng, placeResult.display);
       setStops(prev => {
         const updated = prev.map(s => s.id !== stopId ? s : {
           ...s, lat: placeResult.lat, lng: placeResult.lng,
