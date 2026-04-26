@@ -2546,12 +2546,30 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
       if (saved?.stops && saved?.sentAt) {
-        lastSentAt.current = saved.sentAt;
-        seenRouteIds.current.add(saved.sentAt);
-        _memStore.routes[myKey] = saved;
-        if (!window.__rdRouteStore) window.__rdRouteStore = {};
-        window.__rdRouteStore[myKey] = saved;
-        setStops(saved.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" })));
+        const savedStops = saved.stops.map(s => ({ ...s, driverStatus: s.driverStatus || "pending" }));
+        const savedAllDone = savedStops.length > 0 && savedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
+        if (savedAllDone) {
+          const completedRoute = { ...saved, stops: savedStops, completedAt: saved.completedAt || new Date().toISOString(), histId: saved.histId || `H-${Date.now()}` };
+          setRouteHistory(prev => {
+            const exists = prev.some(r => (completedRoute.routeId && r.routeId === completedRoute.routeId) || r.sentAt === completedRoute.sentAt);
+            const next = exists ? prev : [completedRoute, ...prev].slice(0, 50);
+            try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
+          seenRouteIds.current.add(completedRoute.routeId || completedRoute.sentAt);
+          if (completedRoute.sentAt) seenRouteIds.current.add(completedRoute.sentAt);
+          try { localStorage.removeItem(LS_KEY); } catch(e) {}
+          if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
+          delete _memStore.routes[myKey];
+          FB.set(`routes/${myKey}`, null);
+        } else {
+          lastSentAt.current = saved.sentAt;
+          seenRouteIds.current.add(saved.sentAt);
+          _memStore.routes[myKey] = saved;
+          if (!window.__rdRouteStore) window.__rdRouteStore = {};
+          window.__rdRouteStore[myKey] = saved;
+          setStops(savedStops);
+        }
       }
     } catch(e) {}
 
@@ -2580,19 +2598,42 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       setPendingRoutes(queue.filter(r => r.queueStatus === "pending"));
     };
 
-    // Marcar ruta como completada en Firebase (sin borrar — para que el admin no la reencole)
-    const markDoneInFirebase = (routeId, sentAt) => {
+    // Marcar ruta en Firebase sin borrarla de golpe.
+    // status="active" cuando el mensajero la abre desde cola.
+    // status="completed" cuando la ruta ya terminó.
+    const markQueueStatusInFirebase = (routeId, sentAt, status = "completed") => {
       FB.get(`pendingRoutes/${myKey}`).then(fbData => {
         const arr = Array.isArray(fbData) ? fbData
           : (fbData && typeof fbData === "object") ? Object.values(fbData) : [];
+        const now = new Date().toISOString();
+        let touched = false;
         const updated = arr.map(r => {
           const matches = (routeId && r.routeId === routeId) || (sentAt && r.sentAt === sentAt);
-          return matches ? { ...r, queueStatus: "completed", completedAt: new Date().toISOString() } : r;
+          if (!matches) return r;
+          touched = true;
+          return {
+            ...r,
+            queueStatus: status,
+            ...(status === "active" ? { activatedAt: now } : {}),
+            ...(status === "completed" ? { completedAt: now } : {}),
+          };
         });
-        if (updated.some(r => (r.routeId === routeId || r.sentAt === sentAt) && r.queueStatus === "completed")) {
-          FB.set(`pendingRoutes/${myKey}`, updated);
-        }
+        if (touched) FB.set(`pendingRoutes/${myKey}`, updated);
       }).catch(() => {});
+    };
+
+    const clearActiveRouteLocal = (route) => {
+      const routeKey = route?.routeId || route?.sentAt;
+      if (routeKey) seenRouteIds.current.add(routeKey);
+      if (route?.sentAt) seenRouteIds.current.add(route.sentAt);
+      saveSeenIds();
+      lastSentAt.current = null;
+      setStops([]);
+      if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
+      delete _memStore.routes[myKey];
+      onUpdateRoute(myKey, null);
+      try { localStorage.removeItem(LS_KEY); } catch(e) {}
+      FB.set(`routes/${myKey}`, null);
     };
 
     // ── applyRoute: solo acepta rutas completamente nuevas del admin ─────────
@@ -3004,7 +3045,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
       setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
       // Marcar como "completed" en Firebase (NO borrar — así el admin no la reencola)
-      markDoneInFirebase(updated.routeId, updated.sentAt);
+      markQueueStatusInFirebase(updated.routeId, updated.sentAt, "completed");
+      // Sacar la ruta activa de la pantalla y dejarla solo en historial.
+      // Esto evita que una ruta ya completada quede persistente y bloquee/sustituya mal la siguiente cola.
+      clearActiveRouteLocal(histEntry);
+      setTab(newQueue.length > 0 ? "pending" : "history");
     }
   };
 
@@ -3963,9 +4008,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               const stopsCount = route.stops?.length || 0;
               const sent = route.sentAt ? new Date(route.sentAt).toLocaleString("es-DO",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
               const isFirst = idx === 0;
-              // Ruta completada = todos delivered/problema → cola se puede activar
-              const allCompleted = stops.length > 0 && stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
-              const hasActiveWork = !allCompleted && stops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
+              const hasActiveWork = stops.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
               return (
                 <div key={route.routeId||route.sentAt||idx}
                   style={{ background:"#161616",border:`1.5px solid ${isFirst?"rgba(245,158,11,0.4)":"rgba(255,255,255,0.08)"}`,borderRadius:16,padding:"14px",animation:"fadeUp .25s ease both" }}>
@@ -4016,32 +4059,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   <button
                     disabled={hasActiveWork && isFirst}
                     onClick={() => {
-                      // Verificación en tiempo real — no depende del estado React del render
-                      const stopsNow = window.__rdRouteStore?.[myKey]?.stops || [];
-                      const reallyActive = stopsNow.some(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta");
-                      if (reallyActive) return;
-
-                      // Guardar ruta completada al historial ANTES de reemplazarla
-                      const currentActive = window.__rdRouteStore?.[myKey];
-                      if (currentActive?.stops?.length > 0) {
-                        const wasCompleted = currentActive.stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
-                        if (wasCompleted) {
-                          const histEntry = { ...currentActive, completedAt: new Date().toISOString(), histId: `H-${Date.now()}` };
-                          setRouteHistory(prev => {
-                            const next = [histEntry, ...prev].slice(0, 50);
-                            try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e) {}
-                            return next;
-                          });
-                        }
-                      }
-
-                      // Marcar como vista — Firebase no la reinyectará
+                      if (hasActiveWork) return;
+                      // Marcar como vista para siempre — Firebase no la reinyectará
                       const routeKey = route.routeId || route.sentAt;
                       seenRouteIds.current.add(routeKey);
                       if (route.sentAt) seenRouteIds.current.add(route.sentAt);
                       try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
 
-                      // Eliminar SOLO esta ruta de la cola
+                      // Eliminar de la cola local (UI y localStorage)
                       const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
                       const newQueue = currentQueue.filter(r =>
                         route.routeId ? r.routeId !== route.routeId : r.sentAt !== route.sentAt
@@ -4050,14 +4075,14 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       window.__rdPendingRoutes[myKey] = newQueue;
                       try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
                       setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
-                      markDoneInFirebase(route.routeId, route.sentAt);
+                      // Marcar como "active" en Firebase (NO borrar — así el admin no la reencola)
+                      markQueueStatusInFirebase(route.routeId, route.sentAt, "active");
 
                       // Activar como ruta actual
                       lastSentAt.current = route.sentAt;
                       const newStops = (route.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
                       const activeRoute = { ...route, stops: newStops };
                       setStops(newStops);
-                      setShowCompletedBanner(false);
                       if (!window.__rdRouteStore) window.__rdRouteStore = {};
                       window.__rdRouteStore[myKey] = activeRoute;
                       _memStore.routes[myKey] = activeRoute;
@@ -5844,7 +5869,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
+  const numInOrig = (original || "").match(/\d{1,4}/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
