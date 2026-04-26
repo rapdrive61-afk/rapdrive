@@ -737,9 +737,20 @@ const PageRoutes = () => {
         const isDone    = stop.driverStatus === "delivered";
         const isProb    = stop.driverStatus === "problema";
         const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-          <circle cx="16" cy="16" r="14" fill="${color}" opacity="${isDone?0.7:1}" stroke="white" stroke-width="2"/>
-          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="38" viewBox="0 0 32 38">
+          <defs>
+            <filter id="sh" x="-40%" y="-20%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="${color}" flood-opacity="0.4"/>
+            </filter>
+          </defs>
+          <g filter="url(#sh)">
+            <path d="M9,${isDone?16:14} Q16,28 16,28 Q16,28 23,${isDone?16:14}Z" fill="${color}" opacity="${isDone?0.7:1}"/>
+            <circle cx="16" cy="${isDone?13:11}" r="${isDone?11:10}" fill="${color}" opacity="${isDone?0.75:1}" stroke="white" stroke-width="2"/>
+          </g>
+          <text x="16" y="${isDone?17:15}" text-anchor="middle" dominant-baseline="central"
+            font-size="${String(stop.stopNum||"?").length>2?7:10}" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
+          ${isDone ? `<circle cx="24" cy="5" r="6" fill="#059669" stroke="white" stroke-width="1.5"/>
+          <path d="M21,5 l2,2 4,-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` : ""}
         </svg>`;
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
@@ -941,8 +952,10 @@ const PageRoutes = () => {
                 const c = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
                 return (
                   <div key={stop.id||i} style={{ display:"flex", gap:12, padding:"10px 16px", borderBottom:"1px solid #080e16", alignItems:"flex-start" }}>
-                    <div style={{ width:26, height:26, borderRadius:7, background:`${c}15`, border:`1px solid ${c}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, color:c, flexShrink:0, marginTop:1 }}>
-                      {isDone ? "✓" : isProb ? "!" : stop.stopNum || i+1}
+                    <div style={{ width:26, height:26, borderRadius:7, background:`${c}18`, border:`1.5px solid ${c}40`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, color:c, flexShrink:0, marginTop:1, position:"relative" }}>
+                      {stop.stopNum || i+1}
+                      {isDone && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#10b981", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>✓</div>}
+                      {isProb && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#ef4444", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>!</div>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Cliente primero, dirección debajo */}
@@ -2625,14 +2638,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (Array.isArray(msgs)) setChatLog([...msgs]);
     };
 
-    // ── 4. Listeners Firebase ────────────────────────────────────────────────
-    FB.get(`routes/${myKey}`).then(applyRoute);
+    // ── 4. Firebase listeners ─────────────────────────────────────────────────
+    // NO llamar FB.get("routes/myKey") al montar — ya tenemos localStorage como fuente de verdad.
+    // Solo escuchar cambios NUEVOS del admin. Esto evita que la ruta con progreso parcial
+    // se re-aplique al recargar la página.
     FB.get(`pendingRoutes/${myKey}`).then(applyPending);
     FB.get(`chats/${myKey}`).then(applyChat);
 
-    const unsubRoute   = FB.listen(`routes/${myKey}`,   applyRoute);
+    const unsubRoute   = FB.listen(`routes/${myKey}`, applyRoute);
     const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
-    const unsubChat    = FB.listen(`chats/${myKey}`,    applyChat);
+    const unsubChat    = FB.listen(`chats/${myKey}`, applyChat);
 
     // ── 5. Exponer helpers para admin en mismo navegador ─────────────────────
     window.__rdSetRoute   = (driverId, route) => { if (driverId === myKey) applyRoute(route); };
@@ -2678,10 +2693,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       });
     });
 
-    // Polling de respaldo cada 8s para rutas + notifs (por si SSE falla)
+    // Polling de respaldo cada 8s — solo notifs y pendingRoutes (NO routes para no revertir progreso)
     const pollInterval = setInterval(() => {
       if (!writingRef.current) {
-        FB.get(`routes/${myKey}`).then(applyRoute);
         FB.get(`pendingRoutes/${myKey}`).then(applyPending);
       }
       checkNotifs();
@@ -2835,36 +2849,35 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
         ${isNow ? `<ellipse cx="${ballCX}" cy="${ballCY}" rx="${ballR+8}" ry="${ballR+8}" fill="url(#glow${id})"/>` : ""}
 
-        <!-- Pin shape: circle top + triangular tail -->
+        <!-- Pin shape -->
         <g filter="url(#sh${id})">
-          <!-- Tail -->
           <path d="M${ballCX-7},${ballCY+ballR-4} Q${ballCX},${tipY+6} ${tipX},${tipY} Q${ballCX},${tipY+6} ${ballCX+7},${ballCY+ballR-4}Z"
             fill="url(#bg${id})"/>
-          <!-- Main circle -->
           <circle cx="${ballCX}" cy="${ballCY}" r="${ballR}"
             fill="url(#bg${id})"
             stroke="rgba(255,255,255,${isNow?0.6:0.4})"
             stroke-width="${isNow?2:1.5}"/>
-          <!-- Glass highlight -->
           <ellipse cx="${ballCX-ballR*0.22}" cy="${ballCY-ballR*0.28}"
             rx="${ballR*0.42}" ry="${ballR*0.26}"
             fill="rgba(255,255,255,0.32)"
             transform="rotate(-25,${ballCX-ballR*0.22},${ballCY-ballR*0.28})"/>
         </g>
 
-        <!-- Contenido del pin -->
-        ${isDone
-          ? `<path d="M${ballCX-5},${ballCY} l3,3 6,-6"
-               stroke="white" stroke-width="${isNow?2.5:2}" stroke-linecap="round" stroke-linejoin="round"
-               fill="none" opacity="0.95"/>`
-          : isProb
-            ? `<text x="${ballCX}" y="${ballCY+1}" text-anchor="middle" dominant-baseline="central"
-                 font-size="${isNow?15:12}" font-weight="900" fill="white"
-                 font-family="-apple-system,BlinkMacSystemFont,sans-serif" opacity="0.95">!</text>`
-            : `<text x="${ballCX}" y="${ballCY+0.5}" text-anchor="middle" dominant-baseline="central"
-                 font-size="${fs}" font-weight="900" fill="white"
-                 font-family="-apple-system,BlinkMacSystemFont,sans-serif" letter-spacing="-0.5" opacity="0.97">${label}</text>`
-        }
+        <!-- Siempre mostrar el número de parada -->
+        <text x="${ballCX}" y="${ballCY+0.5}" text-anchor="middle" dominant-baseline="central"
+          font-size="${fs}" font-weight="900" fill="white"
+          font-family="-apple-system,BlinkMacSystemFont,sans-serif" letter-spacing="-0.5" opacity="0.97">${label}</text>
+
+        <!-- Badge de estado (esquina superior derecha) -->
+        ${isDone ? `
+          <circle cx="${ballCX+ballR-1}" cy="${ballCY-ballR+1}" r="6" fill="#059669" stroke="white" stroke-width="1.5"/>
+          <path d="M${ballCX+ballR-4},${ballCY-ballR+1} l2,2 4,-4"
+            stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        ` : isProb ? `
+          <circle cx="${ballCX+ballR-1}" cy="${ballCY-ballR+1}" r="6" fill="#dc2626" stroke="white" stroke-width="1.5"/>
+          <text x="${ballCX+ballR-1}" y="${ballCY-ballR+1.5}" text-anchor="middle" dominant-baseline="central"
+            font-size="7" font-weight="900" fill="white" font-family="sans-serif">!</text>
+        ` : ""}
       </svg>`;
 
       const marker = new window.google.maps.Marker({
@@ -3654,7 +3667,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     {/* Content */}
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Nombre cliente */}
-                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.3)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2, textDecoration:isDone?"line-through":"none" }}>
+                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.35)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2 }}>
                         {stop.client||`Parada ${stop.stopNum}`}
                       </div>
                       {/* Dirección */}
