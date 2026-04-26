@@ -2330,6 +2330,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const markersRef = useRef([]);
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
+  // IDs ya vistos — nunca se reinyectan desde Firebase
+  const seenRouteIds = useRef(new Set());
 
   // ── UBICACIÓN EN TIEMPO REAL ────────────────────────────────
   const [locationStatus, setLocationStatus] = useState("idle"); // idle | requesting | active | denied
@@ -2463,13 +2465,22 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const writingRef = useRef(false); // true mientras pushUpdate está escribiendo en Firebase
 
   useEffect(() => {
-    const LS_KEY = `rdRoute_${myKey}`;
+    const LS_KEY       = `rdRoute_${myKey}`;
+    const LS_QUEUE_KEY = `rdQueue_${myKey}`;    // cola local — fuente de verdad del mensajero
+    const LS_SEEN_KEY  = `rdSeen_${myKey}`;     // IDs ya procesados
 
-    // Al montar: recuperar estado desde localStorage primero (respaldo inmediato)
+    // ── 1. Cargar IDs ya vistos (rutas procesadas en sesiones anteriores) ────
+    try {
+      const seen = JSON.parse(localStorage.getItem(LS_SEEN_KEY) || "[]");
+      seen.forEach(id => seenRouteIds.current.add(id));
+    } catch(e) {}
+
+    // ── 2. Cargar ruta activa desde localStorage ─────────────────────────────
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (saved && saved.stops && saved.sentAt) {
+      if (saved?.stops && saved?.sentAt) {
         lastSentAt.current = saved.sentAt;
+        seenRouteIds.current.add(saved.sentAt);
         _memStore.routes[myKey] = saved;
         if (!window.__rdRouteStore) window.__rdRouteStore = {};
         window.__rdRouteStore[myKey] = saved;
@@ -2477,47 +2488,70 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       }
     } catch(e) {}
 
-    // applyRoute: SOLO se aplica si es una ruta distinta (sentAt diferente = admin envió nueva ruta)
-    // NUNCA sobreescribe el estado actual del mensajero para la misma ruta
+    // ── 3. Cargar cola desde localStorage (fuente de verdad local de la cola) ─
+    try {
+      const savedQueue = JSON.parse(localStorage.getItem(LS_QUEUE_KEY) || "[]");
+      if (Array.isArray(savedQueue) && savedQueue.length > 0) {
+        if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
+        window.__rdPendingRoutes[myKey] = savedQueue;
+        setPendingRoutes(savedQueue.filter(r => r.queueStatus === "pending"));
+      }
+    } catch(e) {}
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    const saveSeenIds = () => {
+      try { localStorage.setItem(LS_SEEN_KEY, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
+    };
+
+    const saveQueue = (queue) => {
+      if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
+      window.__rdPendingRoutes[myKey] = queue;
+      try { localStorage.setItem(LS_QUEUE_KEY, JSON.stringify(queue)); } catch(e) {}
+      // Sincronizar a Firebase para que el admin vea la cola
+      FB.set(`pendingRoutes/${myKey}`, queue);
+      setPendingRoutes(queue.filter(r => r.queueStatus === "pending"));
+    };
+
+    // ── applyRoute: solo acepta rutas completamente nuevas del admin ─────────
     const applyRoute = (nr) => {
-      if (!nr || !nr.stops) return;
-      if (writingRef.current) return; // ignorar Firebase mientras estamos escribiendo
-      // Normalizar stops: Firebase puede devolver objeto {0:{},1:{}} en vez de array
-      const normalizedStops = Array.isArray(nr.stops)
-        ? nr.stops
-        : Object.values(nr.stops || {});
+      if (!nr?.stops) return;
+      if (writingRef.current) return;
+      const normalizedStops = Array.isArray(nr.stops) ? nr.stops : Object.values(nr.stops);
       const route = { ...nr, stops: normalizedStops };
-      const isDifferentRoute = route.sentAt !== lastSentAt.current;
-      if (!isDifferentRoute) return; // misma ruta → nunca sobreescribir estado del mensajero
 
-      // ── COLA PERSISTENTE: verificar si esta ruta ya está en la cola (pendingRoutes)
-      // Si ya existe ahí con cualquier status → NO procesar aquí, el mensajero la maneja
-      const fullQueue = window.__rdPendingRoutes?.[myKey] || [];
-      const queueEntry = fullQueue.find(r =>
-        route.routeId ? r.routeId === route.routeId : r.sentAt === route.sentAt
-      );
-      // Si está en cola (pending, active, completed) → ignorar, evitar reencolar
-      if (queueEntry) return;
+      // Ignorar si ya fue procesada (activa o en cola o completada antes)
+      const routeKey = route.routeId || route.sentAt;
+      if (!routeKey) return;
+      if (seenRouteIds.current.has(routeKey)) return;
+      if (route.sentAt && seenRouteIds.current.has(route.sentAt)) return;
 
-      // Es una ruta diferente → verificar si hay trabajo activo antes de reemplazar
+      // Es nueva — ¿hay trabajo activo ahora mismo?
       setStops(currentStops => {
-        const hasActive = currentStops.length > 0 && currentStops.some(
+        const hasActive = currentStops.some(
           s => s.driverStatus === "pending" || s.driverStatus === "en_ruta"
         );
+
         if (hasActive) {
-          // Encolar con queueStatus "pending" — cola persistente, nunca se borra
-          setPendingRoutes(prev => {
-            if (prev.some(r => r.sentAt === route.sentAt)) return prev;
-            const routeWithStatus = { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() };
-            const updated = [...prev, routeWithStatus];
-            if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-            window.__rdPendingRoutes[myKey] = updated;
-            LS.setPending(myKey, updated);
-            return updated;
-          });
+          // Encolar — marcar como vista para no reencolar
+          seenRouteIds.current.add(routeKey);
+          if (route.sentAt) seenRouteIds.current.add(route.sentAt);
+          saveSeenIds();
+
+          const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
+          const alreadyInQueue = currentQueue.some(r =>
+            (r.routeId && r.routeId === route.routeId) || r.sentAt === route.sentAt
+          );
+          if (!alreadyInQueue) {
+            saveQueue([...currentQueue, { ...route, queueStatus: "pending", enqueuedAt: new Date().toISOString() }]);
+          }
           return currentStops;
         }
-        // Sin trabajo activo Y no está en la cola: aplicar como ruta activa
+
+        // Sin trabajo activo — asignar directamente
+        seenRouteIds.current.add(routeKey);
+        if (route.sentAt) seenRouteIds.current.add(route.sentAt);
+        saveSeenIds();
         lastSentAt.current = route.sentAt;
         if (!window.__rdRouteStore) window.__rdRouteStore = {};
         window.__rdRouteStore[myKey] = route;
@@ -2528,35 +2562,46 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       });
     };
 
-    const applyChat = (msgs) => {
-      if (!Array.isArray(msgs)) return;
-      setChatLog([...msgs]);
-    };
-
+    // applyPending: Firebase envía la cola — solo agregar rutas que no hayamos visto
     const applyPending = (queue) => {
-      let arr = queue;
-      if (queue && !Array.isArray(queue) && typeof queue === "object") {
-        arr = Object.values(queue);
+      let arr = Array.isArray(queue) ? queue
+        : (queue && typeof queue === "object") ? Object.values(queue) : [];
+
+      // Filtrar solo las realmente nuevas (no vistas, no procesadas)
+      const newRoutes = arr.filter(r => {
+        const key = r.routeId || r.sentAt;
+        return key && !seenRouteIds.current.has(key) && r.queueStatus === "pending";
+      });
+
+      if (newRoutes.length === 0) return; // nada nuevo — no tocar nada
+
+      // Agregar las nuevas a la cola local
+      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
+      const currentIds = new Set(currentQueue.map(r => r.routeId || r.sentAt));
+      const toAdd = newRoutes.filter(r => !currentIds.has(r.routeId || r.sentAt));
+      if (toAdd.length > 0) {
+        saveQueue([...currentQueue, ...toAdd]);
       }
-      if (!Array.isArray(arr)) return;
-      if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = arr;
-      // Solo mostrar rutas que estén genuinamente esperando ("pending")
-      // "active" = ya fue activada y está corriendo como ruta actual → NO mostrar en cola
-      // "completed" = ya terminada → NO mostrar en cola
-      const visible = arr.filter(r => r.queueStatus === "pending");
-      setPendingRoutes(visible);
     };
 
-    // 1) Leer desde Firebase al montar (para rutas nuevas del admin)
-    FB.get(`routes/${myKey}`).then(applyRoute);
-    FB.get(`chats/${myKey}`).then(applyChat);
-    FB.get(`pendingRoutes/${myKey}`).then(applyPending);
+    const applyChat = (msgs) => {
+      if (Array.isArray(msgs)) setChatLog([...msgs]);
+    };
 
-    // 2) SSE solo para rutas (detectar nueva ruta del admin) y chat/pending
-    const unsubRoute   = FB.listen(`routes/${myKey}`, applyRoute);
-    const unsubChat    = FB.listen(`chats/${myKey}`,   applyChat);
+    // ── 4. Listeners Firebase ────────────────────────────────────────────────
+    FB.get(`routes/${myKey}`).then(applyRoute);
+    FB.get(`pendingRoutes/${myKey}`).then(applyPending);
+    FB.get(`chats/${myKey}`).then(applyChat);
+
+    const unsubRoute   = FB.listen(`routes/${myKey}`,   applyRoute);
     const unsubPending = FB.listen(`pendingRoutes/${myKey}`, applyPending);
+    const unsubChat    = FB.listen(`chats/${myKey}`,    applyChat);
+
+    // ── 5. Exponer helpers para admin en mismo navegador ─────────────────────
+    window.__rdSetRoute   = (driverId, route) => { if (driverId === myKey) applyRoute(route); };
+    window.__rdSetPending = (driverId, queue) => { if (driverId === myKey) applyPending(queue); };
+
+    // ── 6. Notificaciones del admin ──────────────────────────────────────────
 
     // 3) Listener de notificaciones del admin → mensajero (ruta asignada)
     let lastNotifKeys = new Set();
@@ -2604,12 +2649,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       }
       checkNotifs();
     }, 8000);
-    // Primera verificación de notificaciones al montar
     checkNotifs();
-
-    window.__rdSetPending = (driverId, queue) => {
-      if (driverId === myKey) applyPending(queue);
-    };
 
     return () => { unsubRoute(); unsubChat(); unsubPending(); unsubDriverNotifs(); clearInterval(pollInterval); };
   }, [myKey]); // eslint-disable-line
@@ -2859,39 +2899,30 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     ]).finally(() => {
       writingRef.current = false;
     });
-    // Check if route is now fully complete → save to history
+    // Route fully complete
     const allDone = updatedStops.length > 0 && updatedStops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
     if (allDone) {
-      const histEntry = {
-        ...updated,
-        completedAt: new Date().toISOString(),
-        histId: `H-${Date.now()}`,
-      };
+      const histEntry = { ...updated, completedAt: new Date().toISOString(), histId: `H-${Date.now()}` };
       setRouteHistory(prev => {
         const next = [histEntry, ...prev].slice(0, 50);
         try { localStorage.setItem(`rdHistory_${myKey}`, JSON.stringify(next)); } catch(e){}
         return next;
       });
-      // Cola persistente: marcar la entrada "active" de esta ruta como "completed".
-      // NUNCA se borra — solo cambia queueStatus para que no reaparezca en la UI.
-      const fullQueue = window.__rdPendingRoutes?.[myKey] || [];
-      const completedAt = new Date().toISOString();
-      const updatedFullQueue = fullQueue.map(r => {
-        const matches = updated.routeId
-          ? r.routeId === updated.routeId
-          : r.sentAt === updated.sentAt;
-        // Marcar completed si está pending o active (no tocar las ya completed)
-        if (matches && r.queueStatus !== "completed") {
-          return { ...r, queueStatus: "completed", completedAt };
-        }
-        return r;
-      });
+      // Marcar esta ruta como vista para siempre
+      const routeKey = updated.routeId || updated.sentAt;
+      if (routeKey) seenRouteIds.current.add(routeKey);
+      if (updated.sentAt) seenRouteIds.current.add(updated.sentAt);
+      try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
+      // Eliminar de la cola local
+      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
+      const newQueue = currentQueue.filter(r =>
+        updated.routeId ? r.routeId !== updated.routeId : r.sentAt !== updated.sentAt
+      );
       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-      window.__rdPendingRoutes[myKey] = updatedFullQueue;
-      // Solo rutas genuinamente pendientes en la UI
-      const stillPending = updatedFullQueue.filter(r => r.queueStatus === "pending");
-      setPendingRoutes(stillPending);
-      LS.setPending(myKey, updatedFullQueue);
+      window.__rdPendingRoutes[myKey] = newQueue;
+      try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
+      FB.set(`pendingRoutes/${myKey}`, newQueue.length > 0 ? newQueue : null);
+      setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
     }
   };
 
@@ -3828,24 +3859,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     disabled={hasActiveWork && isFirst}
                     onClick={() => {
                       if (hasActiveWork) return;
-                      const fullQueue = window.__rdPendingRoutes?.[myKey] || [];
-                      // Marcar esta ruta como "active" en el array completo de Firebase
-                      const updatedFullQueue = fullQueue.map(r => {
-                        const matches = route.routeId
-                          ? r.routeId === route.routeId
-                          : r.sentAt === route.sentAt;
-                        return matches
-                          ? { ...r, queueStatus: "active", activatedAt: new Date().toISOString() }
-                          : r;
-                      });
+                      // Marcar como vista para siempre — Firebase no la reinyectará
+                      const routeKey = route.routeId || route.sentAt;
+                      seenRouteIds.current.add(routeKey);
+                      if (route.sentAt) seenRouteIds.current.add(route.sentAt);
+                      try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
+
+                      // Eliminar de la cola local y sincronizar a Firebase
+                      const currentQueue = window.__rdPendingRoutes?.[myKey] || [];
+                      const newQueue = currentQueue.filter(r =>
+                        route.routeId ? r.routeId !== route.routeId : r.sentAt !== route.sentAt
+                      );
                       if (!window.__rdPendingRoutes) window.__rdPendingRoutes = {};
-                      window.__rdPendingRoutes[myKey] = updatedFullQueue;
-                      // Persistir en Firebase (array completo con status actualizado)
-                      LS.setPending(myKey, updatedFullQueue);
-                      // Cola visible: SOLO las que siguen en "pending" (esta ya no)
-                      const visibleQueue = updatedFullQueue.filter(r => r.queueStatus === "pending");
-                      setPendingRoutes(visibleQueue);
-                      // Activar como ruta actual — actualizar lastSentAt para que applyRoute no la reencole
+                      window.__rdPendingRoutes[myKey] = newQueue;
+                      try { localStorage.setItem(`rdQueue_${myKey}`, JSON.stringify(newQueue)); } catch(e) {}
+                      FB.set(`pendingRoutes/${myKey}`, newQueue.length > 0 ? newQueue : null);
+                      setPendingRoutes(newQueue.filter(r => r.queueStatus === "pending"));
+
+                      // Activar como ruta actual
                       lastSentAt.current = route.sentAt;
                       const newStops = (route.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
                       const activeRoute = { ...route, stops: newStops };
@@ -3856,7 +3887,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       LS.setRoute(myKey, activeRoute);
                       onUpdateRoute(myKey, activeRoute);
                       try { localStorage.setItem(`rdRoute_${myKey}`, JSON.stringify(activeRoute)); } catch(e) {}
-                      // Chat automático
                       addChatMsg(`🚀 Ruta "${route.routeName}" activada · ${stopsCount} paradas`);
                       setTab("route");
                       setFilterMode("all");
