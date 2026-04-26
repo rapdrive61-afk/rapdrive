@@ -4838,46 +4838,136 @@ const RoleGuard = ({ allowed, currentRole, children, fallback }) => {
 // The core differentiator: Excel import + geocoding + route optimization
 
 // Geocoding: parse & normalize Spanish addresses into structured data
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSER DOMINICANO — descompone direcciones en formato RD en sus partes
+// Soporta:
+//   "C/Mella #45, 2da planta, al lado del colmado El Rey, Herrera"
+//   "frente a la iglesia, detrás del parque, Bayona"
+//   "Res. Carmen Renata I, Calle 5 casa 12, SDO"
+//   "Km 9 Autopista Duarte, al lado de PriceSmart"
+//   "7VXP+Q3 Herrera"  (Plus Code)
+//   "esq. Av. Isabel Aguiar con Calle 3, Herrera"
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Palabras de referencia relacional — frases que indican "cerca de X"
+const RD_REF_PATTERNS = [
+  /\b(?:al\s+lado\s+(?:de(?:l)?)?|next\s+to)\s+(.+?)(?:,|$)/gi,
+  /\b(?:frente\s+a(?:l)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:detr[aá]s\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:cerca\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:esquina\s+(?:con|a)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:diagonal\s+(?:a(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+  /\b(?:subiendo|bajando)\s+(.+?)(?:,|$)/gi,
+  /\b(?:entre\s+.+?\s+y)\s+(.+?)(?:,|$)/gi,
+  /\b(?:a\s+(?:una\s+)?(?:\d+\s+)?(?:cuadra|bloque)s?\s+(?:de(?:l)?)?)\s+(.+?)(?:,|$)/gi,
+];
+
+// Sectores conocidos SDO para extracción automática
+const SDO_SECTORS = [
+  "herrera","bayona","engombe","las caobas","manoguayabo","villa aura",
+  "olimpo","hato nuevo","las palmas","enriquillo","caballona","lechería",
+  "arroyo bonito","ciudad agraria","la isabela","savica","las caobitas",
+  "las colinas","el libertador","pueblo nuevo","juan guzmán","las mercedes",
+  "altos de engombe","altos de las caobas","buenos aires de herrera",
+  "buenos aires de manoguayabo","buenos aires de las caobas",
+  "el café de herrera","las palmas de herrera","barrio nuevo","barrio duarte",
+  "barrio san francisco","barrio san miguel","barrio enriquillo","barrio libertad",
+  "barrio progreso","batey bienvenido","nuevo horizonte","la venta",
+  "el hoyo de manoguayabo","carmen renata","brisas del oeste","don honorio",
+  "operaciones especiales","residencial altagracia","residencial antonia",
+];
+
+// Plus Code detector
+const PLUS_CODE_RE = /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}(?:\s+\w+)?$/i;
+
 const parseAddress = (raw) => {
   if (!raw) return { valid: false, raw: "" };
   const s = String(raw).trim();
 
-  // Extract number
-  const numMatch = s.match(/,?\s*n[ºo°]?\s*(\d+[-\w]*)/i) || s.match(/\s(\d+)\s*$/);
+  // ── 0. Plus Code directo ──────────────────────────────────────────────────
+  if (PLUS_CODE_RE.test(s.split(",")[0].trim())) {
+    return { valid: true, raw: s, isPlusCode: true, plusCode: s.split(",")[0].trim(),
+      street: s, number: "", floor: "", reference: "", sector: "", display: s };
+  }
+
+  // ── 1. Extraer referencias relacionales ("frente a", "al lado de"…) ───────
+  let working = s;
+  const references = [];
+  for (const pat of RD_REF_PATTERNS) {
+    let m;
+    pat.lastIndex = 0;
+    while ((m = pat.exec(working)) !== null) {
+      if (m[1]) references.push(m[1].trim().replace(/,$/, ""));
+    }
+  }
+
+  // ── 2. Extraer sector SDO ─────────────────────────────────────────────────
+  let sector = "";
+  const lc = working.toLowerCase();
+  for (const sec of SDO_SECTORS) {
+    if (lc.includes(sec)) { sector = sec.replace(/\b\w/g, c => c.toUpperCase()); break; }
+  }
+
+  // ── 3. Extraer número de casa/local ──────────────────────────────────────
+  const numMatch = working.match(/[,\s](?:no?[.ºo°#]?\s*)?(\d{1,4}[a-z]?)(?:\s|,|$)/i)
+                || working.match(/\s#\s*(\d{1,4}[a-z]?)/i)
+                || working.match(/n[ºo°]\s*(\d{1,4})/i);
   const number = numMatch ? numMatch[1] : "";
 
-  // Extract floor/door
-  const floorMatch = s.match(/(\d+[ºo°]?\s*[A-Z]?)\s*(?:piso|planta|pta|puerta)?/i);
-  const floor = floorMatch && floorMatch[0].includes("piso") ? floorMatch[1] : "";
+  // ── 4. Extraer piso / apartamento / local ────────────────────────────────
+  const floorMatch = working.match(/(\d+[aº]?)\s*(?:er|ro|do|to)?\s*(?:piso|planta)/i)
+                  || working.match(/apt(?:o|artamento)?\.?\s*(\d+[a-z]?)/i)
+                  || working.match(/local\s+(\d+[a-z]?)/i);
+  const floor = floorMatch ? floorMatch[0].trim() : "";
 
-  // Strip number/floor from street
-  let street = s
-    .replace(/,?\s*n[ºo°]?\s*\d+[-\w]*/i, "")
-    .replace(/,?\s*\d+[ºo°]?\s*(piso|planta|pta)[^,]*/i, "")
-    .replace(/\s+\d+\s*$/, "")
+  // ── 5. Limpiar y normalizar la parte de calle ─────────────────────────────
+  let street = working
+    .replace(/,?\s*(?:no?[.ºo°#]?\s*)?\d{1,4}[a-z]?\s*(?:er|ro|do|to)?(?:\s+piso|\s+planta)?/gi, "")
+    .replace(/,?\s*apt(?:o|artamento)?\.?\s*\d+[a-z]?/gi, "")
+    .replace(/,?\s*local\s+\d+[a-z]?/gi, "")
+    .replace(/,?\s*\d+[aº]?\s*(?:piso|planta)[^,]*/gi, "")
+    // quitar las frases relacionales ya extraídas
+    .replace(/\b(?:al\s+lado\s+(?:de(?:l)?)?|frente\s+a(?:l)?|detr[aá]s\s+(?:de(?:l)?)?|cerca\s+(?:de(?:l)?)?|diagonal\s+(?:a(?:l)?)?|subiendo|bajando)\s+[^,]+/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
     .trim();
 
-  // Normalize abbreviations
+  // ── 6. Expandir abreviaturas de vía ──────────────────────────────────────
   street = street
-    .replace(/^c\/?\s*/i,  "Calle ")
-    .replace(/^av\.?\s*/i, "Avenida ")
-    .replace(/^avda\.?\s*/i,"Avenida ")
-    .replace(/^pz?a?\.?\s*/i,"Plaza ")
-    .replace(/^ctra\.?\s*/i,"Carretera ")
-    .replace(/^pg?\s+ind\b/i,"Polígono Industrial ")
-    .replace(/^blv?d?\.?\s*/i,"Bulevar ")
-    .replace(/^ps?o?\.?\s*/i,"Paseo ");
+    .replace(/\bc\/?(\s+|(?=[A-ZÁÉÍÓÚ\d]))/gi, "Calle ")
+    .replace(/\bav\.?\s*/gi,    "Avenida ")
+    .replace(/\bave\.?\s*/gi,   "Avenida ")
+    .replace(/\bavda\.?\s*/gi,  "Avenida ")
+    .replace(/\bprol\.?\s*/gi,  "Prolongación ")
+    .replace(/\besq\.?\s*/gi,   "Esquina ")
+    .replace(/\bres\.?\s*/gi,   "Residencial ")
+    .replace(/\burb\.?\s*/gi,   "Urbanización ")
+    .replace(/\bkm\.?\s+/gi,    "Km ")
+    .replace(/\bctra\.?\s*/gi,  "Carretera ");
 
-  // Capitalize words
+  // ── 7. Capitalizar ────────────────────────────────────────────────────────
   street = street.replace(/\b\w/g, c => c.toUpperCase());
 
+  // ── 8. Construir query optimizada para Google ─────────────────────────────
+  // Orden: calle+número, sector, ciudad — referencias van al final como hint
+  const parts = [street, number].filter(Boolean).join(" No. ");
+  const sectorHint = sector ? `${sector}, Santo Domingo Oeste` : "Santo Domingo Oeste";
+  const optimizedQuery = references.length
+    ? `${parts}, ${sectorHint} (cerca de ${references[0]})`
+    : `${parts}, ${sectorHint}`;
+
   return {
-    valid: street.length > 2,
+    valid: street.length > 2 || sector.length > 0,
     raw: s,
     street,
     number,
     floor,
+    sector,
+    reference: references[0] || "",
+    allReferences: references,
     display: [street, number, floor].filter(Boolean).join(", "),
+    optimizedQuery,
+    isPlusCode: false,
   };
 };
 
@@ -5055,6 +5145,20 @@ const buildQueryVariants = (raw) => {
 
   const expanded = expandRDAddress(s);
   const variants = new Set();
+
+  // ── Usar query optimizada del parser dominicano como variante prioritaria ──
+  const parsed = parseAddress(s);
+  if (parsed.isPlusCode) {
+    variants.add(parsed.plusCode + " Santo Domingo Oeste, República Dominicana");
+    variants.add(parsed.plusCode);
+  } else if (parsed.valid && parsed.optimizedQuery) {
+    variants.add(parsed.optimizedQuery + ", República Dominicana");
+    if (parsed.reference) {
+      const noRef = [parsed.street, parsed.number].filter(Boolean).join(" No. ");
+      const sec   = parsed.sector || "Santo Domingo Oeste";
+      variants.add(noRef + ", " + sec + ", Santo Domingo Oeste, República Dominicana");
+    }
+  }
 
   // --- Detección de contexto geográfico ---
   const hasCountry = /rep[uú]blica dominicana|dominican republic/i.test(s);
@@ -5314,380 +5418,222 @@ const expandRDAddress = (s) => {
     [/\bsd\s+o\b/gi,                          "Santo Domingo Oeste"],
 
     // ════════════════════════════════════════════════════════════════════════
-    // PUNTOS DE REFERENCIA SDO — calles, negocios, escuelas, hospitales, etc.
+    // NUEVOS PUNTOS DE REFERENCIA SDO — segunda tanda
     // ════════════════════════════════════════════════════════════════════════
 
-    // ── CALLES Y AVENIDAS PRINCIPALES ────────────────────────────────────────
-    [/\bav(?:enida)?\s+herrera\b/gi,                   "Avenida Herrera, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+central\s+(?:de\s+)?herrera\b/gi, "Avenida Central de Herrera, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+restauraci[oó]n\b/gi,           "Avenida Restauración, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+proyecto\b/gi,                  "Avenida Proyecto, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+zona\s+industrial\b/gi,         "Avenida Zona Industrial, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+san\s+mart[ií]n\b/gi,           "Avenida San Martín, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+manoguayabo\b/gi,               "Avenida Manoguayabo, Santo Domingo Oeste"],
-    [/\bav(?:enida)?\s+engombe\b/gi,                   "Avenida Engombe, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+principal\s+herrera\b/gi,         "Calle Principal Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+segunda\s+herrera\b/gi,           "Calle Segunda Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+tercera\s+herrera\b/gi,           "Calle Tercera Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+cuarta\s+herrera\b/gi,            "Calle Cuarta Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+primera\s+(?:de\s+)?herrera\b/gi, "Calle Primera Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+juan\s+pablo\s+duarte\s+herrera\b/gi, "Calle Juan Pablo Duarte, Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+mella\s+herrera\b/gi,             "Calle Mella, Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+s[aá]nchez\s+herrera\b/gi,        "Calle Sánchez, Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+padre\s+billini\s+herrera\b/gi,   "Calle Padre Billini, Herrera, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+isabela\b/gi,                     "Calle Isabela, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+higuamo\b/gi,                     "Calle Higuamo, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+yaque\b/gi,                       "Calle Yaque, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+cambronal\b/gi,                   "Calle Cambronal, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+daj[aá]b[oó]n\b/gi,              "Calle Dajabón, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+oc[oó]a\b/gi,                     "Calle Ocoa, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+beller\b/gi,                      "Calle Beller, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+lima\b/gi,                        "Calle Lima, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+bogot[aá]\b/gi,                   "Calle Bogotá, Santo Domingo Oeste"],
-    [/\bc(?:alle)?\s+caracas\b/gi,                     "Calle Caracas, Santo Domingo Oeste"],
-    [/\bprolongaci[oó]n\s+herrera\b/gi,                "Prolongación Herrera, Santo Domingo Oeste"],
-    [/\bcarretera\s+sanche[sz]\b/gi,                   "Carretera Sánchez, Santo Domingo Oeste"],
-    [/\bcarretera\s+manoguayabo\b/gi,                  "Carretera Manoguayabo, Santo Domingo Oeste"],
-    [/\bcarretera\s+hato\s+nuevo\b/gi,                 "Carretera Hato Nuevo, Santo Domingo Oeste"],
-    [/\bcalle\s+las\s+damas\s+herrera\b/gi,            "Calle Las Damas, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+los\s+alcarrizos\b/gi,                 "Calle Los Alcarrizos, Santo Domingo Oeste"],
+    // ── ZONAS Y MICRO-SECTORES ADICIONALES ───────────────────────────────────
+    [/\bla\s+zurza\b/gi,                      "La Zurza, Santo Domingo Oeste"],
+    [/\bel\s+café\b(?!\s+de\s+herrera)/gi,    "El Café, Santo Domingo Oeste"],
+    [/\bla\s+mosca\b/gi,                      "La Mosca, Santo Domingo Oeste"],
+    [/\bel\s+gordo\b/gi,                      "El Gordo, Santo Domingo Oeste"],
+    [/\blos\s+girasoles\b/gi,                 "Los Girasoles, Santo Domingo Oeste"],
+    [/\blos\s+jardines\s+(?:de\s+)?herrera\b/gi, "Los Jardines de Herrera, Santo Domingo Oeste"],
+    [/\blos\s+pinos\s+(?:de\s+)?herrera\b/gi, "Los Pinos de Herrera, Santo Domingo Oeste"],
+    [/\blos\s+almendros\b/gi,                 "Los Almendros, Santo Domingo Oeste"],
+    [/\bla\s+colonia\b/gi,                    "La Colonia, Santo Domingo Oeste"],
+    [/\breparto\s+herrera\b/gi,               "Reparto Herrera, Santo Domingo Oeste"],
+    [/\breparto\s+oriental\b/gi,              "Reparto Oriental, Santo Domingo Oeste"],
+    [/\bel\s+limonal\b/gi,                    "El Limonal, Santo Domingo Oeste"],
+    [/\bla\s+javilla\b/gi,                    "La Javilla, Santo Domingo Oeste"],
+    [/\blos\s+ciruelitos\b/gi,                "Los Ciruelitos, Santo Domingo Oeste"],
+    [/\bel\s+cachón\b/gi,                     "El Cachón, Santo Domingo Oeste"],
+    [/\bla\s+barranquita\b/gi,                "La Barranquita, Santo Domingo Oeste"],
+    [/\blos\s+frailes\b/gi,                   "Los Frailes, Santo Domingo Oeste"],
+    [/\bvilla\s+mella\s+(?:oeste|sdo)\b/gi,   "Villa Mella Oeste, Santo Domingo Oeste"],
+    [/\bel\s+carril\b/gi,                     "El Carril, Santo Domingo Oeste"],
 
-    // ── SUPERMERCADOS Y TIENDAS ───────────────────────────────────────────────
-    [/\bla\s+sirena\s+herrera\b/gi,                    "La Sirena Herrera, Santo Domingo Oeste"],
-    [/\bla\s+sirena\s+(?:de\s+)?bayona\b/gi,           "La Sirena Bayona, Santo Domingo Oeste"],
-    [/\bpricesmarts?\s+herrera\b/gi,                    "PriceSmart Herrera, Santo Domingo Oeste"],
-    [/\bpricesmarts?\s+(?:autopista\s+)?duarte\b/gi,   "PriceSmart Autopista Duarte, Santo Domingo Oeste"],
-    [/\bnacional\s+herrera\b/gi,                       "Supermercado Nacional Herrera, Santo Domingo Oeste"],
-    [/\bnacional\s+(?:de\s+)?bayona\b/gi,              "Supermercado Nacional Bayona, Santo Domingo Oeste"],
-    [/\bnacional\s+(?:de\s+)?las\s+caobas\b/gi,        "Supermercado Nacional Las Caobas, Santo Domingo Oeste"],
-    [/\bpuella\s+herrera\b/gi,                         "Supermercado Puella Herrera, Santo Domingo Oeste"],
-    [/\bpuella\s+(?:de\s+)?engombe\b/gi,               "Supermercado Puella Engombe, Santo Domingo Oeste"],
-    [/\bplaza\s+lama\s+herrera\b/gi,                   "Plaza Lama Herrera, Santo Domingo Oeste"],
-    [/\bbravo\s+(?:supermercado\s+)?herrera\b/gi,      "Bravo Herrera, Santo Domingo Oeste"],
-    [/\bjumbo\s+herrera\b/gi,                          "Jumbo Herrera, Santo Domingo Oeste"],
-    [/\bjumbo\s+(?:de\s+)?bayona\b/gi,                 "Jumbo Bayona, Santo Domingo Oeste"],
-    [/\bcentro\s+cuesta\s+herrera\b/gi,                "Centro Cuesta Herrera, Santo Domingo Oeste"],
-    [/\bcost[oa]\s+todo\s+herrera\b/gi,                "Costo Todo Herrera, Santo Domingo Oeste"],
-    [/\boli\s+(?:supermercado\s+)?herrera\b/gi,        "OLI Herrera, Santo Domingo Oeste"],
-    [/\beli\s+(?:supermercado\s+)?herrera\b/gi,        "Eli Herrera, Santo Domingo Oeste"],
-    [/\bsuper\s+pola\s+herrera\b/gi,                   "Super Pola Herrera, Santo Domingo Oeste"],
-    [/\bvito\s+(?:supermercado\s+)?herrera\b/gi,       "Vito Herrera, Santo Domingo Oeste"],
-    [/\bsuper\s+king\s+herrera\b/gi,                   "Super King Herrera, Santo Domingo Oeste"],
-    [/\bsuper\s+mercado\s+don\s+bosco\s+herrera\b/gi,  "Supermercado Don Bosco, Herrera, Santo Domingo Oeste"],
+    // ── CALLES ADICIONALES ────────────────────────────────────────────────────
+    [/\bav(?:enida)?\s+hermanos\s+deligne\b/gi,  "Avenida Hermanos Deligne, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+jacobo\s+majluta\b/gi,    "Avenida Jacobo Majluta, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+circunvalaci[oó]n\b/gi,   "Avenida Circunvalación, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+(?:de\s+)?los\s+pr[oó]ceres\b/gi, "Avenida de los Próceres, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+lup[eé]r[oó]n\b/gi,      "Avenida Luperón, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+s[aá]nchez\b/gi,          "Avenida Sánchez, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+mella\b/gi,               "Avenida Mella, Santo Domingo Oeste"],
+    [/\bav(?:enida)?\s+padre\s+castellanos\b/gi, "Avenida Padre Castellanos, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+mameyes\b/gi,              "Calle Los Mameyes, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+cacao\b/gi,                "Calle Los Cacao, Santo Domingo Oeste"],
+    [/\bcalle\s+las\s+flores\b/gi,               "Calle Las Flores, Santo Domingo Oeste"],
+    [/\bcalle\s+las\s+rosas\b/gi,                "Calle Las Rosas, Santo Domingo Oeste"],
+    [/\bcalle\s+los\s+almendros\b/gi,            "Calle Los Almendros, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+juan\b/gi,                 "Calle San Juan, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+pedro\b/gi,                "Calle San Pedro, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+pablo\b/gi,                "Calle San Pablo, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+luis\b/gi,                 "Calle San Luis, Santo Domingo Oeste"],
+    [/\bcalle\s+san\s+rafael\b/gi,               "Calle San Rafael, Santo Domingo Oeste"],
+    [/\bcalle\s+el\s+mamey\b/gi,                 "Calle El Mamey, Santo Domingo Oeste"],
+    [/\bcalle\s+el\s+jobo\b/gi,                  "Calle El Jobo, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+bayona\b/gi,          "Calle Principal Bayona, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+engombe\b/gi,         "Calle Principal Engombe, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+las\s+caobas\b/gi,   "Calle Principal Las Caobas, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+manoguayabo\b/gi,     "Calle Principal Manoguayabo, Santo Domingo Oeste"],
+    [/\bcalle\s+principal\s+engombe\b/gi,         "Calle Principal Engombe, Santo Domingo Oeste"],
+    [/\bcalle\s+21\b(?:\s+herrera)?/gi,          "Calle 21, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+22\b(?:\s+herrera)?/gi,          "Calle 22, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+23\b(?:\s+herrera)?/gi,          "Calle 23, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+24\b(?:\s+herrera)?/gi,          "Calle 24, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+25\b(?:\s+herrera)?/gi,          "Calle 25, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+g\b(?:\s+herrera)?/gi,           "Calle G, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+h\b(?:\s+herrera)?/gi,           "Calle H, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+i\b(?:\s+herrera)?/gi,           "Calle I, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+j\b(?:\s+herrera)?/gi,           "Calle J, Herrera, Santo Domingo Oeste"],
+    [/\bcalle\s+k\b(?:\s+herrera)?/gi,           "Calle K, Herrera, Santo Domingo Oeste"],
 
-    // ── COLMADOS CONOCIDOS ────────────────────────────────────────────────────
-    [/\bcolmado\s+el\s+buen\s+precio\b/gi,             "Colmado El Buen Precio, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+esquina\b/gi,                   "Colmado La Esquina, Santo Domingo Oeste"],
-    [/\bcolmado\s+san\s+jose\b/gi,                     "Colmado San José, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+chino\b/gi,                     "Colmado El Chino, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+cubano\b/gi,                    "Colmado El Cubano, Santo Domingo Oeste"],
-    [/\bcolmado\s+don\s+juan\b/gi,                     "Colmado Don Juan, Santo Domingo Oeste"],
-    [/\bcolmado\s+don\s+pep[eé]\b/gi,                  "Colmado Don Pepé, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+bendici[oó]n\b/gi,              "Colmado La Bendición, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+amigo\b/gi,                     "Colmado El Amigo, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+pariente\b/gi,                  "Colmado El Pariente, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+palma\b/gi,                     "Colmado La Palma, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+progreso\b/gi,                  "Colmado El Progreso, Santo Domingo Oeste"],
-    [/\bcolmado\s+ramoncito\b/gi,                      "Colmado Ramoncito, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+esperanza\b/gi,                 "Colmado La Esperanza, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+rey\b/gi,                       "Colmado El Rey, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+reina\b/gi,                     "Colmado La Reina, Santo Domingo Oeste"],
-    [/\bcolmado\s+mi\s+tierra\b/gi,                    "Colmado Mi Tierra, Santo Domingo Oeste"],
-    [/\bcolmado\s+el\s+vecino\b/gi,                    "Colmado El Vecino, Santo Domingo Oeste"],
-    [/\bcolmado\s+los\s+primos\b/gi,                   "Colmado Los Primos, Santo Domingo Oeste"],
-    [/\bcolmado\s+la\s+familiar\b/gi,                  "Colmado La Familiar, Santo Domingo Oeste"],
+    // ── COLEGIOS Y CENTROS EDUCATIVOS ADICIONALES ────────────────────────────
+    [/\bcolegio\s+san\s+judas\s+tadeo\b/gi,      "Colegio San Judas Tadeo, Santo Domingo Oeste"],
+    [/\bcolegio\s+nuestra\s+se[nñ]ora\s+(?:de\s+)?la\s+paz\b/gi, "Colegio Nuestra Señora de la Paz, Santo Domingo Oeste"],
+    [/\bcolegio\s+la\s+paz\s+herrera\b/gi,       "Colegio La Paz, Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+el\s+camino\b/gi,              "Colegio El Camino, Santo Domingo Oeste"],
+    [/\bcolegio\s+bilingüe\s+herrera\b/gi,       "Colegio Bilingüe Herrera, Santo Domingo Oeste"],
+    [/\binstituto\s+salesiano\s+herrera\b/gi,    "Instituto Salesiano Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+la\s+salle\s+bayona\b/gi,      "Colegio La Salle Bayona, Santo Domingo Oeste"],
+    [/\bescuela\s+(?:b[aá]sica\s+)?arroyo\s+bonito\b/gi, "Escuela Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bescuela\s+(?:b[aá]sica\s+)?villa\s+mella\b/gi,   "Escuela Villa Mella Oeste, Santo Domingo Oeste"],
+    [/\bcentro\s+educativo\s+herrera\b/gi,       "Centro Educativo Herrera, Santo Domingo Oeste"],
+    [/\bcolegio\s+jard[ií]n\s+de\s+ni[nñ]os\b/gi, "Colegio Jardín de Niños, Santo Domingo Oeste"],
+    [/\bescuela\s+técnica\s+herrera\b/gi,        "Escuela Técnica Herrera, Santo Domingo Oeste"],
+    [/\binstituto\s+técnico\s+(?:de\s+)?herrera\b/gi, "Instituto Técnico Herrera, Santo Domingo Oeste"],
+    [/\buniversidad\s+abierta\s+(?:herrera|sdo)\b/gi, "Universidad Abierta SDO, Santo Domingo Oeste"],
+    [/\binfotep\s+herrera\b/gi,                  "INFOTEP Herrera, Santo Domingo Oeste"],
+    [/\binfotep\s+(?:de\s+)?bayona\b/gi,         "INFOTEP Bayona, Santo Domingo Oeste"],
 
-    // ── PLAZAS COMERCIALES ────────────────────────────────────────────────────
-    [/\bplaza\s+herrera\b/gi,                          "Plaza Herrera, Santo Domingo Oeste"],
-    [/\bplaza\s+central\s+herrera\b/gi,                "Plaza Central Herrera, Santo Domingo Oeste"],
-    [/\bplaza\s+(?:comercial\s+)?bayona\b/gi,          "Plaza Bayona, Santo Domingo Oeste"],
-    [/\bplaza\s+(?:comercial\s+)?engombe\b/gi,         "Plaza Engombe, Santo Domingo Oeste"],
-    [/\bplaza\s+(?:comercial\s+)?las\s+caobas\b/gi,   "Plaza Las Caobas, Santo Domingo Oeste"],
-    [/\bplaza\s+(?:comercial\s+)?manoguayabo\b/gi,    "Plaza Manoguayabo, Santo Domingo Oeste"],
-    [/\bplaza\s+villa\s+aura\b/gi,                    "Plaza Villa Aura, Santo Domingo Oeste"],
-    [/\bplaza\s+olimpo\b/gi,                           "Plaza Olimpo, Santo Domingo Oeste"],
-    [/\bplaza\s+duarte\s+herrera\b/gi,                "Plaza Duarte Herrera, Santo Domingo Oeste"],
-    [/\bplaza\s+los\s+alcarrizos\b/gi,                "Plaza Los Alcarrizos, Santo Domingo Oeste"],
-    [/\bmall\s+(?:de\s+)?herrera\b/gi,                "Mall Herrera, Santo Domingo Oeste"],
-    [/\bcent(?:ro)?\s+comercial\s+herrera\b/gi,       "Centro Comercial Herrera, Santo Domingo Oeste"],
-    [/\bcent(?:ro)?\s+comercial\s+(?:de\s+)?bayona\b/gi, "Centro Comercial Bayona, Santo Domingo Oeste"],
-    [/\bplaza\s+la\s+palma\s+herrera\b/gi,            "Plaza La Palma Herrera, Santo Domingo Oeste"],
-    [/\bplaza\s+san\s+mart[ií]n\b/gi,                 "Plaza San Martín, Santo Domingo Oeste"],
-    [/\bplaza\s+trinidad\b/gi,                         "Plaza Trinidad, Santo Domingo Oeste"],
-    [/\bplaza\s+don\s+bosco\b/gi,                     "Plaza Don Bosco, Santo Domingo Oeste"],
-    [/\bplaza\s+el\s+sol\b/gi,                        "Plaza El Sol, Santo Domingo Oeste"],
-    [/\bplaza\s+nuevo\s+horizonte\b/gi,               "Plaza Nuevo Horizonte, Santo Domingo Oeste"],
+    // ── CLÍNICAS Y SALUD ADICIONAL ────────────────────────────────────────────
+    [/\bcl[ií]nica\s+el\s+buen\s+pastor\b/gi,    "Clínica El Buen Pastor, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+san\s+juan\s+herrera\b/gi,  "Clínica San Juan, Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+nova\s+herrera\b/gi,        "Clínica Nova Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+dra?\.\s+\w+\s+herrera\b/gi,"Clínica Herrera, Santo Domingo Oeste"],
+    [/\bunidad\s+médica\s+herrera\b/gi,          "Unidad Médica Herrera, Santo Domingo Oeste"],
+    [/\blaboratorio\s+(?:cl[ií]nico\s+)?herrera\b/gi, "Laboratorio Clínico Herrera, Santo Domingo Oeste"],
+    [/\blaboratorio\s+bayona\b/gi,               "Laboratorio Bayona, Santo Domingo Oeste"],
+    [/\bóptica\s+herrera\b/gi,                   "Óptica Herrera, Santo Domingo Oeste"],
+    [/\bdentista\s+herrera\b/gi,                 "Dentista Herrera, Santo Domingo Oeste"],
+    [/\bcl[ií]nica\s+dental\s+herrera\b/gi,      "Clínica Dental Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+roma\s+herrera\b/gi,          "Farmacia Roma Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+sim[oó]n\s+bolívar\s+herrera\b/gi, "Farmacia Simón Bolívar, Herrera, Santo Domingo Oeste"],
+    [/\bfarmacia\s+carol\s+las\s+caobas\b/gi,    "Farmacia Carol Las Caobas, Santo Domingo Oeste"],
+    [/\bfarmacia\s+el\s+roble\b/gi,              "Farmacia El Roble, Santo Domingo Oeste"],
+    [/\bfarmacia\s+san\s+mart[ií]n\s+herrera\b/gi, "Farmacia San Martín, Herrera, Santo Domingo Oeste"],
 
-    // ── ESCUELAS Y LICEOS ─────────────────────────────────────────────────────
-    [/\bescuela\s+(?:primaria\s+)?herrera\b/gi,        "Escuela Herrera, Santo Domingo Oeste"],
-    [/\bliceo\s+herrera\b/gi,                          "Liceo Herrera, Santo Domingo Oeste"],
-    [/\bliceo\s+(?:secundario\s+)?las\s+caobas\b/gi,  "Liceo Las Caobas, Santo Domingo Oeste"],
-    [/\bliceo\s+(?:secundario\s+)?bayona\b/gi,         "Liceo Bayona, Santo Domingo Oeste"],
-    [/\bliceo\s+(?:secundario\s+)?engombe\b/gi,        "Liceo Engombe, Santo Domingo Oeste"],
-    [/\bliceo\s+(?:secundario\s+)?manoguayabo\b/gi,   "Liceo Manoguayabo, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?villa\s+aura\b/gi, "Escuela Villa Aura, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?olimpo\b/gi,       "Escuela Olimpo, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?engombe\b/gi,      "Escuela Engombe, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?las\s+caobas\b/gi, "Escuela Las Caobas, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?bayona\b/gi,       "Escuela Bayona, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?manoguayabo\b/gi,  "Escuela Manoguayabo, Santo Domingo Oeste"],
-    [/\bescuela\s+(?:b[aá]sica\s+)?hato\s+nuevo\b/gi, "Escuela Hato Nuevo, Santo Domingo Oeste"],
-    [/\bcolegio\s+don\s+bosco\s+herrera\b/gi,          "Colegio Don Bosco Herrera, Santo Domingo Oeste"],
-    [/\bcolegio\s+la\s+salle\s+herrera\b/gi,           "Colegio La Salle Herrera, Santo Domingo Oeste"],
-    [/\bcolegio\s+cristiano\s+herrera\b/gi,            "Colegio Cristiano Herrera, Santo Domingo Oeste"],
-    [/\bcolegio\s+bet[aá]nia\b/gi,                    "Colegio Betania, Santo Domingo Oeste"],
-    [/\bcolegio\s+nueva\s+esperanza\s+herrera\b/gi,   "Colegio Nueva Esperanza, Herrera, Santo Domingo Oeste"],
-    [/\bcolegio\s+monte\s+sion\b/gi,                  "Colegio Monte Sión, Santo Domingo Oeste"],
-    [/\bcolegio\s+luz\s+del\s+mundo\b/gi,             "Colegio Luz del Mundo, Santo Domingo Oeste"],
-    [/\bcolegio\s+el\s+shaddai\b/gi,                  "Colegio El Shaddai, Santo Domingo Oeste"],
-    [/\binstituto\s+polit[eé]cnico\s+herrera\b/gi,    "Instituto Politécnico Herrera, Santo Domingo Oeste"],
-    [/\buniversidad\s+o&m\s+herrera\b/gi,             "Universidad O&M Herrera, Santo Domingo Oeste"],
-    [/\buasd\s+(?:recinto\s+)?herrera\b/gi,           "UASD Herrera, Santo Domingo Oeste"],
-    [/\bescuela\s+enriquillo\s+herrera\b/gi,          "Escuela Enriquillo, Herrera, Santo Domingo Oeste"],
-    [/\bescuela\s+juan\s+pablo\s+duarte\s+herrera\b/gi, "Escuela Juan Pablo Duarte, Herrera, Santo Domingo Oeste"],
-    [/\bcolegio\s+emmanuel\b/gi,                      "Colegio Emmanuel, Santo Domingo Oeste"],
-    [/\bcolegio\s+ana\s+frank\s+herrera\b/gi,         "Colegio Ana Frank, Herrera, Santo Domingo Oeste"],
+    // ── NEGOCIOS Y SERVICIOS ADICIONALES ─────────────────────────────────────
+    [/\bferro\s+norte\s+herrera\b/gi,            "Ferro Norte Herrera, Santo Domingo Oeste"],
+    [/\bferro\s+centro\s+herrera\b/gi,           "Ferro Centro Herrera, Santo Domingo Oeste"],
+    [/\bdeposito\s+(?:de\s+)?materiales\s+herrera\b/gi, "Depósito de Materiales Herrera, Santo Domingo Oeste"],
+    [/\bdeposito\s+(?:de\s+)?materiales\s+bayona\b/gi,  "Depósito de Materiales Bayona, Santo Domingo Oeste"],
+    [/\bcervecería\s+(?:nacional\s+)?herrera\b/gi, "Cervecería Nacional Herrera, Santo Domingo Oeste"],
+    [/\brivera\s+herrera\b/gi,                   "Rivera Herrera, Santo Domingo Oeste"],
+    [/\bcolmena\s+herrera\b/gi,                  "Colmena Herrera, Santo Domingo Oeste"],
+    [/\bwanda\s+herrera\b/gi,                    "Wanda Herrera, Santo Domingo Oeste"],
+    [/\bel\s+barrigón\b/gi,                      "El Barrigón, Santo Domingo Oeste"],
+    [/\bel\s+ticket\s+herrera\b/gi,              "El Ticket Herrera, Santo Domingo Oeste"],
+    [/\bcopy\s+(?:center\s+)?herrera\b/gi,        "Copy Center Herrera, Santo Domingo Oeste"],
+    [/\bimpresiones\s+herrera\b/gi,              "Impresiones Herrera, Santo Domingo Oeste"],
+    [/\bwestern\s+union\s+herrera\b/gi,          "Western Union Herrera, Santo Domingo Oeste"],
+    [/\bmoneygram\s+herrera\b/gi,                "MoneyGram Herrera, Santo Domingo Oeste"],
+    [/\bpagos\s+(?:en\s+l[ií]nea\s+)?herrera\b/gi, "Pagos Herrera, Santo Domingo Oeste"],
+    [/\binternet\s+caf[eé]\s+herrera\b/gi,       "Internet Café Herrera, Santo Domingo Oeste"],
+    [/\bmercadom[oó]vil\s+herrera\b/gi,          "MercadoMóvil Herrera, Santo Domingo Oeste"],
+    [/\bclaro\s+hogar\s+herrera\b/gi,            "Claro Hogar Herrera, Santo Domingo Oeste"],
+    [/\boficina\s+(?:de\s+)?claro\s+herrera\b/gi,"Oficina Claro Herrera, Santo Domingo Oeste"],
+    [/\btaller\s+(?:mec[aá]nico\s+)?herrera\b/gi,"Taller Mecánico Herrera, Santo Domingo Oeste"],
+    [/\btaller\s+(?:mec[aá]nico\s+)?bayona\b/gi, "Taller Mecánico Bayona, Santo Domingo Oeste"],
+    [/\bautorepuestos?\s+herrera\b/gi,           "Autorepuestos Herrera, Santo Domingo Oeste"],
+    [/\bautorepuestos?\s+bayona\b/gi,            "Autorepuestos Bayona, Santo Domingo Oeste"],
+    [/\bgomera\s+herrera\b/gi,                   "Gomera Herrera, Santo Domingo Oeste"],
+    [/\bgomera\s+bayona\b/gi,                    "Gomera Bayona, Santo Domingo Oeste"],
+    [/\bcar\s+wash\s+herrera\b/gi,               "Car Wash Herrera, Santo Domingo Oeste"],
+    [/\blavado\s+(?:de\s+autos\s+)?herrera\b/gi, "Lavado de Autos Herrera, Santo Domingo Oeste"],
+    [/\bservi\s+centro\s+herrera\b/gi,           "Servi Centro Herrera, Santo Domingo Oeste"],
+    [/\bpintura\s+(?:y\s+colisión\s+)?herrera\b/gi, "Pintura y Colisión Herrera, Santo Domingo Oeste"],
+    [/\bair\s+express\s+herrera\b/gi,            "Air Express Herrera, Santo Domingo Oeste"],
+    [/\bservi-cargo\s+herrera\b/gi,              "Servi-Cargo Herrera, Santo Domingo Oeste"],
+    [/\balmac[eé]n\s+roma\s+herrera\b/gi,        "Almacén Roma Herrera, Santo Domingo Oeste"],
 
-    // ── HOSPITALES, CLÍNICAS Y FARMACIAS ─────────────────────────────────────
-    [/\bcl[ií]nica\s+herrera\b/gi,                    "Clínica Herrera, Santo Domingo Oeste"],
-    [/\bcl[ií]nica\s+(?:general\s+)?bayona\b/gi,      "Clínica Bayona, Santo Domingo Oeste"],
-    [/\bcl[ií]nica\s+(?:general\s+)?engombe\b/gi,     "Clínica Engombe, Santo Domingo Oeste"],
-    [/\bcl[ií]nica\s+(?:general\s+)?las\s+caobas\b/gi,"Clínica Las Caobas, Santo Domingo Oeste"],
-    [/\bcentro\s+de\s+salud\s+herrera\b/gi,           "Centro de Salud Herrera, Santo Domingo Oeste"],
-    [/\bcentro\s+de\s+salud\s+manoguayabo\b/gi,       "Centro de Salud Manoguayabo, Santo Domingo Oeste"],
-    [/\bcentro\s+de\s+salud\s+engombe\b/gi,           "Centro de Salud Engombe, Santo Domingo Oeste"],
-    [/\bcentro\s+de\s+salud\s+bayona\b/gi,            "Centro de Salud Bayona, Santo Domingo Oeste"],
-    [/\bconsultorio\s+(?:m[eé]dico\s+)?herrera\b/gi,  "Consultorio Médico Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+carol\s+herrera\b/gi,              "Farmacia Carol Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+(?:la\s+)?esperanza\s+herrera\b/gi,"Farmacia La Esperanza, Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+san\s+jose\s+herrera\b/gi,         "Farmacia San José, Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+el\s+progreso\s+herrera\b/gi,      "Farmacia El Progreso, Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+omega\s+herrera\b/gi,              "Farmacia Omega, Herrera, Santo Domingo Oeste"],
-    [/\bfarmacia\s+bayona\b/gi,                       "Farmacia Bayona, Santo Domingo Oeste"],
-    [/\bfarmacia\s+(?:de\s+)?engombe\b/gi,            "Farmacia Engombe, Santo Domingo Oeste"],
-    [/\bfarmacia\s+las\s+caobas\b/gi,                 "Farmacia Las Caobas, Santo Domingo Oeste"],
-    [/\bfarmacia\s+manoguayabo\b/gi,                  "Farmacia Manoguayabo, Santo Domingo Oeste"],
-    [/\bfarmacia\s+carol\s+(?:bayona|engombe)\b/gi,   "Farmacia Carol, Santo Domingo Oeste"],
-    [/\bfarmacia\s+cibao\s+herrera\b/gi,              "Farmacia Cibao, Herrera, Santo Domingo Oeste"],
-    [/\buco\s+herrera\b/gi,                           "UCO Herrera, Santo Domingo Oeste"],
-    [/\bunidad\s+de\s+atenci[oó]n\s+primaria\s+herrera\b/gi, "Unidad de Atención Primaria Herrera, Santo Domingo Oeste"],
+    // ── IGLESIAS ADICIONALES ──────────────────────────────────────────────────
+    [/\biglesia\s+testigos\s+(?:de\s+jehov[aá]\s+)?herrera\b/gi, "Iglesia Testigos de Jehová, Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+mormones?\s+herrera\b/gi,      "Iglesia Mormones Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+el\s+aposento\s+alto\b/gi,     "Iglesia El Aposento Alto, Santo Domingo Oeste"],
+    [/\biglesia\s+palabra\s+de\s+vida\b/gi,      "Iglesia Palabra de Vida, Santo Domingo Oeste"],
+    [/\biglesia\s+rey\s+de\s+reyes\b/gi,         "Iglesia Rey de Reyes, Santo Domingo Oeste"],
+    [/\biglesia\s+nueva\s+vida\s+herrera\b/gi,   "Iglesia Nueva Vida, Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+dios\s+es\s+amor\s+herrera\b/gi, "Iglesia Dios es Amor, Herrera, Santo Domingo Oeste"],
+    [/\bcongregaci[oó]n\s+cristiana\s+herrera\b/gi, "Congregación Cristiana Herrera, Santo Domingo Oeste"],
+    [/\btabern[aá]culo\s+herrera\b/gi,           "Tabernáculo Herrera, Santo Domingo Oeste"],
+    [/\biglesia\s+(?:de\s+)?hato\s+nuevo\b/gi,   "Iglesia Hato Nuevo, Santo Domingo Oeste"],
 
-    // ── CANCHAS, PARQUES Y ESPACIOS DEPORTIVOS ───────────────────────────────
-    [/\bcancha\s+(?:de\s+)?herrera\b/gi,              "Cancha Herrera, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?bayona\b/gi,               "Cancha Bayona, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?engombe\b/gi,              "Cancha Engombe, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?las\s+caobas\b/gi,         "Cancha Las Caobas, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?manoguayabo\b/gi,          "Cancha Manoguayabo, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?villa\s+aura\b/gi,         "Cancha Villa Aura, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?olimpo\b/gi,               "Cancha Olimpo, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?hato\s+nuevo\b/gi,         "Cancha Hato Nuevo, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?herrera\b/gi,              "Parque Herrera, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?bayona\b/gi,               "Parque Bayona, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?las\s+caobas\b/gi,         "Parque Las Caobas, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?engombe\b/gi,              "Parque Engombe, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?manoguayabo\b/gi,          "Parque Manoguayabo, Santo Domingo Oeste"],
-    [/\bparque\s+(?:de\s+)?villa\s+aura\b/gi,         "Parque Villa Aura, Santo Domingo Oeste"],
-    [/\bpolideportivo\s+herrera\b/gi,                 "Polideportivo Herrera, Santo Domingo Oeste"],
-    [/\bpolideportivo\s+(?:de\s+)?bayona\b/gi,        "Polideportivo Bayona, Santo Domingo Oeste"],
-    [/\bgi(?:mn)?asio\s+herrera\b/gi,                 "Gimnasio Herrera, Santo Domingo Oeste"],
-    [/\bpiscina\s+(?:olímpica\s+)?herrera\b/gi,       "Piscina Herrera, Santo Domingo Oeste"],
-    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+herrera\b/gi,  "Campo de Béisbol Herrera, Santo Domingo Oeste"],
-    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+bayona\b/gi,   "Campo de Béisbol Bayona, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?baloncesto\s+herrera\b/gi,  "Cancha de Baloncesto Herrera, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?f[uú]tbol\s+herrera\b/gi,  "Cancha de Fútbol Herrera, Santo Domingo Oeste"],
-    [/\bcancha\s+(?:de\s+)?f[uú]tbol\s+bayona\b/gi,   "Cancha de Fútbol Bayona, Santo Domingo Oeste"],
-    [/\bplaza\s+deportiva\s+herrera\b/gi,             "Plaza Deportiva Herrera, Santo Domingo Oeste"],
-    [/\brecreo\s+herrera\b/gi,                        "Recreo Herrera, Santo Domingo Oeste"],
-    [/\b[áa]rea\s+recreativa\s+las\s+caobas\b/gi,    "Área Recreativa Las Caobas, Santo Domingo Oeste"],
+    // ── CANCHAS Y ESPACIOS ADICIONALES ───────────────────────────────────────
+    [/\bcancha\s+(?:de\s+)?los\s+girasoles\b/gi, "Cancha Los Girasoles, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?los\s+pinos\b/gi,     "Cancha Los Pinos, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?caballona\b/gi,       "Cancha Caballona, Santo Domingo Oeste"],
+    [/\bcancha\s+(?:de\s+)?arroyo\s+bonito\b/gi, "Cancha Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?caballona\b/gi,       "Parque Caballona, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?hato\s+nuevo\b/gi,    "Parque Hato Nuevo, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?olimpo\b/gi,          "Parque Olimpo, Santo Domingo Oeste"],
+    [/\bparque\s+(?:de\s+)?arroyo\s+bonito\b/gi, "Parque Arroyo Bonito, Santo Domingo Oeste"],
+    [/\bplaza\s+deportiva\s+bayona\b/gi,         "Plaza Deportiva Bayona, Santo Domingo Oeste"],
+    [/\bgi(?:mn)?asio\s+bayona\b/gi,             "Gimnasio Bayona, Santo Domingo Oeste"],
+    [/\bgi(?:mn)?asio\s+engombe\b/gi,            "Gimnasio Engombe, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+engombe\b/gi, "Campo de Béisbol Engombe, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+manoguayabo\b/gi, "Campo de Béisbol Manoguayabo, Santo Domingo Oeste"],
+    [/\bcampo\s+(?:de\s+)?b[eé]isbol\s+las\s+caobas\b/gi, "Campo de Béisbol Las Caobas, Santo Domingo Oeste"],
 
-    // ── IGLESIAS Y TEMPLOS ────────────────────────────────────────────────────
-    [/\biglesia\s+cat[oó]lica\s+herrera\b/gi,         "Iglesia Católica Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+san\s+jose\s+herrera\b/gi,          "Iglesia San José, Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+santa\s+mar[ií]a\s+herrera\b/gi,   "Iglesia Santa María, Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+la\s+altagracia\s+herrera\b/gi,    "Iglesia La Altagracia, Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+(?:de\s+)?bayona\b/gi,              "Iglesia Bayona, Santo Domingo Oeste"],
-    [/\biglesia\s+(?:de\s+)?engombe\b/gi,             "Iglesia Engombe, Santo Domingo Oeste"],
-    [/\biglesia\s+(?:de\s+)?las\s+caobas\b/gi,        "Iglesia Las Caobas, Santo Domingo Oeste"],
-    [/\biglesia\s+(?:de\s+)?manoguayabo\b/gi,         "Iglesia Manoguayabo, Santo Domingo Oeste"],
-    [/\biglesia\s+(?:evang[eé]lica|pentecostal)\s+herrera\b/gi, "Iglesia Evangélica Herrera, Santo Domingo Oeste"],
-    [/\btemplo\s+(?:evang[eé]lico\s+)?herrera\b/gi,   "Templo Evangélico Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+de\s+dios\s+herrera\b/gi,           "Iglesia de Dios, Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+adventista\s+herrera\b/gi,          "Iglesia Adventista Herrera, Santo Domingo Oeste"],
-    [/\biglesia\s+bautista\s+herrera\b/gi,            "Iglesia Bautista Herrera, Santo Domingo Oeste"],
+    // ── PUNTOS KM Y REFERENCIAS VIALES ADICIONALES ───────────────────────────
+    [/\bkm\s*16\b/gi,                            "Km 16 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*17\b/gi,                            "Km 17 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*18\b/gi,                            "Km 18 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*19\b/gi,                            "Km 19 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bkm\s*20\b/gi,                            "Km 20 Autopista Duarte, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?bayona\b/gi,         "Entrada de Bayona, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?engombe\b/gi,        "Entrada de Engombe, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?las\s+caobas\b/gi,  "Entrada de Las Caobas, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?manoguayabo\b/gi,   "Entrada de Manoguayabo, Santo Domingo Oeste"],
+    [/\bentrada\s+(?:de\s+)?hato\s+nuevo\b/gi,  "Entrada de Hato Nuevo, Santo Domingo Oeste"],
+    [/\bsalida\s+(?:de\s+)?bayona\b/gi,         "Salida de Bayona, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?herrera\b/gi,         "Curva de Herrera, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?bayona\b/gi,          "Curva de Bayona, Santo Domingo Oeste"],
+    [/\bcurva\s+(?:de\s+)?engombe\b/gi,         "Curva de Engombe, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?herrera\b/gi,         "Cruce de Herrera, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?bayona\b/gi,          "Cruce de Bayona, Santo Domingo Oeste"],
+    [/\bcruce\s+(?:de\s+)?manoguayabo\b/gi,     "Cruce de Manoguayabo, Santo Domingo Oeste"],
+    [/\bcallejón\s+(?:de\s+)?herrera\b/gi,      "Callejón de Herrera, Santo Domingo Oeste"],
+    [/\bintercambiador\s+herrera\b/gi,          "Intercambiador Herrera, Santo Domingo Oeste"],
+    [/\bintercambiador\s+(?:de\s+)?bayona\b/gi, "Intercambiador Bayona, Santo Domingo Oeste"],
+    [/\bpaso\s+elevado\s+herrera\b/gi,          "Paso Elevado Herrera, Santo Domingo Oeste"],
+    [/\bpaso\s+(?:a\s+)?nivel\s+herrera\b/gi,  "Paso a Nivel Herrera, Santo Domingo Oeste"],
 
-    // ── INSTITUCIONES Y OFICINAS ──────────────────────────────────────────────
-    [/\bayuntamiento\s+(?:de\s+)?(?:sdo|santo\s+domingo\s+oeste)\b/gi, "Ayuntamiento Santo Domingo Oeste"],
-    [/\bjunta\s+(?:de\s+)?vecinos\s+herrera\b/gi,     "Junta de Vecinos Herrera, Santo Domingo Oeste"],
-    [/\bjunta\s+(?:de\s+)?vecinos\s+bayona\b/gi,      "Junta de Vecinos Bayona, Santo Domingo Oeste"],
-    [/\bjunta\s+(?:de\s+)?vecinos\s+engombe\b/gi,     "Junta de Vecinos Engombe, Santo Domingo Oeste"],
-    [/\bjunta\s+(?:de\s+)?vecinos\s+las\s+caobas\b/gi,"Junta de Vecinos Las Caobas, Santo Domingo Oeste"],
-    [/\bpolicía\s+(?:nacional\s+)?herrera\b/gi,       "Policía Nacional Herrera, Santo Domingo Oeste"],
-    [/\bpolicía\s+(?:nacional\s+)?bayona\b/gi,        "Policía Nacional Bayona, Santo Domingo Oeste"],
-    [/\bpolicía\s+(?:nacional\s+)?engombe\b/gi,       "Policía Nacional Engombe, Santo Domingo Oeste"],
-    [/\bcuartel\s+(?:de\s+)?herrera\b/gi,             "Cuartel Herrera, Santo Domingo Oeste"],
-    [/\bbomberos\s+herrera\b/gi,                      "Bomberos Herrera, Santo Domingo Oeste"],
-    [/\bcorreos\s+(?:de\s+)?herrera\b/gi,             "Correos Herrera, Santo Domingo Oeste"],
-    [/\bindrhi\s+herrera\b/gi,                        "INDRHI Herrera, Santo Domingo Oeste"],
-    [/\boficina\s+edesu[eé]\s+herrera\b/gi,           "Oficina EDESUE Herrera, Santo Domingo Oeste"],
-    [/\bedesur\s+herrera\b/gi,                        "EDESUR Herrera, Santo Domingo Oeste"],
-    [/\bcaasd\s+herrera\b/gi,                         "CAASD Herrera, Santo Domingo Oeste"],
-    [/\bbanco\s+popular\s+herrera\b/gi,               "Banco Popular Herrera, Santo Domingo Oeste"],
-    [/\bbanco\s+(?:de\s+)?reservas\s+herrera\b/gi,    "Banco de Reservas Herrera, Santo Domingo Oeste"],
-    [/\bbanco\s+brh\s+herrera\b/gi,                   "Banco BHD Herrera, Santo Domingo Oeste"],
-    [/\bbhd\s+herrera\b/gi,                           "BHD Herrera, Santo Domingo Oeste"],
-    [/\bscotiabank\s+herrera\b/gi,                    "Scotiabank Herrera, Santo Domingo Oeste"],
-    [/\bbanreservas\s+herrera\b/gi,                   "Banreservas Herrera, Santo Domingo Oeste"],
-    [/\batm\s+popular\s+herrera\b/gi,                 "ATM Popular Herrera, Santo Domingo Oeste"],
-    [/\bregistro\s+civil\s+herrera\b/gi,              "Registro Civil Herrera, Santo Domingo Oeste"],
-    [/\bjuzgado\s+(?:de\s+paz\s+)?herrera\b/gi,       "Juzgado de Paz Herrera, Santo Domingo Oeste"],
+    // ── RESIDENCIALES ADICIONALES ─────────────────────────────────────────────
+    [/\bres(?:idencial)?\s+las\s+américas\s+(?:herrera|sdo)\b/gi, "Residencial Las Américas, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+los\s+pinos\s+(?:herrera|sdo)\b/gi,    "Residencial Los Pinos, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+el\s+roble\b/gi,      "Residencial El Roble, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+villa\s+linda\b/gi,   "Residencial Villa Linda, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+el\s+caf[eé]\b/gi,    "Residencial El Café, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+palmas\s+del\s+norte\b/gi, "Residencial Palmas del Norte, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+la\s+esperanza\b/gi,  "Residencial La Esperanza, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+los\s+girasoles\b/gi, "Residencial Los Girasoles, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+monte\s+verde\b/gi,   "Residencial Monte Verde, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+jardines\s+del\s+norte\b/gi, "Residencial Jardines del Norte, Santo Domingo Oeste"],
+    [/\bres(?:idencial)?\s+nuevo\s+herrera\b/gi, "Residencial Nuevo Herrera, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?herrera\b/gi,         "Villas de Herrera, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?bayona\b/gi,          "Villas de Bayona, Santo Domingo Oeste"],
+    [/\bvillas\s+(?:de\s+)?engombe\b/gi,         "Villas de Engombe, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+nueva\s+herrera\b/gi, "Urbanización Nueva Herrera, Santo Domingo Oeste"],
+    [/\burb(?:anizaci[oó]n)?\s+los\s+pinos\b/gi, "Urbanización Los Pinos, Santo Domingo Oeste"],
 
-    // ── ZONAS INDUSTRIALES Y EMPRESAS ────────────────────────────────────────
-    [/\bzona\s+industrial\s+(?:de\s+)?herrera\b/gi,   "Zona Industrial Herrera, Santo Domingo Oeste"],
-    [/\bzona\s+industrial\s+(?:de\s+)?bayona\b/gi,    "Zona Industrial Bayona, Santo Domingo Oeste"],
-    [/\bparque\s+industrial\s+herrera\b/gi,           "Parque Industrial Herrera, Santo Domingo Oeste"],
-    [/\bindustrias\s+herrera\b/gi,                    "Industrias Herrera, Santo Domingo Oeste"],
-    [/\balmac[eé]n\s+industrial\s+herrera\b/gi,       "Almacén Industrial Herrera, Santo Domingo Oeste"],
-    [/\bdhl\s+herrera\b/gi,                           "DHL Herrera, Santo Domingo Oeste"],
-    [/\bfedex\s+herrera\b/gi,                         "FedEx Herrera, Santo Domingo Oeste"],
-    [/\bups\s+herrera\b/gi,                           "UPS Herrera, Santo Domingo Oeste"],
-    [/\bclaro\s+(?:tienda\s+)?herrera\b/gi,           "Claro Herrera, Santo Domingo Oeste"],
-    [/\baltice\s+(?:tienda\s+)?herrera\b/gi,          "Altice Herrera, Santo Domingo Oeste"],
-    [/\bwind\s+(?:tienda\s+)?herrera\b/gi,            "Wind Herrera, Santo Domingo Oeste"],
-    [/\bgasolinera\s+(?:shell|texaco|puma|total|red\s+star)?\s*herrera\b/gi, "Gasolinera Herrera, Santo Domingo Oeste"],
-    [/\bgasolinera\s+(?:shell|texaco|puma|total|red\s+star)?\s*bayona\b/gi,  "Gasolinera Bayona, Santo Domingo Oeste"],
-    [/\bgasolinera\s+(?:shell|texaco|puma|total|red\s+star)?\s*engombe\b/gi, "Gasolinera Engombe, Santo Domingo Oeste"],
-    [/\bgasolinera\s+(?:shell|texaco|puma|total|red\s+star)?\s*las\s+caobas\b/gi, "Gasolinera Las Caobas, Santo Domingo Oeste"],
-    [/\bshell\s+herrera\b/gi,                         "Shell Herrera, Santo Domingo Oeste"],
-    [/\btexaco\s+herrera\b/gi,                        "Texaco Herrera, Santo Domingo Oeste"],
-    [/\bpuma\s+herrera\b/gi,                          "Puma Herrera, Santo Domingo Oeste"],
-    [/\bred\s+star\s+herrera\b/gi,                    "Red Star Herrera, Santo Domingo Oeste"],
-    [/\btotal\s+(?:gasolinera\s+)?herrera\b/gi,       "Total Herrera, Santo Domingo Oeste"],
-
-    // ── RESTAURANTES Y COMIDA ─────────────────────────────────────────────────
-    [/\bkfc\s+herrera\b/gi,                           "KFC Herrera, Santo Domingo Oeste"],
-    [/\bmcdonald[''s]?\s+herrera\b/gi,                "McDonald's Herrera, Santo Domingo Oeste"],
-    [/\bpollo\s+rey\s+herrera\b/gi,                   "Pollo Rey Herrera, Santo Domingo Oeste"],
-    [/\bpollo\s+victorina\s+herrera\b/gi,             "Pollo Victorina, Herrera, Santo Domingo Oeste"],
-    [/\bpica\s+pollo\s+herrera\b/gi,                  "Pica Pollo Herrera, Santo Domingo Oeste"],
-    [/\bpica\s+pollo\s+bayona\b/gi,                   "Pica Pollo Bayona, Santo Domingo Oeste"],
-    [/\bchimi(?:churi)?\s+herrera\b/gi,               "Chimichuri Herrera, Santo Domingo Oeste"],
-    [/\bfrituras?\s+herrera\b/gi,                     "Frituras Herrera, Santo Domingo Oeste"],
-    [/\bcomedor\s+herrera\b/gi,                       "Comedor Herrera, Santo Domingo Oeste"],
-    [/\bcomedor\s+doña\s+\w+\s+herrera\b/gi,          "Comedor Herrera, Santo Domingo Oeste"],
-    [/\bpizzería?\s+herrera\b/gi,                     "Pizzería Herrera, Santo Domingo Oeste"],
-    [/\bdomino[''s]?\s+herrera\b/gi,                  "Domino's Herrera, Santo Domingo Oeste"],
-    [/\bpizza\s+hut\s+herrera\b/gi,                   "Pizza Hut Herrera, Santo Domingo Oeste"],
-    [/\bsubway\s+herrera\b/gi,                        "Subway Herrera, Santo Domingo Oeste"],
-    [/\bburger\s+king\s+herrera\b/gi,                 "Burger King Herrera, Santo Domingo Oeste"],
-    [/\bcaribeño[''s]?\s+herrera\b/gi,                "Caribeño's Herrera, Santo Domingo Oeste"],
-    [/\bel\s+conuco\s+herrera\b/gi,                   "El Conuco Herrera, Santo Domingo Oeste"],
-    [/\bpan\s+y\s+m[aá]s\s+herrera\b/gi,             "Pan y Más Herrera, Santo Domingo Oeste"],
-    [/\bpanadera\s+herrera\b/gi,                      "Panadera Herrera, Santo Domingo Oeste"],
-    [/\bpanadería\s+(?:la\s+)?esperanza\s+herrera\b/gi,"Panadería La Esperanza, Herrera, Santo Domingo Oeste"],
-
-    // ── FERRETERÍAS Y MATERIALES ──────────────────────────────────────────────
-    [/\bferretería\s+herrera\b/gi,                    "Ferretería Herrera, Santo Domingo Oeste"],
-    [/\bferretería\s+(?:el\s+)?progreso\s+herrera\b/gi,"Ferretería El Progreso, Herrera, Santo Domingo Oeste"],
-    [/\bferretería\s+(?:la\s+)?esperanza\s+herrera\b/gi,"Ferretería La Esperanza, Herrera, Santo Domingo Oeste"],
-    [/\bferretería\s+(?:san\s+jos[eé]\s+)?herrera\b/gi,"Ferretería San José, Herrera, Santo Domingo Oeste"],
-    [/\bferretería\s+bayona\b/gi,                     "Ferretería Bayona, Santo Domingo Oeste"],
-    [/\bferretería\s+engombe\b/gi,                    "Ferretería Engombe, Santo Domingo Oeste"],
-    [/\bferretería\s+las\s+caobas\b/gi,               "Ferretería Las Caobas, Santo Domingo Oeste"],
-    [/\bhome\s+depot\s+herrera\b/gi,                  "Home Depot Herrera, Santo Domingo Oeste"],
-    [/\bpinturas?\s+global\s+herrera\b/gi,            "Pinturas Global Herrera, Santo Domingo Oeste"],
-    [/\bplomería\s+herrera\b/gi,                      "Plomería Herrera, Santo Domingo Oeste"],
-
-    // ── PUNTOS DE TRANSPORTE Y PARADAS ───────────────────────────────────────
-    [/\bparada\s+(?:de\s+)?herrera\b/gi,              "Parada Herrera, Santo Domingo Oeste"],
-    [/\bparada\s+(?:de\s+)?bayona\b/gi,               "Parada Bayona, Santo Domingo Oeste"],
-    [/\bparada\s+(?:de\s+)?engombe\b/gi,              "Parada Engombe, Santo Domingo Oeste"],
-    [/\bparada\s+(?:de\s+)?las\s+caobas\b/gi,         "Parada Las Caobas, Santo Domingo Oeste"],
-    [/\bparada\s+(?:de\s+)?manoguayabo\b/gi,          "Parada Manoguayabo, Santo Domingo Oeste"],
-    [/\bparada\s+(?:de\s+)?villa\s+aura\b/gi,         "Parada Villa Aura, Santo Domingo Oeste"],
-    [/\bstop\s+(?:de\s+)?herrera\b/gi,               "Stop Herrera, Santo Domingo Oeste"],
-    [/\bstop\s+(?:de\s+)?bayona\b/gi,                "Stop Bayona, Santo Domingo Oeste"],
-    [/\bparada\s+autopista\s+duarte\b/gi,             "Parada Autopista Duarte, Santo Domingo Oeste"],
-    [/\bparada\s+27\s+de\s+febrero\b/gi,              "Parada 27 de Febrero, Santo Domingo Oeste"],
-    [/\bterm(?:inal)?\s+(?:de\s+)?herrera\b/gi,       "Terminal Herrera, Santo Domingo Oeste"],
-    [/\bcarro\s+p[uú]blico\s+herrera\b/gi,            "Carro Público Herrera, Santo Domingo Oeste"],
-    [/\bsindicato\s+(?:de\s+)?herrera\b/gi,           "Sindicato Herrera, Santo Domingo Oeste"],
-
-    // ── REFERENCIAS DE CALLES NUMÉRICAS / POR NÚMERO ─────────────────────────
-    [/\bcalle\s+1\b(?:\s+herrera)?/gi,               "Calle 1, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+2\b(?:\s+herrera)?/gi,               "Calle 2, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+3\b(?:\s+herrera)?/gi,               "Calle 3, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+4\b(?:\s+herrera)?/gi,               "Calle 4, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+5\b(?:\s+herrera)?/gi,               "Calle 5, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+6\b(?:\s+herrera)?/gi,               "Calle 6, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+7\b(?:\s+herrera)?/gi,               "Calle 7, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+8\b(?:\s+herrera)?/gi,               "Calle 8, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+9\b(?:\s+herrera)?/gi,               "Calle 9, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+10\b(?:\s+herrera)?/gi,              "Calle 10, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+11\b(?:\s+herrera)?/gi,              "Calle 11, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+12\b(?:\s+herrera)?/gi,              "Calle 12, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+13\b(?:\s+herrera)?/gi,              "Calle 13, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+14\b(?:\s+herrera)?/gi,              "Calle 14, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+15\b(?:\s+herrera)?/gi,              "Calle 15, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+16\b(?:\s+herrera)?/gi,              "Calle 16, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+17\b(?:\s+herrera)?/gi,              "Calle 17, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+18\b(?:\s+herrera)?/gi,              "Calle 18, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+19\b(?:\s+herrera)?/gi,              "Calle 19, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+20\b(?:\s+herrera)?/gi,              "Calle 20, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+a\b(?:\s+herrera)?/gi,               "Calle A, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+b\b(?:\s+herrera)?/gi,               "Calle B, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+c\b(?:\s+herrera)?/gi,               "Calle C, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+d\b(?:\s+herrera)?/gi,               "Calle D, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+e\b(?:\s+herrera)?/gi,               "Calle E, Herrera, Santo Domingo Oeste"],
-    [/\bcalle\s+f\b(?:\s+herrera)?/gi,               "Calle F, Herrera, Santo Domingo Oeste"],
-
-    // ── OTROS PUNTOS DE REFERENCIA LOCALES ───────────────────────────────────
-    [/\bcementerio\s+(?:de\s+)?herrera\b/gi,          "Cementerio Herrera, Santo Domingo Oeste"],
-    [/\bcementerio\s+(?:de\s+)?bayona\b/gi,           "Cementerio Bayona, Santo Domingo Oeste"],
-    [/\bcementerio\s+(?:de\s+)?engombe\b/gi,          "Cementerio Engombe, Santo Domingo Oeste"],
-    [/\bmercado\s+(?:p[uú]blico\s+)?herrera\b/gi,     "Mercado Público Herrera, Santo Domingo Oeste"],
-    [/\bmercado\s+(?:p[uú]blico\s+)?bayona\b/gi,      "Mercado Público Bayona, Santo Domingo Oeste"],
-    [/\bmercado\s+(?:p[uú]blico\s+)?las\s+caobas\b/gi,"Mercado Público Las Caobas, Santo Domingo Oeste"],
-    [/\btiangue\s+herrera\b/gi,                       "Tiangue Herrera, Santo Domingo Oeste"],
-    [/\btiangue\s+bayona\b/gi,                        "Tiangue Bayona, Santo Domingo Oeste"],
-    [/\blavandería\s+herrera\b/gi,                    "Lavandería Herrera, Santo Domingo Oeste"],
-    [/\bbarbería\s+(?:el\s+)?estilo\s+herrera\b/gi,   "Barbería El Estilo, Herrera, Santo Domingo Oeste"],
-    [/\bsalón\s+(?:de\s+belleza\s+)?herrera\b/gi,     "Salón de Belleza Herrera, Santo Domingo Oeste"],
-    [/\bhotel\s+herrera\b/gi,                         "Hotel Herrera, Santo Domingo Oeste"],
-    [/\bmotel\s+herrera\b/gi,                         "Motel Herrera, Santo Domingo Oeste"],
-    [/\bguarder[ií]a\s+herrera\b/gi,                  "Guardería Herrera, Santo Domingo Oeste"],
-    [/\best(?:adi[oó]n|adium)\s+herrera\b/gi,         "Estadio Herrera, Santo Domingo Oeste"],
-    [/\bl[ií]nea\s+(?:de\s+)?herrera\b/gi,            "Línea de Herrera, Santo Domingo Oeste"],
-    [/\bcajero\s+(?:autom[aá]tico\s+)?popular\s+herrera\b/gi, "Cajero Popular Herrera, Santo Domingo Oeste"],
-    [/\bcyberclub\s+herrera\b/gi,                     "Cyberclub Herrera, Santo Domingo Oeste"],
-    [/\bentrada\s+(?:de\s+)?herrera\b/gi,             "Entrada de Herrera, Santo Domingo Oeste"],
-    [/\bsalida\s+(?:de\s+)?herrera\b/gi,              "Salida de Herrera, Santo Domingo Oeste"],
-    [/\bfinca\s+herrera\b/gi,                         "Finca Herrera, Santo Domingo Oeste"],
-    [/\blaguna\s+(?:de\s+)?herrera\b/gi,              "Laguna Herrera, Santo Domingo Oeste"],
-    [/\bpuente\s+herrera\b/gi,                        "Puente Herrera, Santo Domingo Oeste"],
-    [/\bpuente\s+(?:de\s+)?engombe\b/gi,              "Puente Engombe, Santo Domingo Oeste"],
-    [/\bpuente\s+(?:de\s+)?manoguayabo\b/gi,          "Puente Manoguayabo, Santo Domingo Oeste"],
-    [/\bpuente\s+(?:de\s+)?bayona\b/gi,               "Puente Bayona, Santo Domingo Oeste"],
-    [/\bro(?:tonda|ndabout)\s+herrera\b/gi,           "Rotonda Herrera, Santo Domingo Oeste"],
-    [/\bro(?:tonda|ndabout)\s+bayona\b/gi,            "Rotonda Bayona, Santo Domingo Oeste"],
-    [/\bro(?:tonda|ndabout)\s+engombe\b/gi,           "Rotonda Engombe, Santo Domingo Oeste"],
-    [/\bsemáforo\s+(?:de\s+)?herrera\b/gi,            "Semáforo Herrera, Santo Domingo Oeste"],
-    [/\bsemáforo\s+(?:de\s+)?bayona\b/gi,             "Semáforo Bayona, Santo Domingo Oeste"],
-    [/\bel\s+semáforo\s+herrera\b/gi,                 "El Semáforo de Herrera, Santo Domingo Oeste"],
-    [/\bkm\s*8\s*(?:autopista\s+duarte)?\b/gi,        "Km 8 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*9\s*(?:autopista\s+duarte)?\b/gi,        "Km 9 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*10\s*(?:autopista\s+duarte)?\b/gi,       "Km 10 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*11\s*(?:autopista\s+duarte)?\b/gi,       "Km 11 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*12\s*(?:autopista\s+duarte)?\b/gi,       "Km 12 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*13\s*(?:autopista\s+duarte)?\b/gi,       "Km 13 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*14\s*(?:autopista\s+duarte)?\b/gi,       "Km 14 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*15\s*(?:autopista\s+duarte)?\b/gi,       "Km 15 Autopista Duarte, Santo Domingo Oeste"],
-    [/\bkm\s*8\.5\b/gi,                               "Km 8.5 Autopista Duarte, Santo Domingo Oeste"],
-    [/\blos\s+alcarrizos\b/gi,                        "Los Alcarrizos, Santo Domingo Oeste"],
-    [/\bpedro\s+brand\b/gi,                           "Pedro Brand, Santo Domingo Oeste"],
-    [/\bjaina\b/gi,                                   "Jaina, Santo Domingo Oeste"],
-    [/\bsab(?:ana)?\s+perdida\b/gi,                   "Sabana Perdida, Santo Domingo Oeste"],
-    [/\blas\s+minas\b(?!\s+de)/gi,                    "Las Minas, Santo Domingo Oeste"],
-    [/\bguachup[ií]ta\b/gi,                           "Guachupita, Santo Domingo Oeste"],
+    // ── INSTITUCIONES ADICIONALES ─────────────────────────────────────────────
+    [/\bministerio\s+(?:de\s+)?salud\s+herrera\b/gi, "Ministerio de Salud Herrera, Santo Domingo Oeste"],
+    [/\bjunta\s+electoral\s+herrera\b/gi,        "Junta Electoral Herrera, Santo Domingo Oeste"],
+    [/\bjce\s+herrera\b/gi,                      "JCE Herrera, Santo Domingo Oeste"],
+    [/\boficina\s+(?:de\s+)?interior\s+herrera\b/gi, "Oficina Interior Herrera, Santo Domingo Oeste"],
+    [/\bmigración\s+herrera\b/gi,                "Migración Herrera, Santo Domingo Oeste"],
+    [/\bdirección\s+(?:de\s+)?impuestos\s+herrera\b/gi, "DGII Herrera, Santo Domingo Oeste"],
+    [/\bdgii\s+herrera\b/gi,                     "DGII Herrera, Santo Domingo Oeste"],
+    [/\btesorería\s+herrera\b/gi,                "Tesorería Herrera, Santo Domingo Oeste"],
+    [/\bregistro\s+mercantil\s+herrera\b/gi,     "Registro Mercantil Herrera, Santo Domingo Oeste"],
+    [/\bnotaría\s+herrera\b/gi,                  "Notaría Herrera, Santo Domingo Oeste"],
+    [/\bbanco\s+agi\s+herrera\b/gi,              "Banco BDI Herrera, Santo Domingo Oeste"],
+    [/\bbanco\s+vimenca\s+herrera\b/gi,          "Banco Vimenca Herrera, Santo Domingo Oeste"],
+    [/\bassociaci[oó]n\s+(?:cibao|popular)\s+herrera\b/gi, "Asociación Cibao Herrera, Santo Domingo Oeste"],
+    [/\bcoopverde\s+herrera\b/gi,                "CoopVerde Herrera, Santo Domingo Oeste"],
+    [/\bcooperativa\s+herrera\b/gi,              "Cooperativa Herrera, Santo Domingo Oeste"],
   ];
 
   for (const [pat, repl] of abbrevs) r = r.replace(pat, repl);
