@@ -4984,123 +4984,93 @@ const ImportModal = ({ onClose, onImported }) => {
 
   const runOptimize = () => {
     // ═══════════════════════════════════════════════════════════════════════════
-    // ⚠️  MOTOR DE OPTIMIZACIÓN DE RUTA — NO MODIFICAR SIN AUTORIZACIÓN
+    // ⚠️  MOTOR DE OPTIMIZACIÓN DE RUTA v3 — NO MODIFICAR SIN AUTORIZACIÓN
     //
     // LÓGICA (en orden de ejecución):
     //
     //  PASO 1 — HAVERSINE
-    //    Función de distancia real en km entre dos coordenadas GPS.
-    //    Base de todos los cálculos posteriores.
+    //    Distancia real en km entre dos coordenadas GPS.
     //
     //  PASO 2 — CLUSTERING GEOGRÁFICO (radio = CLUSTER_KM)
-    //    Agrupa paradas que están a menos de CLUSTER_KM entre sí en el mismo
-    //    "cluster" o zona. Esto garantiza que paradas en Las Caobas, Piantini,
-    //    Bayona, etc. queden como bloques consecutivos y el mensajero NO salga
-    //    de una zona y tenga que volver. El radio se elige para que zonas como
-    //    Las Caobas (≈1.2 km de diámetro) queden en un solo cluster.
+    //    Agrupa paradas que están a menos de CLUSTER_KM entre sí.
+    //    Garantiza que paradas en la misma zona (Las Caobas, Piantini, Bayona)
+    //    queden como bloques CONSECUTIVOS. El mensajero NO sale de una zona
+    //    y tiene que volver porque quedaron paradas de esa zona asignadas
+    //    después de paradas de otra zona.
     //
-    //  PASO 3 — ORDENAR CLUSTERS desde la BASE (DEPOT)
-    //    El cluster cuyo centroide está más cerca del DEPOT es el #1.
-    //    Luego se encadena el cluster más cercano al último cluster visitado
-    //    (Nearest Neighbor entre centroides). Esto elimina los saltos entre
-    //    zonas lejanas.
+    //  PASO 3 — ORDENAR CLUSTERS desde el DEPOT
+    //    El cluster más cercano al DEPOT es el primero.
+    //    Luego se encadena el cluster más cercano al último visitado (NN).
     //
     //  PASO 4 — ORDENAR PARADAS DENTRO DE CADA CLUSTER
-    //    Dentro de cada zona se aplica Nearest Neighbor empezando desde el
-    //    punto de entrada al cluster (última parada del cluster anterior, o
-    //    el DEPOT para el primer cluster). Así la ruta dentro de cada zona
-    //    también es coherente y sin zigzag.
+    //    NN dentro de cada zona empezando desde el punto de entrada.
     //
-    //  PASO 5 — 2-OPT GLOBAL
-    //    Mejora la ruta completa invirtiendo segmentos cuando eso reduce la
-    //    distancia total. Limitado a 3 pasadas para no alterar el clustering.
-    //    No cruza bloques de clusters — solo mejora micro-desvíos.
+    //  PASO 5 — 2-OPT GLOBAL (micro-optimización, 3 pasadas)
+    //    Invierte segmentos si eso reduce la distancia total.
     //
-    //  PASO 6 — OR-OPT (mover tripletes)
-    //    Mueve bloques de 1, 2 y 3 paradas consecutivas a otra posición si
-    //    reduce distancia. Respeta el orden de clusters — NO mueve una parada
-    //    de Las Caobas a medio Piantini.
+    //  PASO 6 — OR-OPT (mover bloques de 1-3 paradas)
+    //    Mueve bloques a otra posición si reduce distancia.
     //
-    //  RESULTADO: Ruta que:
-    //    ✓ Sale del DEPOT y visita la zona más cercana primero
-    //    ✓ Termina todos los paquetes de cada zona antes de ir a la siguiente
-    //    ✓ Dentro de cada zona el recorrido es el más corto posible
-    //    ✓ No hay saltos inter-zona que obliguen a volver
+    //  PASO 7 — handleImport reasigna stopNum = índice+1
+    //    CRÍTICO: sin esto el mapa ignora el orden optimizado.
     //
     // AUTOR: RapDrive Motor v3 — Solo tocar `runOptimize`, nada más.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    const CLUSTER_KM   = 1.5;  // km — radio para agrupar paradas en la misma zona
-    const OPT_PASSES   = 3;    // pasadas de 2-opt (más = más lento, <5 recomendado)
-    const depot        = { lat: DEPOT.lat, lng: DEPOT.lng };
-    const valid        = stops.filter(s => s.lat && s.lng);
+    const CLUSTER_KM = 1.5;
+    const OPT_PASSES = 3;
+    const depot      = { lat: DEPOT.lat, lng: DEPOT.lng };
+    const valid      = stops.filter(s => s.lat && s.lng);
     if (valid.length === 0) return;
 
-    // ── PASO 1: Haversine ──────────────────────────────────────────────────────
+    // PASO 1: Haversine
     const hav = (a, b) => {
-      const R  = 6371;
+      const R = 6371;
       const dl = (b.lat - a.lat) * Math.PI / 180;
       const dg = (b.lng - a.lng) * Math.PI / 180;
-      const x  = Math.sin(dl/2)**2
-               + Math.cos(a.lat*Math.PI/180) * Math.cos(b.lat*Math.PI/180)
-               * Math.sin(dg/2)**2;
+      const x  = Math.sin(dl/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dg/2)**2;
       return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
     };
-
     const routeKm = (arr, start = depot) =>
       arr.reduce((acc, s, i) => acc + hav(i === 0 ? start : arr[i-1], s), 0);
 
-    // ── PASO 2: Clustering geográfico ──────────────────────────────────────────
-    // Algoritmo greedy: cada parada va al cluster cuyo centroide esté a menos de
-    // CLUSTER_KM. Si ninguno está cerca, se crea un cluster nuevo.
-    const clusters = [];
-    const assigned = new Array(valid.length).fill(-1);
-
-    const centroid = (idxArr) => ({
+    // PASO 2: Clustering geográfico
+    const clusters  = [];
+    const centroid  = (idxArr) => ({
       lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
       lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
     });
-
     valid.forEach((stop, si) => {
       let bestCluster = -1, bestDist = CLUSTER_KM;
       clusters.forEach((cl, ci) => {
         const d = hav(stop, centroid(cl));
         if (d < bestDist) { bestDist = d; bestCluster = ci; }
       });
-      if (bestCluster === -1) {
-        clusters.push([si]);
-      } else {
-        clusters[bestCluster].push(si);
-        assigned[si] = bestCluster;
-      }
+      if (bestCluster === -1) clusters.push([si]);
+      else clusters[bestCluster].push(si);
     });
 
-    // ── PASO 3: Ordenar clusters desde el DEPOT ────────────────────────────────
-    // Nearest Neighbor entre centroides empezando desde el DEPOT.
-    let remClusters  = clusters.map((idxArr, ci) => ci);
+    // PASO 3: Ordenar clusters desde DEPOT
+    let remClusters  = clusters.map((_, ci) => ci);
     const ordClusters = [];
     let curPoint      = depot;
-
     while (remClusters.length) {
-      let bestCi = 0, bestDist = Infinity;
+      let bestPos = 0, bestDist = Infinity;
       remClusters.forEach((ci, pos) => {
         const d = hav(curPoint, centroid(clusters[ci]));
-        if (d < bestDist) { bestDist = d; bestCi = pos; }
+        if (d < bestDist) { bestDist = d; bestPos = pos; }
       });
-      const chosen = remClusters.splice(bestCi, 1)[0];
+      const chosen = remClusters.splice(bestPos, 1)[0];
       ordClusters.push(chosen);
       curPoint = centroid(clusters[chosen]);
     }
 
-    // ── PASO 4: Ordenar paradas dentro de cada cluster ─────────────────────────
-    // NN dentro del cluster desde el punto de entrada (último visitado).
-    let ordered  = [];
-    let entryPt  = depot;
-
+    // PASO 4: Ordenar paradas dentro de cada cluster
+    let ordered = [];
+    let entryPt = depot;
     ordClusters.forEach(ci => {
-      let remStops = [...clusters[ci]]; // índices dentro de `valid`
+      let remStops = [...clusters[ci]];
       const clusterOrdered = [];
-
       while (remStops.length) {
         let bestPos = 0, bestDist = Infinity;
         remStops.forEach((si, pos) => {
@@ -5114,33 +5084,25 @@ const ImportModal = ({ onClose, onImported }) => {
       ordered = ordered.concat(clusterOrdered);
     });
 
-    // ── PASO 5: 2-opt global (micro-optimización) ──────────────────────────────
-    // Invierte segmentos [i+1..k] si eso reduce la distancia.
-    // Limitado a OPT_PASSES para que sea rápido en browser.
+    // PASO 5: 2-opt global
     let improved = true;
     for (let pass = 0; pass < OPT_PASSES && improved; pass++) {
       improved = false;
       for (let i = 0; i < ordered.length - 2; i++) {
         for (let k = i + 1; k < ordered.length; k++) {
           const a = i === 0 ? depot : ordered[i-1];
-          const b = ordered[i];
-          const c = ordered[k];
           const d = k + 1 < ordered.length ? ordered[k+1] : null;
-          const before = hav(a, b) + (d ? hav(c, d) : 0);
-          const after  = hav(a, c) + (d ? hav(b, d) : 0);
+          const before = hav(a, ordered[i]) + (d ? hav(ordered[k], d) : 0);
+          const after  = hav(a, ordered[k]) + (d ? hav(ordered[i], d) : 0);
           if (after < before - 0.001) {
-            // Invertir segmento
-            const seg = ordered.slice(i, k+1).reverse();
-            ordered.splice(i, k-i+1, ...seg);
+            ordered.splice(i, k-i+1, ...ordered.slice(i, k+1).reverse());
             improved = true;
           }
         }
       }
     }
 
-    // ── PASO 6: Or-opt — mover bloques de 1-3 paradas ─────────────────────────
-    // Si mover un bloque de tamaño `sz` de posición `i` a posición `j` reduce
-    // la distancia, se hace el movimiento.
+    // PASO 6: Or-opt (bloques de 1-3)
     for (let sz = 1; sz <= 3; sz++) {
       let changed = true;
       while (changed) {
@@ -5150,11 +5112,9 @@ const ImportModal = ({ onClose, onImported }) => {
           const rest  = [...ordered.slice(0, i), ...ordered.slice(i+sz)];
           const baseCost = routeKm(ordered);
           for (let j = 0; j <= rest.length; j++) {
-            const candidate = [...rest.slice(0,j), ...block, ...rest.slice(j)];
-            if (routeKm(candidate) < baseCost - 0.001) {
-              ordered = candidate;
-              changed = true;
-              break;
+            if (routeKm([...rest.slice(0,j), ...block, ...rest.slice(j)]) < baseCost - 0.001) {
+              ordered = [...rest.slice(0,j), ...block, ...rest.slice(j)];
+              changed = true; break;
             }
           }
           if (changed) break;
@@ -5162,10 +5122,8 @@ const ImportModal = ({ onClose, onImported }) => {
       }
     }
 
-    // ── Calcular métricas ──────────────────────────────────────────────────────
     const originalKm = routeKm(valid);
     const optKm      = routeKm(ordered);
-
     setOptimized({
       ordered,
       totalKm:    Math.round(optKm * 10) / 10,
@@ -5176,7 +5134,11 @@ const ImportModal = ({ onClose, onImported }) => {
   };
 
   const handleImport = () => {
-    const finalStops = optimized ? optimized.ordered : stops;
+    const raw = optimized ? optimized.ordered : stops;
+    // ── Reasignar stopNum en el orden correcto del motor ──────────────────────
+    // Sin esto, el mapa dibuja las líneas según el stopNum ORIGINAL del Excel
+    // ignorando el resultado del optimizador. Este map() es crítico — no borrar.
+    const finalStops = raw.map((s, i) => ({ ...s, stopNum: i + 1 }));
     onImported({ stops: finalStops, driverName, routeName, optimized });
     setStage("done");
     setTimeout(onClose, 2000);
@@ -5397,7 +5359,6 @@ const ImportModal = ({ onClose, onImported }) => {
                       ["Distancia opt.", `${optimized.totalKm} km`, "#10b981"],
                       ["Distancia orig.", `${optimized.originalKm} km`, "#4b5563"],
                       ["Ahorro",         `${optimized.savings} km`, "#f59e0b"],
-                      ["Zonas",          `${optimized.clusters || "—"}`, "#3b82f6"],
                     ].map(([l,v,c])=>(
                       <div key={l} style={{background:"#0a1019",borderRadius:9,padding:"10px 12px",border:`1px solid ${c}22`}}>
                         <div style={{fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:c}}>{v}</div>
