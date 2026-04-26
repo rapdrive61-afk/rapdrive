@@ -378,11 +378,12 @@ const PageDashboard = () => {
           const mins = Math.round((Date.now() - (loc.ts||0)) / 60000);
           const timeAgo = mins === 0 ? "ahora mismo" : mins === 1 ? "hace 1 min" : `hace ${mins} min`;
           infoWindowRef.current.setContent(`
-            <div style="font-family:system-ui,-apple-system,sans-serif;padding:10px 12px;min-width:180px;background:#0a0f1a;border-radius:10px;border:1px solid #1e2d3d;box-shadow:0 8px 24px rgba(0,0,0,0.7)">
-              <div style="font-weight:800;font-size:13px;margin-bottom:5px;color:#f1f5f9;letter-spacing:-0.2px">${loc.driverName||driverId}</div>
-              <div style="font-size:11px;color:#4b5563;margin-bottom:3px">🕐 ${timeAgo}</div>
-              ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6;margin-bottom:2px">📦 ${loc.routeName}</div>` : ""}
-              ${loc.accuracy ? `<div style="font-size:10px;color:#374151">±${loc.accuracy}m precisión</div>` : ""}
+            <div style="font-family:-apple-system,sans-serif;padding:4px 6px;min-width:160px">
+              <div style="font-weight:800;font-size:13px;margin-bottom:3px">${loc.driverName||driverId}</div>
+              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">🕐 Actualizado ${timeAgo}</div>
+              ${loc.routeName ? `<div style="font-size:11px;color:#3b82f6">📦 ${loc.routeName}</div>` : ""}
+              ${loc.accuracy ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">Precisión: ±${loc.accuracy}m</div>` : ""}
+              <div style="font-size:10px;color:#9ca3af">${loc.lat?.toFixed(5)}, ${loc.lng?.toFixed(5)}</div>
             </div>
           `);
           infoWindowRef.current.open({ map: gMapRef.current, anchor: marker });
@@ -494,10 +495,7 @@ const PageDashboard = () => {
           map: gMapRef.current,
           position: { lat, lng },
           animation: window.google.maps.Animation.DROP,
-          icon: (() => {
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52"><defs><filter id="ds"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/></filter></defs><path d="M20 1C11.2 1 4 8.2 4 17c0 11.8 16 34 16 34s16-22.2 16-34C36 8.2 28.8 1 20 1z" fill="#3b82f6" filter="url(#ds)" stroke="white" stroke-width="1.5"/><circle cx="20" cy="17" r="9" fill="rgba(0,0,0,0.15)"/><path d="M15 17l3 3.5 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
-          return { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg), scaledSize: new window.google.maps.Size(40,52), anchor: new window.google.maps.Point(20,52) };
-        })(),
+          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor:"#3b82f6", fillOpacity:1, strokeColor:"white", strokeWeight:2.5 },
         });
       }
     } catch(e) {
@@ -725,62 +723,31 @@ const PageRoutes = () => {
       if (ordered.length > 1) {
         const line = new window.google.maps.Polyline({
           map: gMapRef.current,
-          path: [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...ordered.map(s=>({lat:s.lat,lng:s.lng})), { lat: DEPOT.lat, lng: DEPOT.lng }],
+          path: [{ lat: DEPOT.lat, lng: DEPOT.lng }, ...ordered.map(s=>({lat:s.lat,lng:s.lng}))],
           strokeColor: "#3b82f6",
-          strokeOpacity: 0.75,
-          strokeWeight: 3,
-          icons: [{
-            icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.5, strokeColor: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 1, strokeWeight: 1 },
-            repeat: "90px", offset: "45px"
-          }],
+          strokeOpacity: 0.5,
+          strokeWeight: 2,
         });
         markersRef.current.push(line);
       }
 
-      // DEPOT marker — home icon
-      const depotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
-        <defs><filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/></filter></defs>
-        <circle cx="22" cy="22" r="20" fill="#1d4ed8" stroke="white" stroke-width="2" filter="url(#ds)"/>
-        <path d="M22 11L11 21h3v12h6v-7h4v7h6V21h3L22 11z" fill="white"/>
-      </svg>`;
-      new window.google.maps.Marker({
-        map: gMapRef.current,
-        position: { lat: DEPOT.lat, lng: DEPOT.lng },
-        title: "Base",
-        zIndex: 999,
-        icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(depotSvg), scaledSize: new window.google.maps.Size(44,44), anchor: new window.google.maps.Point(22,22) },
-      });
-
-      // Drop markers per stop — modern teardrop with status
+      // Drop markers per stop
       stops.forEach(stop => {
-        const isDone = stop.driverStatus === "delivered";
-        const isProb = stop.driverStatus === "problema";
-        const isCur  = stop.driverStatus === "en_camino";
-        const col = isDone ? "#10b981" : isProb ? "#ef4444" : isCur ? "#3b82f6" : "#94a3b8";
-        const num = stop.stopNum || "?";
-        const sz  = isCur ? 40 : 32;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${Math.round(sz*1.3)}" viewBox="0 0 40 52">
-          <defs><filter id="s"><feDropShadow dx="0" dy="3" stdDeviation="${isCur?3:2}" flood-color="#000" flood-opacity="${isDone?0.3:0.5}"/></filter></defs>
-          <path d="M20 1C11.2 1 4 8.2 4 17c0 11.8 16 34 16 34s16-22.2 16-34C36 8.2 28.8 1 20 1z"
-            fill="${col}" opacity="${isDone?0.6:1}" filter="url(#s)"
-            stroke="${isCur?"white":"rgba(0,0,0,0.15)"}" stroke-width="${isCur?1.5:0.5}"/>
-          <circle cx="20" cy="17" r="9" fill="rgba(0,0,0,0.15)"/>
-          ${isDone
-            ? `<path d="M14 17l4 4 8-8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
-            : isProb
-              ? `<text x="20" y="22" text-anchor="middle" font-size="13" font-weight="900" fill="white" font-family="system-ui">!</text>`
-              : `<text x="20" y="22" text-anchor="middle" font-size="${num>9?9:11}" font-weight="800" fill="white" font-family="system-ui,Arial">${num}</text>`
-          }
+        const isDone    = stop.driverStatus === "delivered";
+        const isProb    = stop.driverStatus === "problema";
+        const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+          <circle cx="16" cy="16" r="14" fill="${color}" opacity="${isDone?0.7:1}" stroke="white" stroke-width="2"/>
+          <text x="16" y="21" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="sans-serif">${stop.stopNum||"?"}</text>
         </svg>`;
         const marker = new window.google.maps.Marker({
           map: gMapRef.current,
           position: { lat: stop.lat, lng: stop.lng },
           title: `#${stop.stopNum} ${stop.client||""}`,
-          zIndex: isCur ? 100 : isDone ? 1 : 10,
           icon: {
             url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-            scaledSize: new window.google.maps.Size(sz, Math.round(sz*1.3)),
-            anchor: new window.google.maps.Point(sz/2, Math.round(sz*1.3)),
+            scaledSize: new window.google.maps.Size(32, 32),
+            anchor: new window.google.maps.Point(16, 16),
           },
         });
         markersRef.current.push(marker);
@@ -3043,171 +3010,201 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         </button>
       </div>
 
-      {/* ══ MAP SECTION — solo en tab mapa ══ */}
+      {/* ══ MAP SECTION — rediseñado ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
-        <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
 
-        {/* map controls bottom-right */}
-        <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
-          <button className="rd-btn" style={{ width:38,height:38,borderRadius:11,background:"rgba(6,12,20,0.9)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        {/* ── Mapa a pantalla completa ── */}
+        <div ref={mapRef} style={{ position:"absolute", inset:0, zIndex:1 }}/>
+
+        {/* ── TOP HUD: progreso de ruta flotante ── */}
+        {myRoute && (
+          <div style={{ position:"absolute", top:12, left:12, right:12, zIndex:10, pointerEvents:"none" }}>
+            <div style={{
+              background:"rgba(6,12,22,0.88)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
+              borderRadius:16, border:"1px solid rgba(255,255,255,0.09)",
+              boxShadow:"0 4px 24px rgba(0,0,0,0.6)",
+              padding:"11px 14px",
+              display:"flex", alignItems:"center", gap:12,
+            }}>
+              {/* Progreso circular mini */}
+              <div style={{ position:"relative", width:40, height:40, flexShrink:0 }}>
+                <svg width="40" height="40" viewBox="0 0 40 40" style={{ transform:"rotate(-90deg)" }}>
+                  <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3.5"/>
+                  <circle cx="20" cy="20" r="16" fill="none" stroke="#3b82f6" strokeWidth="3.5"
+                    strokeDasharray={`${2*Math.PI*16}`}
+                    strokeDashoffset={`${2*Math.PI*16*(1-(delivered.length/(stops.length||1)))}`}
+                    strokeLinecap="round" style={{ transition:"stroke-dashoffset .6s ease" }}/>
+                </svg>
+                <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:"#93c5fd", fontFamily:"'DM Mono',monospace" }}>
+                  {stops.length ? Math.round(delivered.length/stops.length*100) : 0}%
+                </span>
+              </div>
+              {/* Info ruta */}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:4 }}>
+                  {myRoute.name || "Ruta activa"}
+                </div>
+                <div style={{ display:"flex", gap:10 }}>
+                  <span style={{ fontSize:10, color:"#10b981", fontWeight:700 }}>✓ {delivered.length} entregadas</span>
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)" }}>·</span>
+                  <span style={{ fontSize:10, color:"#f59e0b", fontWeight:600 }}>{pending.length} pendientes</span>
+                </div>
+              </div>
+              {/* Siguiente parada */}
+              {(() => {
+                const next = stops.find(s => s.driverStatus === "en_ruta" || s.driverStatus === "pending");
+                return next ? (
+                  <div style={{ pointerEvents:"auto", background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.3)", borderRadius:10, padding:"5px 10px", cursor:"pointer", flexShrink:0 }}
+                    onClick={() => { if(gMapRef.current && next.lat) gMapRef.current.panTo({lat:next.lat,lng:next.lng}); setMapPinPopup(next); }}>
+                    <div style={{ fontSize:9, color:"#60a5fa", fontWeight:700, letterSpacing:"0.6px", marginBottom:1 }}>PRÓXIMA</div>
+                    <div style={{ fontSize:11, color:"#93c5fd", fontWeight:700 }}>#{next.stopNum}</div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── CONTROLES flotantes bottom-right ── */}
+        <div style={{ position:"absolute", bottom:100, right:12, zIndex:10, display:"flex", flexDirection:"column", gap:8 }}>
+          <button className="rd-btn" onClick={() => {
+            if (gMapRef.current && myLocation) {
+              gMapRef.current.panTo({ lat: myLocation.lat, lng: myLocation.lng });
+              gMapRef.current.setZoom(16);
+            }
+          }} style={{ width:42, height:42, borderRadius:13, background:"rgba(6,12,20,0.92)", backdropFilter:"blur(14px)", border:"1px solid rgba(255,255,255,0.12)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", boxShadow:"0 2px 12px rgba(0,0,0,0.5)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(147,197,253,0.9)" strokeWidth="2.2">
+              <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+            </svg>
           </button>
-          <button className="rd-btn" style={{ width:38,height:38,borderRadius:11,background:"rgba(6,12,20,0.9)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          <button className="rd-btn" onClick={() => {
+            if (!gMapRef.current) return;
+            const valid = stops.filter(s => s.lat && s.lng);
+            if (!valid.length) return;
+            const b = new window.google.maps.LatLngBounds();
+            valid.forEach(s => b.extend({lat:s.lat, lng:s.lng}));
+            gMapRef.current.fitBounds(b, {top:120,bottom:90,left:20,right:20});
+          }} style={{ width:42, height:42, borderRadius:13, background:"rgba(6,12,20,0.92)", backdropFilter:"blur(14px)", border:"1px solid rgba(255,255,255,0.12)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", boxShadow:"0 2px 12px rgba(0,0,0,0.5)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+            </svg>
           </button>
         </div>
 
-        {/* ── MAP PIN POPUP ── aparece cuando se toca un pin */}
+        {/* ── PIN POPUP rediseñado ── */}
         {mapPinPopup && (() => {
           const s = mapPinPopup;
           const isDone = s.driverStatus === "delivered";
           const isProb = s.driverStatus === "problema";
           const ac = isDone ? "#10b981" : isProb ? "#ef4444" : "#3b82f6";
           return (
-            /* ── Info card: top-left, no obstruction, read-only ── */
-            <div style={{
-              position:"absolute", top:14, left:12, zIndex:200,
-              width: Math.min(280, window.innerWidth - 24),
-              animation:"slideUp .2s cubic-bezier(.4,0,.2,1)",
-              pointerEvents:"auto",
-            }}>
+            <div style={{ position:"absolute", bottom:90, left:12, right:12, zIndex:20, animation:"slideUp .22s cubic-bezier(.4,0,.2,1)" }}>
               <div style={{
-                background:"rgba(6,12,22,0.96)",
-                backdropFilter:"blur(24px)",
-                WebkitBackdropFilter:"blur(24px)",
-                borderRadius:16,
-                border:`1px solid ${ac}30`,
-                boxShadow:`0 4px 24px rgba(0,0,0,0.7), 0 0 0 1px ${ac}15`,
+                background:"rgba(6,12,22,0.97)", backdropFilter:"blur(28px)", WebkitBackdropFilter:"blur(28px)",
+                borderRadius:20, border:`1px solid ${ac}28`,
+                boxShadow:`0 8px 40px rgba(0,0,0,0.75), 0 0 0 1px ${ac}12`,
                 overflow:"hidden",
               }}>
-                {/* Accent bar */}
-                <div style={{ height:2, background:`linear-gradient(90deg,${ac},${ac}22)` }}/>
-
-                <div style={{ padding:"11px 13px 13px" }}>
-
-                  {/* Row 1: # parada + nombre + close */}
-                  <div style={{ display:"flex", alignItems:"flex-start", gap:9, marginBottom:10 }}>
-                    {/* Número de parada — siempre visible */}
-                    <div style={{
-                      minWidth:34, height:34, borderRadius:10,
-                      background:`${ac}15`, border:`1.5px solid ${ac}35`,
-                      display:"flex", flexDirection:"column",
-                      alignItems:"center", justifyContent:"center",
-                      flexShrink:0, gap:0,
-                    }}>
-                      <span style={{ fontSize:11, fontWeight:900, color:ac, fontFamily:"'DM Mono',monospace", lineHeight:1 }}>
-                        {s.stopNum||"?"}
-                      </span>
-                      {isDone && (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ac} strokeWidth="3" style={{marginTop:1}}>
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      )}
-                      {isProb && <span style={{ fontSize:9, color:ac, lineHeight:1, marginTop:1 }}>!</span>}
+                <div style={{ height:3, background:`linear-gradient(90deg,${ac},${ac}18)` }}/>
+                <div style={{ padding:"14px 15px 15px" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:11 }}>
+                    <div style={{ width:40, height:40, borderRadius:12, background:`${ac}14`, border:`1.5px solid ${ac}30`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <span style={{ fontSize:13, fontWeight:900, color:ac, fontFamily:"'DM Mono',monospace", lineHeight:1 }}>{s.stopNum||"?"}</span>
+                      {isDone && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ac} strokeWidth="3" style={{marginTop:2}}><polyline points="20 6 9 17 4 12"/></svg>}
+                      {isProb && <span style={{ fontSize:8, color:ac, marginTop:2 }}>!</span>}
                     </div>
-
-                    {/* Nombre cliente */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#f1f5f9", letterSpacing:"-0.2px", lineHeight:1.25, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {s.client || `Parada ${s.stopNum}`}
+                      <div style={{ fontSize:14, fontWeight:700, color:"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.client || `Parada ${s.stopNum}`}</div>
+                      <div style={{ fontSize:10.5, color:isDone?"#10b981":isProb?"#ef4444":"rgba(255,255,255,0.35)", marginTop:2, fontWeight:600 }}>
+                        {isDone ? `✓ Entregado${s.deliveredAt?" · "+s.deliveredAt:""}` : isProb ? "⚠ Problema reportado" : "Pendiente"}
                       </div>
-                      {/* Estado si entregado/problema */}
-                      {(isDone || isProb) && (
-                        <div style={{ fontSize:10, color:ac, fontWeight:600, marginTop:2 }}>
-                          {isDone ? `✓ Entregado${s.deliveredAt ? " · " + s.deliveredAt : ""}` : `⚠ Problema`}
-                        </div>
-                      )}
                     </div>
-
-                    {/* Cerrar */}
-                    <button onClick={() => setMapPinPopup(null)}
-                      style={{ width:26, height:26, borderRadius:7, border:"1px solid rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.35)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0, lineHeight:1 }}>
-                      ✕
-                    </button>
+                    <button onClick={() => setMapPinPopup(null)} style={{ width:30, height:30, borderRadius:9, border:"1px solid rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.4)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>✕</button>
                   </div>
-
-                  {/* Row 2: SP code */}
-                  {s.tracking && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
-                      <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)", fontWeight:700, letterSpacing:"0.8px", textTransform:"uppercase", flexShrink:0 }}>SP</span>
-                      <span style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"rgba(96,165,250,0.85)", background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.18)", borderRadius:5, padding:"1px 7px", letterSpacing:"0.4px" }}>
-                        {s.tracking}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Row 3: Teléfono (solo texto, no botón) */}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:7, marginBottom:s.phone ? 10 : 13 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.45 }}>{s.displayAddr || s.rawAddr || "Sin dirección"}</span>
+                  </div>
                   {s.phone && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                      <span style={{ fontSize:12, color:"rgba(255,255,255,0.6)", fontFamily:"'DM Mono',monospace", letterSpacing:"0.3px" }}>
-                        {s.phone}
-                      </span>
+                    <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:13 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      <a href={`tel:${s.phone}`} style={{ fontSize:12, color:"#60a5fa", fontFamily:"'DM Mono',monospace", textDecoration:"none" }}>{s.phone}</a>
                     </div>
                   )}
-
-                  {/* Row 4: Dirección completa */}
-                  <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.2" style={{marginTop:2,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <span style={{ fontSize:11.5, color:"rgba(255,255,255,0.45)", lineHeight:1.45 }}>
-                      {s.displayAddr || s.rawAddr || "Sin dirección"}
-                    </span>
-                  </div>
-
+                  {!isDone && !isProb && (
+                    <div style={{ display:"flex", gap:8 }}>
+                      <a href={`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ flex:1, padding:"10px", borderRadius:12, background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.28)", color:"#93c5fd", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif", textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                        Navegar
+                      </a>
+                      <button onClick={() => { markDelivered(s.id); setMapPinPopup(null); }}
+                        style={{ flex:1, padding:"10px", borderRadius:12, border:"none", background:"linear-gradient(135deg,#059669,#10b981)", color:"white", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, boxShadow:"0 3px 14px rgba(16,185,129,0.35)" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                        Entregado
+                      </button>
+                    </div>
+                  )}
+                  {isDone && (() => {
+                    const nextStop = stops.find(s2 => s2.stopNum > (s.stopNum||0) && s2.driverStatus !== "delivered");
+                    return nextStop ? (
+                      <button onClick={() => { setMapPinPopup(nextStop); if(gMapRef.current && nextStop.lat) gMapRef.current.panTo({lat:nextStop.lat,lng:nextStop.lng}); }}
+                        style={{ width:"100%", padding:"10px", borderRadius:12, border:"1px solid rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.5)", fontSize:12, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                        Siguiente parada →
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {/* No route overlay */}
+        {/* ── Sin ruta overlay ── */}
         {!myRoute && (
-          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,background:"rgba(6,12,20,0.96)" }}>
-            <div style={{ width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30 }}>📭</div>
+          <div style={{ position:"absolute", inset:0, zIndex:15, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, background:"rgba(6,12,20,0.96)" }}>
+            <div style={{ width:68, height:68, borderRadius:22, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>📭</div>
             <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.6)",marginBottom:6 }}>Sin ruta asignada</div>
-              <div style={{ display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 16px" }}>
-                <div style={{ width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",animation:"pulse 2s infinite" }}/>
-                <span style={{ fontSize:12,color:"rgba(255,255,255,0.35)" }}>Esperando ruta del admin...</span>
+              <div style={{ fontSize:15, fontWeight:700, color:"rgba(255,255,255,0.55)", marginBottom:8 }}>Sin ruta asignada</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:11, padding:"9px 18px" }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:"rgba(255,255,255,0.3)", animation:"pulse 2s infinite" }}/>
+                <span style={{ fontSize:12, color:"rgba(255,255,255,0.3)" }}>Esperando ruta del admin...</span>
               </div>
             </div>
           </div>
         )}
 
-
-
-
-
-        {/* ── Banner: Nueva ruta asignada por el admin ── */}
+        {/* ── Banner: nueva ruta asignada ── */}
         {driverNotif && (
-          <div style={{ position:"absolute",top:16,left:16,right:16,zIndex:200,animation:"slideIn .3s cubic-bezier(.4,0,.2,1)" }}>
-            <div style={{ background:"linear-gradient(135deg,rgba(29,78,216,0.97),rgba(59,130,246,0.97))",border:"1px solid rgba(147,197,253,0.3)",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 32px rgba(59,130,246,0.4)",backdropFilter:"blur(20px)" }}>
-              <div style={{ fontSize:26,flexShrink:0 }}>📦</div>
-              <div style={{ flex:1,minWidth:0 }}>
-                <div style={{ fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:800,color:"white",marginBottom:2 }}>{driverNotif.title}</div>
-                <div style={{ fontSize:11,color:"rgba(255,255,255,0.75)",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{driverNotif.body}</div>
+          <div style={{ position:"absolute", top:16, left:16, right:16, zIndex:30, animation:"slideIn .3s cubic-bezier(.4,0,.2,1)" }}>
+            <div style={{ background:"linear-gradient(135deg,rgba(29,78,216,0.97),rgba(59,130,246,0.97))", border:"1px solid rgba(147,197,253,0.3)", borderRadius:16, padding:"14px 16px", display:"flex", alignItems:"center", gap:12, boxShadow:"0 8px 32px rgba(59,130,246,0.4)", backdropFilter:"blur(20px)" }}>
+              <div style={{ fontSize:26, flexShrink:0 }}>📦</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontFamily:"'DM Sans',sans-serif", fontWeight:800, color:"white", marginBottom:2 }}>{driverNotif.title}</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)", lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{driverNotif.body}</div>
               </div>
-              <button onClick={()=>setDriverNotif(null)} style={{ width:28,height:28,borderRadius:8,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0 }}>✕</button>
+              <button onClick={() => setDriverNotif(null)} style={{ width:28, height:28, borderRadius:8, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>✕</button>
             </div>
           </div>
         )}
 
-        {/* Route complete banner */}
-        {showCompletedBanner && tab!=="chat" && tab!=="pending" && (
-          <div style={{ position:"absolute",bottom:14,left:14,right:14,background:"rgba(6,12,20,0.98)",border:`1px solid ${pendingRoutes.length>0?"rgba(245,158,11,0.25)":"rgba(255,255,255,0.1)"}`,borderRadius:16,padding:"16px",textAlign:"center",backdropFilter:"blur(20px)",boxShadow:"0 8px 32px rgba(0,0,0,0.8)",animation:"popIn .3s cubic-bezier(.4,0,.2,1)",zIndex:50 }}>
-            <button onClick={()=>setShowCompletedBanner(false)} style={{ position:"absolute",top:8,right:10,background:"none",border:"none",color:"rgba(255,255,255,0.3)",fontSize:16,cursor:"pointer",lineHeight:1,padding:4 }}>✕</button>
-            <div style={{ fontSize:30,marginBottom:6 }}>🎉</div>
-            <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white" }}>¡Ruta completada!</div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:3 }}>{delivered.length} entregas · {problems.length > 0 ? `${problems.length} con problemas` : "todo entregado"}</div>
+        {/* ── Banner ruta completada ── */}
+        {showCompletedBanner && tab !== "chat" && tab !== "pending" && (
+          <div style={{ position:"absolute", bottom:14, left:14, right:14, zIndex:25, background:"rgba(6,12,20,0.98)", border:`1px solid ${pendingRoutes.length > 0 ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.1)"}`, borderRadius:16, padding:"16px", textAlign:"center", backdropFilter:"blur(20px)", boxShadow:"0 8px 32px rgba(0,0,0,0.8)", animation:"popIn .3s cubic-bezier(.4,0,.2,1)" }}>
+            <button onClick={() => setShowCompletedBanner(false)} style={{ position:"absolute", top:8, right:10, background:"none", border:"none", color:"rgba(255,255,255,0.3)", fontSize:16, cursor:"pointer", lineHeight:1, padding:4 }}>✕</button>
+            <div style={{ fontSize:30, marginBottom:6 }}>🎉</div>
+            <div style={{ fontSize:15, fontFamily:"'DM Sans',sans-serif", fontWeight:700, color:"white" }}>¡Ruta completada!</div>
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:3 }}>{delivered.length} entregas · {problems.length > 0 ? `${problems.length} con problemas` : "todo entregado"}</div>
             {pendingRoutes.length > 0 && (
-              <button onClick={()=>{setShowCompletedBanner(false);setTab("pending");}}
-                style={{ marginTop:12,width:"100%",padding:"10px",borderRadius:10,border:"none",background:"rgba(245,158,11,0.15)",color:"#f59e0b",fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+              <button onClick={() => { setShowCompletedBanner(false); setTab("pending"); }}
+                style={{ marginTop:12, width:"100%", padding:"10px", borderRadius:10, border:"none", background:"rgba(245,158,11,0.15)", color:"#f59e0b", fontSize:13, fontFamily:"'DM Sans',sans-serif", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Ver {pendingRoutes.length} ruta{pendingRoutes.length>1?"s":""} pendiente{pendingRoutes.length>1?"s":""}
+                Ver {pendingRoutes.length} ruta{pendingRoutes.length > 1 ? "s" : ""} pendiente{pendingRoutes.length > 1 ? "s" : ""}
               </button>
             )}
-            <div style={{ marginTop:10,height:2,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden" }}>
-              <div style={{ height:2,background:pendingRoutes.length>0?"#f59e0b":"white",borderRadius:2,width:"100%",animation:`countdown ${pendingRoutes.length>0?12:6}s linear forwards` }}/>
+            <div style={{ marginTop:10, height:2, background:"rgba(255,255,255,0.08)", borderRadius:2, overflow:"hidden" }}>
+              <div style={{ height:2, background:pendingRoutes.length > 0 ? "#f59e0b" : "white", borderRadius:2, width:"100%", animation:`countdown ${pendingRoutes.length > 0 ? 12 : 6}s linear forwards` }}/>
             </div>
           </div>
         )}
