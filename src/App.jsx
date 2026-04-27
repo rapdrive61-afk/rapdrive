@@ -4370,29 +4370,60 @@ const MensajeroManager = ({ mensajeros, setMensajeros, currentUser }) => {
 
 // --- PAGE: SUPER ADMIN --------------------------------------------------------
 
+
 const PageSuperAdmin = ({ currentUser, onLogout }) => {
   const [offices, setOffices] = useState({});
   const [users, setUsers] = useState([]);
+  const [officeMeta, setOfficeMeta] = useState({});
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [view, setView] = useState("oficinas");
   const [form, setForm] = useState({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
 
   const load = useCallback(async () => {
     const [of, rootUsers] = await Promise.all([FB.get("oficinas"), FB.get("users")]);
-    setOffices(of && typeof of === "object" ? of : {});
+    const oficinas = of && typeof of === "object" ? of : {};
+    setOffices(oficinas);
     const allUsers = Object.values(rootUsers || {}).filter(Boolean);
     const merged = [...USERS];
     allUsers.forEach(u => { if (u?.id && !merged.find(x => x.id === u.id)) merged.push(u); });
+    Object.values(oficinas).forEach(o => {
+      if (o?.users && typeof o.users === "object") Object.values(o.users).forEach(u => { if (u?.id && !merged.find(x => x.id === u.id)) merged.push(u); });
+    });
     setUsers(merged);
+
+    const meta = {};
+    await Promise.all(Object.entries(oficinas).map(async ([id]) => {
+      const [mens, rutas, hist, locs] = await Promise.all([
+        FB.get("oficinas/" + id + "/mensajeros"),
+        FB.get("oficinas/" + id + "/routes"),
+        FB.get("oficinas/" + id + "/routeHistory"),
+        FB.get("oficinas/" + id + "/locations")
+      ]);
+      const mensArr = Array.isArray(mens) ? mens.filter(Boolean) : Object.values(mens || {}).filter(Boolean);
+      const rutasArr = Object.values(rutas || {}).filter(Boolean);
+      const histArr = Object.values(hist || {}).filter(Boolean);
+      const locArr = Object.values(locs || {}).filter(Boolean);
+      meta[id] = {
+        mensajeros: mensArr.length,
+        activos: mensArr.filter(m => m.active !== false).length,
+        rutasActivas: rutasArr.length,
+        historial: histArr.length,
+        online: locArr.filter(l => l && l.online !== false && Date.now() - (l.ts || 0) < 180000).length,
+        ultimaRuta: [...rutasArr, ...histArr].map(r => r.sentAt || r.completedAt || r.createdAt).filter(Boolean).sort().pop() || null
+      };
+    }));
+    setOfficeMeta(meta);
   }, []);
+
   useEffect(() => { load(); }, [load]);
 
   const slugify = (txt) => (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-  const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o })).sort((a,b) => (a.nombre||a.id).localeCompare(b.nombre||b.id));
+  const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o, meta: officeMeta[id] || {} })).sort((a,b) => (a.nombre||a.id).localeCompare(b.nombre||b.id));
   const filteredOffices = officeList.filter(o => {
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || [o.nombre, o.id, o.responsable, o.telefono, o.ubicacionBase?.direccion].some(v => String(v || "").toLowerCase().includes(q));
@@ -4403,16 +4434,37 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     total: officeList.length,
     active: officeList.filter(o => o.activa !== false).length,
     disabled: officeList.filter(o => o.activa === false).length,
-    admins: users.filter(u => u.role === "admin" && u.officeId).length,
+    admins: users.filter(u => (u.role === "admin" || u.role === "office_admin") && u.officeId).length,
+    drivers: officeList.reduce((n,o)=> n + (o.meta?.mensajeros || 0), 0),
+    activeRoutes: officeList.reduce((n,o)=> n + (o.meta?.rutasActivas || 0), 0),
   };
 
   const selectedOffice = selected ? offices[selected] : null;
-  const selectedAdmins = users.filter(u => u.officeId === selected && u.role === "admin");
-  const field = { width:"100%", height:44, border:"1px solid #dbe4f0", borderRadius:12, background:"#fff", color:"#0f172a", padding:"0 13px", fontSize:14, outline:"none", boxShadow:"0 1px 2px rgba(15,23,42,.03)" };
-  const label = { display:"block", fontSize:12, color:"#475569", fontWeight:700, marginBottom:7 };
-  const card = { background:"#fff", border:"1px solid #e2e8f0", borderRadius:20, boxShadow:"0 10px 30px rgba(15,23,42,.06)" };
-  const softButton = { border:"1px solid #dbe4f0", background:"#fff", color:"#334155", borderRadius:12, padding:"10px 13px", fontWeight:800, cursor:"pointer" };
-  const primaryButton = { border:"none", background:"linear-gradient(135deg,#2563eb,#1d4ed8)", color:"white", borderRadius:12, padding:"11px 16px", fontWeight:900, cursor:"pointer", boxShadow:"0 10px 24px rgba(37,99,235,.22)" };
+  const selectedMeta = selected ? (officeMeta[selected] || {}) : {};
+  const selectedAdmins = users.filter(u => u.officeId === selected && (u.role === "admin" || u.role === "office_admin"));
+  const selectedOfficeFull = selected ? officeList.find(o => o.id === selected) : null;
+  const activity = officeList.flatMap(o => ([
+    o.createdAt ? { office:o.nombre||o.id, type:"Oficina creada", time:o.createdAt, tone:"blue" } : null,
+    o.meta?.ultimaRuta ? { office:o.nombre||o.id, type:"Última actividad de ruta", time:o.meta.ultimaRuta, tone:"green" } : null,
+    o.activa === false ? { office:o.nombre||o.id, type:"Oficina pausada", time:o.updatedAt || o.createdAt, tone:"red" } : null,
+  ].filter(Boolean))).sort((a,b)=> new Date(b.time||0) - new Date(a.time||0)).slice(0,8);
+
+  const fmt = (iso) => {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("es-DO", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }); } catch(e) { return "—"; }
+  };
+  const pctActive = stats.total ? Math.round((stats.active / stats.total) * 100) : 0;
+  const initials = (name) => (name || "OF").split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+
+  const ui = {
+    page:{ position:"fixed", inset:0, background:"#f4f7fb", color:"#0f172a", fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" },
+    sidebar:{ width:292, background:"#0b1220", color:"#fff", padding:22, display:"flex", flexDirection:"column", gap:18, flexShrink:0, boxShadow:"16px 0 50px rgba(15,23,42,.10)" },
+    card:{ background:"#fff", border:"1px solid #e5eaf2", borderRadius:22, boxShadow:"0 12px 34px rgba(15,23,42,.07)" },
+    field:{ height:44, border:"1px solid #d8e1ee", borderRadius:13, background:"#fff", color:"#0f172a", padding:"0 13px", fontSize:14, outline:"none" },
+    label:{ display:"block", fontSize:12, color:"#64748b", fontWeight:800, marginBottom:7, letterSpacing:".2px" },
+    soft:{ border:"1px solid #d8e1ee", background:"#fff", color:"#334155", borderRadius:13, padding:"10px 13px", fontWeight:850, cursor:"pointer" },
+    primary:{ border:"none", background:"#2563eb", color:"white", borderRadius:14, padding:"12px 16px", fontWeight:900, cursor:"pointer", boxShadow:"0 14px 26px rgba(37,99,235,.22)" }
+  };
 
   const resetForm = () => setForm({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
 
@@ -4424,205 +4476,128 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     setSaving(true); setMsg("");
     const now = new Date().toISOString();
     const office = {
-      id,
-      nombre,
-      codigo:id,
-      activa:true,
-      responsable:form.responsable.trim(),
-      telefono:form.telefono.trim(),
-      createdAt:now,
-      createdBy:currentUser?.email||"super_admin",
+      id, nombre, codigo:id, activa:true,
+      responsable:form.responsable.trim(), telefono:form.telefono.trim(),
+      createdAt:now, updatedAt:now, createdBy:currentUser?.email||"super_admin",
       ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 },
-      mensajeros:{},
-      routes:{},
-      routeHistory:{},
-      locations:{}
+      mensajeros:{}, routes:{}, routeHistory:{}, locations:{}, users:{}
     };
     const admin = {
-      id:`OA-${id}-${Date.now()}`,
-      name:form.adminName.trim()||`Admin ${nombre}`,
-      email:form.adminEmail.trim().toLowerCase(),
-      password:form.adminPassword,
-      role:"admin",
-      avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
-      color:"#2563eb",
-      officeId:id,
-      officeName:nombre,
-      active:true
+      id:"OA-" + id + "-" + Date.now(),
+      name:form.adminName.trim()||("Admin " + nombre),
+      email:form.adminEmail.trim().toLowerCase(), password:form.adminPassword,
+      role:"admin", avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+      color:"#2563eb", officeId:id, officeName:nombre, active:true
     };
-    await Promise.all([FB.set(`oficinas/${id}`, office), FB.set(`oficinas/${id}/users/${admin.id}`, admin), FB.set(`users/${admin.id}`, admin)]);
+    await Promise.all([FB.set("oficinas/" + id, {...office, users:{ [admin.id]: admin }}), FB.set("users/" + admin.id, admin)]);
     if (!USERS.find(u => u.id === admin.id)) USERS.push(admin);
-    resetForm();
-    setShowCreate(false);
-    setMsg(`✓ Oficina ${nombre} creada con admin ${admin.email}`);
+    resetForm(); setShowCreate(false); setMsg("✓ Oficina " + nombre + " creada correctamente");
     await load(); setSelected(id); setSaving(false);
   };
 
-  const toggleOffice = async (id, next) => { await FB.set(`oficinas/${id}/activa`, next); await load(); setMsg(next ? "✓ Oficina habilitada" : "⏸ Oficina deshabilitada"); };
-  const deleteOffice = async (id) => { const o = offices[id]; if (!confirm(`¿Eliminar la oficina ${o?.nombre || id}?`)) return; await FB.set(`oficinas/${id}`, null); await load(); if (selected === id) setSelected(null); setMsg("Oficina eliminada"); };
+  const toggleOffice = async (id, next) => { await FB.set("oficinas/" + id + "/activa", next); await FB.set("oficinas/" + id + "/updatedAt", new Date().toISOString()); await load(); setMsg(next ? "✓ Oficina habilitada" : "⏸ Oficina pausada"); };
+  const deleteOffice = async (id) => { const o = offices[id]; if (!confirm("¿Eliminar la oficina " + (o?.nombre || id) + "?")) return; await FB.set("oficinas/" + id, null); await load(); if (selected === id) setSelected(null); setMsg("Oficina eliminada"); };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"#f8fafc", color:"#0f172a", fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box} *::-webkit-scrollbar{width:8px;height:8px} *::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px} input:focus,select:focus{border-color:#2563eb!important;box-shadow:0 0 0 4px rgba(37,99,235,.10)!important}`}</style>
+    <div style={ui.page}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box} button{font-family:inherit} *::-webkit-scrollbar{width:8px;height:8px} *::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px} input:focus,select:focus{border-color:#2563eb!important;box-shadow:0 0 0 4px rgba(37,99,235,.10)!important}.rd-row:hover{background:#f8fbff}.rd-menu button:hover{background:#eef4ff}.rd-card:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(15,23,42,.09)}"}</style>
       <div style={{ display:"flex", height:"100%" }}>
-        <aside style={{ width:280, background:"#0f172a", color:"#fff", padding:22, display:"flex", flexDirection:"column", gap:20, flexShrink:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:44, height:44, borderRadius:14, background:"linear-gradient(135deg,#2563eb,#60a5fa)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, letterSpacing:"-.5px" }}>RD</div>
-            <div>
-              <div style={{ fontSize:17, fontWeight:900, lineHeight:1 }}>Rap Drive</div>
-              <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>Super Admin</div>
-            </div>
+        <aside style={ui.sidebar}>
+          <div style={{ display:"flex", alignItems:"center", gap:13, marginBottom:8 }}>
+            <div style={{ width:46, height:46, borderRadius:16, background:"linear-gradient(135deg,#1d4ed8,#60a5fa)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:950, fontSize:18 }}>RD</div>
+            <div><div style={{ fontSize:18, fontWeight:950, letterSpacing:"-.4px" }}>Rap Drive</div><div style={{ fontSize:12, color:"#93a4bd", marginTop:3 }}>Centro de control</div></div>
           </div>
 
-          <div style={{ display:"grid", gap:10 }}>
-            {[
-              ["Oficinas", stats.total, "#60a5fa"],
-              ["Activas", stats.active, "#34d399"],
-              ["Pausadas", stats.disabled, "#fb7185"],
-              ["Admins", stats.admins, "#a78bfa"],
-            ].map(([t,v,c]) => (
-              <div key={t} style={{ background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.08)", borderRadius:16, padding:"14px 15px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <span style={{ color:"#cbd5e1", fontSize:13, fontWeight:700 }}>{t}</span>
-                <span style={{ color:c, fontSize:22, fontWeight:900 }}>{v}</span>
-              </div>
+          <nav style={{ display:"grid", gap:8 }}>
+            {[["oficinas","Oficinas",stats.total],["actividad","Actividad",activity.length],["riesgos","Riesgos",stats.disabled],["admins","Accesos",stats.admins]].map(([id,t,v]) => (
+              <button key={id} onClick={()=>setView(id)} style={{ border:"1px solid " + (view===id?"rgba(96,165,250,.45)":"rgba(255,255,255,.08)"), background:view===id?"rgba(37,99,235,.18)":"rgba(255,255,255,.04)", color:"#e5edf7", borderRadius:16, padding:"13px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", fontWeight:850 }}>
+                <span>{t}</span><span style={{ color:view===id?"#60a5fa":"#9fb0c7", fontSize:18, fontWeight:950 }}>{v}</span>
+              </button>
             ))}
+          </nav>
+
+          <div style={{ marginTop:4, ...ui.card, background:"linear-gradient(180deg,#111b2f,#0b1220)", border:"1px solid rgba(255,255,255,.08)", padding:16, color:"white", boxShadow:"none" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#9fb0c7", fontWeight:800 }}><span>Salud operativa</span><span>{pctActive}%</span></div>
+            <div style={{ height:9, background:"rgba(255,255,255,.08)", borderRadius:999, overflow:"hidden", marginTop:10 }}><div style={{ height:"100%", width:pctActive + "%", background:"linear-gradient(90deg,#22c55e,#60a5fa)", borderRadius:999 }}/></div>
+            <div style={{ marginTop:12, fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{stats.active} oficinas activas · {stats.activeRoutes} rutas activas</div>
           </div>
 
-          <div style={{ marginTop:"auto", background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.08)", borderRadius:16, padding:14 }}>
-            <div style={{ fontSize:11, color:"#94a3b8", fontWeight:800, textTransform:"uppercase", letterSpacing:".7px" }}>Sesión</div>
-            <div style={{ fontSize:13, marginTop:6, fontWeight:800, wordBreak:"break-all" }}>{currentUser?.email}</div>
+          <div style={{ marginTop:"auto", background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.08)", borderRadius:18, padding:16 }}>
+            <div style={{ fontSize:11, color:"#93a4bd", fontWeight:900, textTransform:"uppercase", letterSpacing:".8px" }}>Sesión actual</div>
+            <div style={{ marginTop:7, fontSize:13, fontWeight:900, wordBreak:"break-all" }}>{currentUser?.email}</div>
           </div>
-          <button onClick={onLogout} style={{ ...softButton, background:"transparent", border:"1px solid rgba(255,255,255,.14)", color:"#e2e8f0" }}>Cerrar sesión</button>
+          <button onClick={onLogout} style={{ ...ui.soft, background:"transparent", border:"1px solid rgba(255,255,255,.12)", color:"#e5edf7" }}>Cerrar sesión</button>
         </aside>
 
-        <main style={{ flex:1, overflow:"auto", padding:28 }}>
-          <div style={{ maxWidth:1280, margin:"0 auto" }}>
-            <header style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:20, marginBottom:22 }}>
+        <main style={{ flex:1, overflow:"auto", padding:26 }}>
+          <div style={{ maxWidth:1440, margin:"0 auto" }}>
+            <header style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:18, marginBottom:20 }}>
               <div>
-                <div style={{ fontSize:13, color:"#2563eb", fontWeight:900, letterSpacing:".8px", textTransform:"uppercase" }}>Rap Drive Enterprise</div>
-                <h1 style={{ fontSize:34, lineHeight:1.1, letterSpacing:"-1px", margin:"6px 0 8px", fontWeight:900 }}>Gestión de oficinas</h1>
-                <p style={{ margin:0, color:"#64748b", fontSize:15, lineHeight:1.6, maxWidth:720 }}>Administra oficinas, accesos y operación. Pausa una oficina por pago pendiente o contrato finalizado sin afectar las demás.</p>
+                <div style={{ display:"inline-flex", gap:8, alignItems:"center", background:"#eaf1ff", color:"#1d4ed8", padding:"7px 11px", borderRadius:999, fontSize:12, fontWeight:900, marginBottom:10 }}>● RAP DRIVE ENTERPRISE</div>
+                <h1 style={{ fontSize:31, lineHeight:1.1, letterSpacing:"-.8px", margin:0, fontWeight:950 }}>Centro de operaciones</h1>
+                <p style={{ margin:"8px 0 0", color:"#64748b", fontSize:14 }}>Controla oficinas, accesos, actividad y riesgo operacional desde un solo lugar.</p>
               </div>
-              <button onClick={() => setShowCreate(true)} style={primaryButton}>+ Nueva oficina</button>
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={load} style={ui.soft}>Actualizar</button>
+                <button onClick={() => setShowCreate(true)} style={ui.primary}>+ Nueva oficina</button>
+              </div>
             </header>
 
-            {msg && <div style={{ marginBottom:16, padding:"13px 15px", borderRadius:14, border:"1px solid " + (msg.startsWith("✓") ? "#bbf7d0" : "#bfdbfe"), background: msg.startsWith("✓") ? "#f0fdf4" : "#eff6ff", color: msg.startsWith("✓") ? "#166534" : "#1d4ed8", fontWeight:800 }}>{msg}</div>}
+            {msg && <div style={{ marginBottom:16, padding:"13px 15px", borderRadius:15, border:"1px solid " + (msg.startsWith("✓") ? "#bbf7d0" : "#bfdbfe"), background: msg.startsWith("✓") ? "#f0fdf4" : "#eff6ff", color: msg.startsWith("✓") ? "#166534" : "#1d4ed8", fontWeight:850 }}>{msg}</div>}
 
-            <section style={{ ...card, overflow:"hidden" }}>
-              <div style={{ padding:18, borderBottom:"1px solid #e2e8f0", display:"flex", alignItems:"center", justifyContent:"space-between", gap:14, flexWrap:"wrap" }}>
-                <div>
-                  <div style={{ fontSize:18, fontWeight:900 }}>Oficinas registradas</div>
-                  <div style={{ fontSize:13, color:"#64748b", marginTop:3 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div>
-                </div>
-                <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                  <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...field, width:300, height:42 }} />
-                  <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...field, width:150, height:42 }}>
-                    <option value="all">Todas</option>
-                    <option value="active">Activas</option>
-                    <option value="disabled">Pausadas</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", minWidth:940 }}>
-                  <thead style={{ background:"#f8fafc" }}>
-                    <tr>{["Oficina", "Código", "Admin", "Base", "Estado", "Acciones"].map(h => <th key={h} style={{ padding:"13px 18px", textAlign:"left", fontSize:12, color:"#64748b", textTransform:"uppercase", letterSpacing:".7px", borderBottom:"1px solid #e2e8f0" }}>{h}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {filteredOffices.length === 0 ? (
-                      <tr><td colSpan={6} style={{ padding:42, textAlign:"center", color:"#64748b" }}>No hay oficinas para mostrar. Crea una nueva oficina para empezar.</td></tr>
-                    ) : filteredOffices.map(o => {
-                      const admins = users.filter(u => u.officeId === o.id && u.role === "admin");
-                      const isActive = o.activa !== false;
-                      return (
-                        <tr key={o.id} onClick={() => setSelected(o.id)} style={{ background:selected===o.id?"#eff6ff":"#fff", cursor:"pointer" }}>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                              <div style={{ width:38, height:38, borderRadius:12, background:isActive?"#dbeafe":"#fee2e2", color:isActive?"#1d4ed8":"#b91c1c", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900 }}>{(o.nombre||o.id||"OF").slice(0,2).toUpperCase()}</div>
-                              <div><div style={{ fontWeight:900 }}>{o.nombre || o.id}</div><div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>{o.responsable || "Sin responsable"}</div></div>
-                            </div>
-                          </td>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7", color:"#334155", fontWeight:700 }}>{o.id}</td>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}>{admins[0]?.email || <span style={{color:'#94a3b8'}}>Sin admin</span>}</td>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7", color:"#475569", maxWidth:240, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{o.ubicacionBase?.direccion || "Sin ubicación"}</td>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}><span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"6px 10px", borderRadius:999, background:isActive?"#dcfce7":"#fee2e2", color:isActive?"#166534":"#991b1b", fontSize:12, fontWeight:900 }}><span style={{ width:7,height:7,borderRadius:"50%",background:isActive?"#22c55e":"#ef4444" }} />{isActive?"Activa":"Pausada"}</span></td>
-                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }} onClick={e=>e.stopPropagation()}>
-                            <div style={{ display:"flex", gap:8 }}>
-                              <button onClick={()=>toggleOffice(o.id, !isActive)} style={{ ...softButton, padding:"8px 10px", fontSize:12 }}>{isActive?"Pausar":"Activar"}</button>
-                              <button onClick={()=>{setSelected(o.id);}} style={{ ...softButton, padding:"8px 10px", fontSize:12 }}>Ver</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <section style={{ display:"grid", gridTemplateColumns:"repeat(6,minmax(0,1fr))", gap:14, marginBottom:18 }}>
+              {[
+                ["Oficinas",stats.total,"#2563eb","Total creadas"],["Activas",stats.active,"#16a34a","Operando"],["Pausadas",stats.disabled,"#e11d48","Bloqueadas"],["Admins",stats.admins,"#7c3aed","Accesos"],["Mensajeros",stats.drivers,"#0891b2","Registrados"],["Rutas activas",stats.activeRoutes,"#f59e0b","En campo"]
+              ].map(([t,v,c,s]) => <div key={t} className="rd-card" style={{ ...ui.card, padding:17, transition:".18s ease" }}><div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:850 }}>{t}</div><div style={{ width:10, height:10, borderRadius:99, background:c }}/></div><div style={{ fontSize:30, lineHeight:1, fontWeight:950, marginTop:13, color:"#0f172a" }}>{v}</div><div style={{ marginTop:7, color:"#94a3b8", fontSize:12 }}>{s}</div></div>)}
             </section>
 
-            <section style={{ marginTop:18, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
-              {[
-                ["Control operativo", "Pausa oficinas sin borrar datos ni afectar otras sucursales."],
-                ["Accesos separados", "Cada admin se crea vinculado a su oficina."],
-                ["Base por oficina", "Cada oficina define su punto de salida para rutas."],
-              ].map(([t,d]) => <div key={t} style={{ ...card, padding:18 }}><div style={{ fontWeight:900, marginBottom:6 }}>{t}</div><div style={{ fontSize:13, color:"#64748b", lineHeight:1.5 }}>{d}</div></div>)}
+            <div style={{ display:"grid", gridTemplateColumns:selectedOffice ? "minmax(0,1fr) 380px" : "minmax(0,1fr)", gap:18, alignItems:"start" }}>
+              <section style={{ ...ui.card, overflow:"hidden" }}>
+                <div style={{ padding:18, borderBottom:"1px solid #e5eaf2", display:"flex", alignItems:"center", justifyContent:"space-between", gap:14, flexWrap:"wrap" }}>
+                  <div><div style={{ fontSize:18, fontWeight:950 }}>Oficinas registradas</div><div style={{ fontSize:13, color:"#64748b", marginTop:3 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div></div>
+                  <div style={{ display:"flex", gap:10 }}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...ui.field, width:320 }} /><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...ui.field, width:150 }}><option value="all">Todas</option><option value="active">Activas</option><option value="disabled">Pausadas</option></select></div>
+                </div>
+
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:980 }}>
+                    <thead><tr style={{ background:"#f8fafc", color:"#64748b", fontSize:11, textTransform:"uppercase", letterSpacing:".7px" }}>{["Oficina","Admin","Estado","Base","Mensajeros","Rutas","Acciones"].map(h=><th key={h} style={{ textAlign:h==="Acciones"?"right":"left", padding:"14px 16px", borderBottom:"1px solid #e5eaf2", fontWeight:950 }}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {filteredOffices.length===0 && <tr><td colSpan="7" style={{ padding:48, textAlign:"center", color:"#64748b" }}><div style={{ fontSize:38, marginBottom:8 }}>🏢</div><div style={{ fontWeight:900, color:"#334155" }}>No hay oficinas para mostrar</div><div style={{ fontSize:13, marginTop:4 }}>Crea la primera oficina o cambia el filtro.</div></td></tr>}
+                      {filteredOffices.map(o => {
+                        const adm = users.find(u => u.officeId === o.id && (u.role === "admin" || u.role === "office_admin"));
+                        const isSel = selected === o.id;
+                        return <tr key={o.id} className="rd-row" onClick={()=>setSelected(o.id)} style={{ cursor:"pointer", background:isSel?"#eef5ff":"#fff", borderLeft:isSel?"4px solid #2563eb":"4px solid transparent" }}>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7" }}><div style={{ display:"flex", alignItems:"center", gap:12 }}><div style={{ width:42, height:42, borderRadius:14, background:"#dbeafe", color:"#1d4ed8", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:950 }}>{initials(o.nombre)}</div><div><div style={{ fontWeight:950, fontSize:15 }}>{o.nombre}</div><div style={{ color:"#64748b", fontSize:12, marginTop:3 }}>{o.responsable || "Sin responsable"}</div></div></div></td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7", color:"#334155", fontWeight:750 }}>{adm?.email || "Sin admin"}</td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7" }}><span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:999, background:o.activa===false?"#fff1f2":"#ecfdf5", color:o.activa===false?"#be123c":"#15803d", fontWeight:900, fontSize:12 }}><span style={{ width:7, height:7, borderRadius:99, background:o.activa===false?"#e11d48":"#22c55e" }}/>{o.activa===false?"Pausada":"Activa"}</span></td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7", color:"#475569", maxWidth:230, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{o.ubicacionBase?.direccion || "Sin base"}</td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7", fontWeight:950 }}>{o.meta?.mensajeros || 0}</td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7", fontWeight:950 }}>{o.meta?.rutasActivas || 0}</td>
+                          <td style={{ padding:"15px 16px", borderBottom:"1px solid #edf2f7", textAlign:"right" }} onClick={e=>e.stopPropagation()}><div style={{ display:"inline-flex", gap:8 }}><button onClick={()=>toggleOffice(o.id, o.activa === false)} style={{ ...ui.soft, padding:"8px 11px", color:o.activa===false?"#15803d":"#b45309" }}>{o.activa===false?"Habilitar":"Pausar"}</button><button onClick={()=>setSelected(o.id)} style={{ ...ui.soft, padding:"8px 11px" }}>Ver</button></div></td>
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {selectedOffice && <aside style={{ ...ui.card, padding:20, position:"sticky", top:18 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"flex-start" }}><div><div style={{ fontSize:21, fontWeight:950, letterSpacing:"-.5px" }}>{selectedOffice.nombre}</div><div style={{ marginTop:4, color:"#64748b", fontSize:13 }}>Código {selected}</div></div><button onClick={()=>setSelected(null)} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:34, height:34, cursor:"pointer", fontWeight:950 }}>×</button></div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:16 }}><div style={{ background:"#f8fafc", border:"1px solid #e5eaf2", borderRadius:16, padding:13 }}><div style={{ color:"#64748b", fontSize:12, fontWeight:850 }}>Mensajeros</div><div style={{ fontSize:24, fontWeight:950, marginTop:6 }}>{selectedMeta.mensajeros || 0}</div></div><div style={{ background:"#f8fafc", border:"1px solid #e5eaf2", borderRadius:16, padding:13 }}><div style={{ color:"#64748b", fontSize:12, fontWeight:850 }}>Online</div><div style={{ fontSize:24, fontWeight:950, marginTop:6 }}>{selectedMeta.online || 0}</div></div></div>
+                <div style={{ display:"grid", gap:10, marginTop:16 }}><button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{ ...ui.primary, background:selectedOffice.activa===false?"#16a34a":"#f97316", boxShadow:"none" }}>{selectedOffice.activa===false?"Habilitar oficina":"Pausar oficina"}</button><button onClick={()=>deleteOffice(selected)} style={{ ...ui.soft, color:"#be123c", borderColor:"#fecdd3" }}>Eliminar oficina</button></div>
+                <div style={{ marginTop:18, paddingTop:18, borderTop:"1px solid #e5eaf2" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:950, textTransform:"uppercase", letterSpacing:".7px" }}>Base / DEPOT</div><div style={{ fontWeight:900, marginTop:8 }}>{selectedOffice.ubicacionBase?.direccion || "Sin dirección"}</div><div style={{ color:"#64748b", marginTop:6, fontSize:13 }}>Lat {selectedOffice.ubicacionBase?.lat || "—"} · Lng {selectedOffice.ubicacionBase?.lng || "—"}</div></div>
+                <div style={{ marginTop:18, paddingTop:18, borderTop:"1px solid #e5eaf2" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:950, textTransform:"uppercase", letterSpacing:".7px" }}>Admins</div><div style={{ display:"grid", gap:8, marginTop:10 }}>{selectedAdmins.length===0 && <div style={{ color:"#64748b", padding:12, border:"1px dashed #cbd5e1", borderRadius:12 }}>Sin admins asignados</div>}{selectedAdmins.map(a => <div key={a.id} style={{ padding:12, background:"#f8fafc", border:"1px solid #e5eaf2", borderRadius:12 }}><div style={{ fontWeight:900 }}>{a.name}</div><div style={{ fontSize:13, color:"#64748b", marginTop:3 }}>{a.email}</div></div>)}</div></div>
+              </aside>}
+            </div>
+
+            <section style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:18, marginTop:18, marginBottom:30 }}>
+              <div style={{ ...ui.card, padding:18 }}><div style={{ fontSize:17, fontWeight:950, marginBottom:14 }}>Actividad reciente</div>{activity.length===0 ? <div style={{ color:"#64748b", padding:22, textAlign:"center" }}>Aún no hay actividad registrada.</div> : <div style={{ display:"grid", gap:10 }}>{activity.map((a,i)=><div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"12px 13px", background:"#f8fafc", border:"1px solid #e5eaf2", borderRadius:14 }}><div style={{ display:"flex", alignItems:"center", gap:11 }}><div style={{ width:10, height:10, borderRadius:99, background:a.tone==="red"?"#e11d48":a.tone==="green"?"#22c55e":"#2563eb" }}/><div><div style={{ fontWeight:900 }}>{a.type}</div><div style={{ color:"#64748b", fontSize:13, marginTop:2 }}>{a.office}</div></div></div><div style={{ color:"#94a3b8", fontSize:12, fontWeight:800 }}>{fmt(a.time)}</div></div>)}</div>}</div>
+              <div style={{ ...ui.card, padding:18 }}><div style={{ fontSize:17, fontWeight:950, marginBottom:14 }}>Riesgos</div><div style={{ display:"grid", gap:10 }}><div style={{ padding:14, borderRadius:14, background:stats.disabled?"#fff1f2":"#f0fdf4", border:"1px solid " + (stats.disabled?"#fecdd3":"#bbf7d0") }}><div style={{ fontWeight:950, color:stats.disabled?"#be123c":"#15803d" }}>{stats.disabled ? stats.disabled + " oficina(s) pausada(s)" : "Sin oficinas pausadas"}</div><div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>Control de pago/contrato.</div></div><div style={{ padding:14, borderRadius:14, background:"#eff6ff", border:"1px solid #bfdbfe" }}><div style={{ fontWeight:950, color:"#1d4ed8" }}>{stats.activeRoutes} rutas activas</div><div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>Operación en curso.</div></div></div></div>
             </section>
           </div>
         </main>
 
-        {selectedOffice && (
-          <aside style={{ width:390, background:"#fff", borderLeft:"1px solid #e2e8f0", padding:22, overflow:"auto", boxShadow:"-12px 0 30px rgba(15,23,42,.04)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:18 }}>
-              <div><div style={{ fontSize:22, fontWeight:900, letterSpacing:"-.5px" }}>{selectedOffice.nombre}</div><div style={{ color:"#64748b", fontSize:13, marginTop:4 }}>ID: {selected}</div></div>
-              <button onClick={()=>setSelected(null)} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:34, height:34, cursor:"pointer", fontWeight:900 }}>×</button>
-            </div>
-            <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-              <button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{ flex:1, ...primaryButton, background:selectedOffice.activa===false?"#16a34a":"#ea580c", boxShadow:"none" }}>{selectedOffice.activa===false?"Habilitar oficina":"Pausar oficina"}</button>
-              <button onClick={()=>deleteOffice(selected)} style={{ ...softButton, color:"#b91c1c", borderColor:"#fecaca" }}>Eliminar</button>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-              <div style={{ ...card, padding:15, boxShadow:"none" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:800 }}>Estado</div><div style={{ fontSize:18, fontWeight:900, color:selectedOffice.activa===false?"#dc2626":"#16a34a", marginTop:5 }}>{selectedOffice.activa===false?"Pausada":"Activa"}</div></div>
-              <div style={{ ...card, padding:15, boxShadow:"none" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:800 }}>Admins</div><div style={{ fontSize:18, fontWeight:900, marginTop:5 }}>{selectedAdmins.length}</div></div>
-            </div>
-            <div style={{ ...card, padding:16, boxShadow:"none", marginBottom:16 }}>
-              <div style={{ fontSize:12, color:"#64748b", fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Ubicación base</div>
-              <div style={{ fontSize:15, fontWeight:800, marginTop:8 }}>{selectedOffice.ubicacionBase?.direccion || "Sin dirección"}</div>
-              <div style={{ fontSize:13, color:"#64748b", marginTop:7 }}>Lat {selectedOffice.ubicacionBase?.lat || "—"} · Lng {selectedOffice.ubicacionBase?.lng || "—"}</div>
-            </div>
-            <div style={{ ...card, padding:16, boxShadow:"none", marginBottom:16 }}>
-              <div style={{ fontSize:12, color:"#64748b", fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Responsable</div>
-              <div style={{ fontSize:15, fontWeight:800, marginTop:8 }}>{selectedOffice.responsable || "Sin responsable"}</div>
-              <div style={{ fontSize:13, color:"#64748b", marginTop:7 }}>{selectedOffice.telefono || "Sin teléfono"}</div>
-            </div>
-            <div style={{ fontSize:14, fontWeight:900, margin:"20px 0 10px" }}>Admins de oficina</div>
-            <div style={{ display:"grid", gap:10 }}>
-              {selectedAdmins.length === 0 && <div style={{ padding:16, border:"1px dashed #cbd5e1", borderRadius:14, color:"#64748b" }}>No hay admins asignados.</div>}
-              {selectedAdmins.map(a => <div key={a.id} style={{ padding:14, border:"1px solid #e2e8f0", borderRadius:14, background:"#f8fafc" }}><div style={{ fontWeight:900 }}>{a.name}</div><div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>{a.email}</div></div>)}
-            </div>
-          </aside>
-        )}
-
-        {showCreate && (
-          <div style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(15,23,42,.42)", backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:22 }}>
-            <div style={{ width:"min(760px,100%)", maxHeight:"92vh", overflow:"auto", ...card, boxShadow:"0 24px 80px rgba(15,23,42,.28)" }}>
-              <div style={{ padding:22, borderBottom:"1px solid #e2e8f0", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
-                <div><div style={{ fontSize:22, fontWeight:900 }}>Nueva oficina</div><div style={{ fontSize:14, color:"#64748b", marginTop:4 }}>Crea la oficina y su administrador inicial.</div></div>
-                <button onClick={()=>{setShowCreate(false); resetForm();}} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:36, height:36, cursor:"pointer", fontWeight:900 }}>×</button>
-              </div>
-              <div style={{ padding:22 }}>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14 }}><div><label style={label}>Nombre oficina</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={field}/></div><div><label style={label}>Código</label><input value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={field}/></div></div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14, marginTop:14 }}><div><label style={label}>Responsable</label><input value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={field}/></div><div><label style={label}>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={field}/></div></div>
-                <div style={{ marginTop:14 }}><label style={label}>Ubicación base / punto de salida</label><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base de la oficina" style={field}/></div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:14 }}><div><label style={label}>Latitud</label><input value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={field}/></div><div><label style={label}>Longitud</label><input value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={field}/></div></div>
-                <div style={{ height:1, background:"#e2e8f0", margin:"22px 0" }}/>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}><div><label style={label}>Nombre admin</label><input value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={field}/></div><div><label style={label}>Correo admin</label><input value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={field}/></div></div>
-                <div style={{ marginTop:14 }}><label style={label}>Contraseña inicial</label><input value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={field}/></div>
-                <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:22 }}><button onClick={()=>{setShowCreate(false); resetForm();}} style={softButton}>Cancelar</button><button onClick={saveOffice} disabled={saving} style={{ ...primaryButton, opacity:saving?0.7:1 }}>{saving?"Guardando...":"Crear oficina y admin"}</button></div>
-              </div>
-            </div>
-          </div>
-        )}
+        {showCreate && <div style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(15,23,42,.45)", backdropFilter:"blur(5px)", display:"flex", alignItems:"center", justifyContent:"center", padding:22 }}><div style={{ width:"min(780px,100%)", maxHeight:"92vh", overflow:"auto", ...ui.card, boxShadow:"0 24px 90px rgba(15,23,42,.30)" }}><div style={{ padding:22, borderBottom:"1px solid #e5eaf2", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}><div><div style={{ fontSize:22, fontWeight:950 }}>Nueva oficina</div><div style={{ fontSize:14, color:"#64748b", marginTop:4 }}>Crea la oficina y el admin responsable.</div></div><button onClick={()=>{setShowCreate(false); resetForm();}} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:36, height:36, cursor:"pointer", fontWeight:950 }}>×</button></div><div style={{ padding:22 }}><div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14 }}><div><label style={ui.label}>Nombre oficina</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={{...ui.field,width:"100%"}}/></div><div><label style={ui.label}>Código</label><input value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={{...ui.field,width:"100%"}}/></div></div><div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14, marginTop:14 }}><div><label style={ui.label}>Responsable</label><input value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={{...ui.field,width:"100%"}}/></div><div><label style={ui.label}>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={{...ui.field,width:"100%"}}/></div></div><div style={{ marginTop:14 }}><label style={ui.label}>Ubicación base / punto de salida</label><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base de la oficina" style={{...ui.field,width:"100%"}}/></div><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:14 }}><div><label style={ui.label}>Latitud</label><input value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={{...ui.field,width:"100%"}}/></div><div><label style={ui.label}>Longitud</label><input value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={{...ui.field,width:"100%"}}/></div></div><div style={{ height:1, background:"#e5eaf2", margin:"22px 0" }}/><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}><div><label style={ui.label}>Nombre admin</label><input value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={{...ui.field,width:"100%"}}/></div><div><label style={ui.label}>Correo admin</label><input value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={{...ui.field,width:"100%"}}/></div></div><div style={{ marginTop:14 }}><label style={ui.label}>Contraseña inicial</label><input value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={{...ui.field,width:"100%"}}/></div><div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:22 }}><button onClick={()=>{setShowCreate(false); resetForm();}} style={ui.soft}>Cancelar</button><button onClick={saveOffice} disabled={saving} style={{ ...ui.primary, opacity:saving?0.7:1 }}>{saving?"Guardando...":"Crear oficina y admin"}</button></div></div></div></div>}
       </div>
     </div>
   );
