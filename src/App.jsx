@@ -450,6 +450,9 @@ const PageDashboard = () => {
         mapTypeId: "roadmap",
         gestureHandling: "greedy",
         clickableIcons: false,
+        isFractionalZoomEnabled: false,
+        tilt: 0,
+        heading: 0,
         disableDefaultUI: true,
         zoomControl: true,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
@@ -2605,6 +2608,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const markersRef = useRef([]);
   const stopMarkersRef = useRef({}); // markers persistentes: no recrear en zoom/polling
   const routeLinesRef = useRef({ glow:null, core:null });
+  const pinIconCacheRef = useRef({}); // cache de iconos: evita reconstruir SVGs y parpadeo en zoom
   const mapUserInteractingRef = useRef(false);
   const routeFitKeyRef = useRef(null); // evita re-centrar mapa mientras el mensajero hace zoom
   const chatEndRef = useRef(null);
@@ -2738,6 +2742,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         position: pos,
         zIndex: 9999,
         title: driver.name || "Mi ubicación",
+        optimized: false,
         icon: {
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(motorSvg),
           scaledSize: new window.google.maps.Size(48, 48),
@@ -2970,6 +2975,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         mapTypeId: "roadmap",
         gestureHandling: "greedy",
         clickableIcons: false,
+        isFractionalZoomEnabled: false,
+        tilt: 0,
+        heading: 0,
         disableDefaultUI: true,
         zoomControl: true,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
@@ -2989,7 +2997,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       gMapRef.current.addListener("dragstart", () => { mapUserInteractingRef.current = true; });
       gMapRef.current.addListener("zoom_changed", () => { mapUserInteractingRef.current = true; });
       gMapRef.current.addListener("idle", () => {
-        window.setTimeout(() => { mapUserInteractingRef.current = false; }, 350);
+        window.setTimeout(() => { mapUserInteractingRef.current = false; }, 1200);
       });
     });
   }, []);
@@ -3057,28 +3065,27 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
     const makeFixedPinIcon = (stop) => {
       const isDone = stop.navStatus === "visited";
+      const label = String(stop.stopNum || "?");
+      const cacheKey = `${isDone ? "done" : "pending"}:${label}`;
+      if (pinIconCacheRef.current[cacheKey]) return pinIconCacheRef.current[cacheKey];
+
       const color = isDone ? "#22c55e" : "#2563eb";
       const dark = isDone ? "#15803d" : "#1d4ed8";
-      const label = String(stop.stopNum || "?");
-      const fs = label.length > 2 ? 9 : 11;
-      // SVG sin animaciones ni filtros pesados: tamaño fijo y estable en zoom.
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="48" viewBox="0 0 42 48">
-        <defs>
-          <linearGradient id="g" x1="8" y1="4" x2="34" y2="46" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#60a5fa"/>
-            <stop offset=".58" stop-color="${color}"/>
-            <stop offset="1" stop-color="${dark}"/>
-          </linearGradient>
-        </defs>
-        <path d="M21 46s14-12.7 14-25A14 14 0 0 0 7 21c0 12.3 14 25 14 25z" fill="url(#g)" stroke="rgba(255,255,255,.8)" stroke-width="1.2"/>
-        <circle cx="21" cy="20.5" r="10.7" fill="rgba(3,7,18,.22)" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>
-        <text x="21" y="24.4" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
+      const fs = label.length > 2 ? 8.5 : 10.5;
+      // Pin sólido, sin filtros, sin animación y con tamaño fijo. Optimizado para que Google Maps no lo reescale durante zoom.
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="42" viewBox="0 0 36 42">
+        <path d="M18 40s13-11.5 13-23A13 13 0 0 0 5 17c0 11.5 13 23 13 23z" fill="${color}" stroke="rgba(255,255,255,.92)" stroke-width="1.15"/>
+        <circle cx="18" cy="17" r="10" fill="${dark}" opacity=".34"/>
+        <circle cx="18" cy="17" r="8.2" fill="${color}"/>
+        <text x="18" y="20.8" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
       </svg>`;
-      return {
+      const icon = {
         url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-        scaledSize: new window.google.maps.Size(42, 48),
-        anchor: new window.google.maps.Point(21, 45),
+        scaledSize: new window.google.maps.Size(36, 42),
+        anchor: new window.google.maps.Point(18, 40),
       };
+      pinIconCacheRef.current[cacheKey] = icon;
+      return icon;
     };
 
     const bounds = new window.google.maps.LatLngBounds();
@@ -3097,7 +3104,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           position: pos,
           title: `#${stop.stopNum} ${stop.client || ""}`,
           zIndex: stop.navStatus === "visited" ? 5 : 20,
-          optimized: true,
+          optimized: false,
+          clickable: true,
           icon: makeFixedPinIcon(stop),
         });
         marker.__rdStatusKey = statusKey;
@@ -3468,7 +3476,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ MAP SECTION — solo en tab mapa ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
-        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"none", willChange:"transform" }}/>
+        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"manipulation", transform:"translateZ(0)", backfaceVisibility:"hidden" }}/>
 
         {/* map controls bottom-right */}
         <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
