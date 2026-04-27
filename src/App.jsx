@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
+// V9 MOTOR FINAL: diseño del motor y animación de geocodificación refinados.
 
 const DELIVERIES = [];
 
@@ -8439,13 +8440,13 @@ const CircuitEngine = () => {
         {/* ════ UPLOAD ════ */}
         {phase === "upload" && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-            <div style={{ maxWidth: 560, width: "100%", animation: "fadeUp .4s ease" }}>
+            <div style={{ maxWidth: 640, width: "100%", animation: "fadeUp .4s ease" }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
                 <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)" }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
-                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Motor de Rutas — Circuit Mode</div>
-                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa tu Excel o CSV. El motor geocodifica cada dirección con Google Maps<br/>y optimiza la ruta automáticamente con algoritmo Nearest-Neighbor + 2-opt.</div>
+                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Circuit Mode</div>
+                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Carga, corrige y optimiza tus rutas con IA local + Google Maps.</div>
               </div>
 
               {/* Feature pills */}
@@ -8464,11 +8465,11 @@ const CircuitEngine = () => {
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) parseFile(f); }}
                 onClick={() => fileRef.current?.click()}
-                style={{ border: `2px dashed ${dragOver ? "#3b82f6" : "#1e2d3d"}`, borderRadius: 18, padding: "44px 28px", textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(59,130,246,0.08)" : "rgba(255,255,255,0.01)", transition: "all .2s", marginBottom: 14, position:"relative", overflow:"hidden" }}>
+                style={{ border: `2px dashed ${dragOver ? "#3b82f6" : "#1e2d3d"}`, borderRadius: 24, padding: "50px 34px", textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(59,130,246,0.08)" : "rgba(255,255,255,0.01)", transition: "all .2s", marginBottom: 14, position:"relative", overflow:"hidden" }}>
                 {dragOver && <div style={{ position:"absolute",inset:0,background:"rgba(59,130,246,0.04)",animation:"pulse .8s ease infinite" }}/>}
-                <div style={{ fontSize: 48, marginBottom: 12, filter:"grayscale(0.2)" }}>📂</div>
-                <div style={{ fontSize: 15, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6 }}>{dragOver?"¡Suelta aquí!":"Arrastra tu Excel o CSV"}</div>
-                <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>o haz clic para buscar en tu computadora</div>
+                <div style={{ fontSize: 42, marginBottom: 12, filter:"grayscale(0.05)" }}>📁</div>
+                <div style={{ fontSize: 15, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6 }}>{dragOver?"¡Suelta aquí!":"Subir archivo de ruta"}</div>
+                <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>Arrastra tu Excel/CSV o haz clic para seleccionar</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                   {[".xlsx",".xls",".csv"].map(e => <span key={e} style={{ background: "#0a1019", border: "1px solid #1e2d3d", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "#60a5fa", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>{e}</span>)}
                 </div>
@@ -8749,11 +8750,11 @@ const CircuitEngine = () => {
             <div style={{ maxWidth: 460, width: "100%", padding: "36px 32px", textAlign: "center", animation: "fadeUp .3s ease" }}>
 
               {/* Orbital core */}
-              <div style={{ width: 120, height: 120, position: "relative", margin: "0 auto 28px", animation:"geoFloat 3s ease-in-out infinite" }}>
+              <div style={{ width: 120, height: 120, position: "relative", margin: "0 auto 28px", animation:"none" }}>
                 {/* Pulse rings */}
-                <div style={{ position:"absolute", inset:-22, borderRadius:"50%", border:"1px solid #3b82f640", animation:"geoRing1 2.2s ease-in-out infinite" }}/>
-                <div style={{ position:"absolute", inset:-38, borderRadius:"50%", border:"1px solid #3b82f625", animation:"geoRing2 2.2s .5s ease-in-out infinite" }}/>
-                <div style={{ position:"absolute", inset:-54, borderRadius:"50%", border:"1px solid #3b82f612", animation:"geoRing3 2.2s 1s ease-in-out infinite" }}/>
+                <div style={{ position:"absolute", inset:-22, borderRadius:"50%", border:"1px solid #3b82f640", animation:"none" }}/>
+                <div style={{ position:"absolute", inset:-38, borderRadius:"50%", border:"1px solid #3b82f625", animation:"none" }}/>
+                <div style={{ position:"absolute", inset:-54, borderRadius:"50%", border:"1px solid #3b82f612", animation:"none" }}/>
                 {/* Glow */}
                 <div style={{ position:"absolute", inset:-8, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,0.2) 0%,transparent 70%)" }}/>
                 {/* Core */}
@@ -8769,18 +8770,18 @@ const CircuitEngine = () => {
                   {size:8,color:"#34d399",shadow:"#34d399",anim:"orbit3",dur:"1.5s"},
                 ].map((d,i)=>(
                   <div key={i} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <div style={{ width:d.size,height:d.size,borderRadius:"50%",background:d.color,boxShadow:`0 0 10px ${d.shadow}`,animation:`${d.anim} ${d.dur} linear infinite` }}/>
+                    <div style={{ width:d.size,height:d.size,borderRadius:"50%",background:d.color,boxShadow:`0 0 10px ${d.shadow}`,animation:"geoPulseText 1.6s ease-in-out infinite" }}/>
                   </div>
                 ))}
               </div>
 
               {/* Title */}
-              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Corrigiendo direcciones con IA + Google Maps</div>
-              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>Normalizando alias, sectores, referencias y Plus Codes</div>
+              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Procesando direcciones</div>
+              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>IA local, referencias RD y Google Maps trabajando juntos.</div>
 
               {/* Address flying by */}
               <div style={{ height:22, overflow:"hidden", marginBottom:18 }}>
-                <div key={geoStatus} style={{ fontSize:11, color:"#3b82f6", fontFamily:"'Inter',monospace", animation:"addressFly 2s ease-in-out", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", padding:"0 20px" }}>{geoStatus || "Iniciando..."}</div>
+                <div key={geoStatus} style={{ fontSize:11, color:"#3b82f6", fontFamily:"'Inter',monospace", animation:"fadeUp .25s ease", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", padding:"0 20px" }}>{geoStatus || "Iniciando..."}</div>
               </div>
 
               {/* Progress bar - enhanced */}
