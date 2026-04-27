@@ -33,6 +33,21 @@ const ROLE_CONFIG = {
   driver: { label:"Mensajero",     color:"#10b981", canSeeAnalytics:false,canManageDrivers:false,canDeleteDeliveries:false,canExport:false },
 };
 
+// --- BRANDING: icono de mensajería, sin rayos -------------------------------
+const RD_BRAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="bg" x1="72" y1="40" x2="440" y2="472" gradientUnits="userSpaceOnUse"><stop stop-color="#38bdf8"/><stop offset="0.55" stop-color="#2563eb"/><stop offset="1" stop-color="#1e40af"/></linearGradient><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#020617" flood-opacity="0.35"/></filter></defs><rect x="48" y="48" width="416" height="416" rx="112" fill="url(#bg)"/><g filter="url(#shadow)" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><path d="M132 300h34l28-74h122l38 74h30" stroke-width="24"/><path d="M205 226v-52h80l58 52" stroke-width="22"/><path d="M122 254h48" stroke-width="22" opacity="0.96"/><circle cx="194" cy="328" r="34" fill="#1d4ed8" stroke-width="22"/><circle cx="342" cy="328" r="34" fill="#1d4ed8" stroke-width="22"/><path d="M318 150h64v64h-64z" fill="#fff" stroke-width="14"/><path d="M318 174h64M350 150v64" stroke="#2563eb" stroke-width="10"/></g></svg>`;
+const RD_BRAND_ICON = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(RD_BRAND_SVG);
+const RD_MANIFEST = { name:"Rap Drive Mensajería", short_name:"Rap Drive", description:"Gestión de rutas, mensajeros y paquetes", start_url:"/", display:"standalone", background_color:"#050a12", theme_color:"#2563eb", icons:[{src:RD_BRAND_ICON,sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},{src:RD_BRAND_ICON,sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}] };
+const installRapDriveBranding = () => {
+  if (typeof document === "undefined") return;
+  document.title = "Rap Drive Mensajería";
+  const upsert = (selector, tag, attrs) => { let el=document.querySelector(selector); if(!el){el=document.createElement(tag); document.head.appendChild(el);} Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); };
+  upsert('link[rel="icon"]','link',{rel:'icon',type:'image/svg+xml',href:RD_BRAND_ICON});
+  upsert('link[rel="shortcut icon"]','link',{rel:'shortcut icon',type:'image/svg+xml',href:RD_BRAND_ICON});
+  upsert('link[rel="apple-touch-icon"]','link',{rel:'apple-touch-icon',href:RD_BRAND_ICON});
+  upsert('meta[name="theme-color"]','meta',{name:'theme-color',content:'#2563eb'});
+  upsert('link[rel="manifest"]','link',{rel:'manifest',href:'data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(RD_MANIFEST))});
+};
+
 // --- PERSISTENT STORE (in-memory - compatible con entorno de artefacto) -------
 // ─── FIREBASE REALTIME DATABASE ─────────────────────────────────────────────
 // Puente real entre navegadores distintos (Chrome admin ↔ Brave mensajero)
@@ -108,13 +123,14 @@ const normalizeMensajeros = (data) => {
     const cleanName  = String(m.name || "").trim().toUpperCase();
     const cleanEmail = String(m.email || "").trim().toLowerCase();
     const cleanPhone = String(m.phone || "").replace(/\D/g, "");
-    const key = m.id || cleanEmail || cleanPhone || cleanName;
+    // Priorizar email/teléfono/nombre sobre id evita duplicados cuando un doble click genera IDs distintos.
+    const key = cleanEmail || cleanPhone || cleanName || m.id;
     if (!key) return;
 
     if (!byKey[key]) {
       byKey[key] = { ...m, name: cleanName || m.name, email: cleanEmail || m.email, phone: cleanPhone || m.phone };
     } else {
-      byKey[key] = { ...byKey[key], ...m, name: cleanName || byKey[key].name, email: cleanEmail || byKey[key].email, phone: cleanPhone || byKey[key].phone };
+      byKey[key] = { ...byKey[key], ...m, id: byKey[key].id || m.id, name: cleanName || byKey[key].name, email: cleanEmail || byKey[key].email, phone: cleanPhone || byKey[key].phone };
     }
   });
 
@@ -138,7 +154,7 @@ const LS = {
     _memStore.chats[id] = c;
     FB.set(RD.path(`chats/${id}`), c);
   },
-  getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
+  getMens:   () => normalizeMensajeros(_memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS),
   setMens:   (m) => {
     const clean = normalizeMensajeros(m);
     _memStore.mens = clean;
@@ -426,6 +442,8 @@ const PageDashboard = () => {
         center: { lat: 18.4861, lng: -69.9312 },
         zoom: 13,
         mapTypeId: "roadmap",
+        gestureHandling: "greedy",
+        clickableIcons: false,
         disableDefaultUI: true,
         zoomControl: true,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
@@ -1355,6 +1373,7 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
   const [adding,setAdding]=useState(false);
   const [form,setForm]=useState({name:"",phone:"",email:"",vehicle:"Moto"});
   const [msg,setMsg]=useState("");
+  const creatingDriverRef = useRef(false);
   const officeId=currentUser?.officeId;
   const list=(mensajeros||[]).filter(m=>{
     const text=`${m.name||""} ${m.phone||""} ${m.email||""} ${m.vehicle||""}`.toLowerCase();
@@ -1367,6 +1386,9 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
   const stats={total:mensajeros.length,active:mensajeros.filter(m=>m.active!==false).length,paused:mensajeros.filter(m=>m.active===false).length,onRoute:mensajeros.filter(m=>(routes||{})[m.id]).length};
   const inp={background:"#070d16",border:"1px solid rgba(148,163,184,.14)",borderRadius:12,padding:"11px 13px",color:"#e2e8f0",outline:"none",fontSize:13,width:"100%"};
   const add=async()=>{
+    if (creatingDriverRef.current) return;
+    creatingDriverRef.current = true;
+    try {
     const name=form.name.trim().toUpperCase();
     const cleanPhone=form.phone.trim().replace(/\D/g, "");
     if(!name||!officeId){setMsg("Falta nombre u oficina.");return;}
@@ -1400,6 +1422,9 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
       FB.set(`users/${newUser.id}`,newUser)
     ]);
     setForm({name:"",phone:"",email:"",vehicle:"Moto"}); setAdding(false); setMsg(`✓ ${name} creado · Login: ${email} / driver123`); setTimeout(()=>setMsg(""),6000);
+    } finally {
+      creatingDriverRef.current = false;
+    }
   };
   const toggle=(id)=>setMensajeros(prev=>{const updated=normalizeMensajeros(prev.map(m=>m.id===id?{...m,active:!(m.active!==false)}:m)); LS.setMens(updated); return updated;});
   const remove=(id,name)=>{if(!window.confirm(`¿Eliminar ${name}?`))return; const u=USERS.find(u=>u.driverId===id); setMensajeros(prev=>{const updated=normalizeMensajeros(prev.filter(m=>m.id!==id)); LS.setMens(updated); return updated;}); if(officeId&&u)FB.set(`oficinas/${officeId}/users/${u.id}`,null); if(u)FB.set(`users/${u.id}`,null);};
@@ -1417,7 +1442,7 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
-        {[["Total",stats.total,"#60a5fa","M13 2 4 14h7l-1 8 10-13h-7l1-7Z"],["Activos",stats.active,"#22c55e","M20 6 9 17l-5-5"],["Pausados",stats.paused,"#f97316","M8 5v14M16 5v14"],["En ruta",stats.onRoute,"#a78bfa","M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"]].map(([l,v,c,d])=>(
+        {[["Total",stats.total,"#60a5fa","M3 11h3l2-5h8l3 5h2M7 16h10M7 16a3 3 0 1 0 0 .01M17 16a3 3 0 1 0 0 .01M10 6v-3h5l3 3"],["Activos",stats.active,"#22c55e","M20 6 9 17l-5-5"],["Pausados",stats.paused,"#f97316","M8 5v14M16 5v14"],["En ruta",stats.onRoute,"#a78bfa","M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"]].map(([l,v,c,d])=>(
           <div key={l} style={{border:"1px solid rgba(148,163,184,.10)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:18,padding:"15px 16px",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",right:-20,top:-24,width:90,height:90,borderRadius:"50%",background:`${c}12`,filter:"blur(2px)"}}/>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -1443,7 +1468,7 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
         </button>
       </div>
       {msg&&<div style={{marginBottom:14,padding:"12px 14px",borderRadius:14,border:"1px solid rgba(34,197,94,.18)",background:"rgba(34,197,94,.08)",color:"#86efac",fontSize:13}}>{msg}</div>}
-      {adding&&(<div style={{marginBottom:18,border:"1px solid rgba(59,130,246,.18)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:20,padding:18}}><div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#f8fafc",marginBottom:14}}>Nuevo driver</div><div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.3fr .8fr",gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo" style={inp}/><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono" style={inp}/><input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo login" style={inp}/><select value={form.vehicle} onChange={e=>setForm({...form,vehicle:e.target.value})} style={inp}><option>Moto</option><option>Carro</option><option>Furgoneta</option><option>Camión</option></select></div><div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:14}}><button onClick={()=>setAdding(false)} style={{padding:"9px 14px",borderRadius:12,border:"1px solid rgba(148,163,184,.16)",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Cancelar</button><button onClick={add} style={{padding:"9px 14px",borderRadius:12,border:"none",background:"#2563eb",color:"white",fontWeight:900,cursor:"pointer"}}>Guardar driver</button></div></div>)}
+      {adding&&(<div style={{marginBottom:18,border:"1px solid rgba(59,130,246,.18)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:20,padding:18}}><div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#f8fafc",marginBottom:14}}>Nuevo driver</div><div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.3fr .8fr",gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo" style={inp}/><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono" style={inp}/><input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo login" style={inp}/><select value={form.vehicle} onChange={e=>setForm({...form,vehicle:e.target.value})} style={inp}><option>Moto</option><option>Carro</option><option>Furgoneta</option><option>Camión</option></select></div><div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:14}}><button onClick={()=>setAdding(false)} style={{padding:"9px 14px",borderRadius:12,border:"1px solid rgba(148,163,184,.16)",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Cancelar</button><button onClick={add} disabled={creatingDriverRef.current} style={{padding:"9px 14px",borderRadius:12,border:"none",background:"#2563eb",color:"white",fontWeight:900,cursor:creatingDriverRef.current?"not-allowed":"pointer",opacity:creatingDriverRef.current ? .6 : 1}}>Guardar driver</button></div></div>)}
       {list.length===0 ? <div style={{padding:"50px",textAlign:"center",border:"1px dashed rgba(148,163,184,.16)",borderRadius:22,color:"#64748b"}}>No hay drivers para mostrar.</div> : (<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:14}}>{list.map(m=><DriverProfileCard key={m.id} m={m} route={(routes||{})[m.id]} user={USERS.find(u=>u.driverId===m.id)} onToggle={toggle} onRemove={remove}/>)}</div>)}
     </div>
   );
@@ -2852,7 +2877,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         lastNotifKeys.add(k);
         if (notif.type === "route_assigned") {
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification(notif.title, { body: notif.body, icon: "/favicon.ico" });
+            new Notification(notif.title, { body: notif.body, icon: RD_BRAND_ICON });
           }
           if (typeof window.__rdShowDriverNotif === "function") {
             window.__rdShowDriverNotif(notif);
@@ -2909,6 +2934,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         center: { lat: DEPOT.lat, lng: DEPOT.lng },
         zoom: 12,
         mapTypeId: "roadmap",
+        gestureHandling: "greedy",
+        clickableIcons: false,
         disableDefaultUI: true,
         zoomControl: true,
         zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_BOTTOM },
@@ -3390,7 +3417,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ MAP SECTION — solo en tab mapa ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
-        <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
+        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"none" }}/>
 
         {/* map controls bottom-right */}
         <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
@@ -9188,7 +9215,7 @@ const V5Icon = ({type, size=18, color='currentColor'}) => {
   const common={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:color,strokeWidth:1.9,strokeLinecap:'round',strokeLinejoin:'round'};
   const icons={
     route:<svg {...common}><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h5a5 5 0 0 1 5 5v4"/><path d="M6 8v10"/></svg>,
-    engine:<svg {...common}><path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/></svg>,
+    engine:<svg {...common}><path d="M4 14h3l2-5h7l3 5h2"/><circle cx="8" cy="17" r="2"/><circle cx="18" cy="17" r="2"/><path d="M10 9V5h5l3 4"/><rect x="13" y="3" width="5" height="5" rx="1"/></svg>,
     depot:<svg {...common}><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-7h6v7"/><path d="M9 10h.01M15 10h.01"/></svg>,
     lock:<svg {...common}><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>,
     chart:<svg {...common}><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>,
@@ -9225,7 +9252,7 @@ const AdminConfigV5 = ({ currentUser }) => {
 
 export default function RapDrive() {
   useEffect(() => {
-    try { document.title = "Rap Drive Mensajería"; } catch(e) {}
+    try { installRapDriveBranding(); } catch(e) {}
   }, []);
   // -- Phase 6: Auth --
   const [currentUser, setCurrentUser] = useState(() => {
