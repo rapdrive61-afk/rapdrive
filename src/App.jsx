@@ -1344,16 +1344,43 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
   const remove=(id,name)=>{if(!window.confirm(`¿Eliminar ${name}?`))return; setMensajeros(prev=>{const updated=prev.filter(m=>m.id!==id); LS.setMens(updated); return updated;}); const u=USERS.find(u=>u.driverId===id); if(officeId)FB.set(`oficinas/${officeId}/mensajeros/${id}`,null); if(officeId&&u)FB.set(`oficinas/${officeId}/users/${u.id}`,null); if(u)FB.set(`users/${u.id}`,null);};
   return (
     <div style={{flex:1,overflow:"auto",padding:"24px",background:"radial-gradient(circle at top left,rgba(37,99,235,.10),transparent 32%),#060b10"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:16,marginBottom:14}}>
-        <button onClick={()=>setAdding(true)} style={{display:"inline-flex",alignItems:"center",gap:9,padding:"12px 16px",borderRadius:14,border:"1px solid rgba(59,130,246,.38)",background:"linear-gradient(135deg,#2563eb,#4f46e5)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 16px 36px rgba(37,99,235,.25)"}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:42,height:42,borderRadius:15,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(37,99,235,.28),rgba(14,165,233,.08))",border:"1px solid rgba(96,165,250,.26)",boxShadow:"0 18px 42px rgba(37,99,235,.16)"}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2.2c0-1.55-1.25-2.8-2.8-2.8H6.8C5.25 16 4 17.25 4 18.8V21"/><circle cx="10" cy="7.5" r="3.5"/><path d="M20 8v5"/><path d="M17.5 10.5h5"/></svg>
+          </div>
+          <div>
+            <div style={{fontSize:22,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:950,letterSpacing:"-.5px"}}>Drivers</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:3}}>Control de mensajeros, accesos y rutas activas</div>
+          </div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
+        {[["Total",stats.total,"#60a5fa","M13 2 4 14h7l-1 8 10-13h-7l1-7Z"],["Activos",stats.active,"#22c55e","M20 6 9 17l-5-5"],["Pausados",stats.paused,"#f97316","M8 5v14M16 5v14"],["En ruta",stats.onRoute,"#a78bfa","M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"]].map(([l,v,c,d])=>(
+          <div key={l} style={{border:"1px solid rgba(148,163,184,.10)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:18,padding:"15px 16px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",right:-20,top:-24,width:90,height:90,borderRadius:"50%",background:`${c}12`,filter:"blur(2px)"}}/>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{width:34,height:34,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",background:`${c}12`,border:`1px solid ${c}26`}}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d={d}/>{l==="En ruta"&&<circle cx="12" cy="10" r="2.2"/>}</svg>
+              </div>
+              <div style={{width:7,height:7,borderRadius:"50%",background:c,boxShadow:`0 0 14px ${c}`}}/>
+            </div>
+            <div style={{fontSize:28,color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:950,lineHeight:1}}>{v}</div>
+            <div style={{fontSize:10,color:"#7c8da7",fontWeight:900,textTransform:"uppercase",letterSpacing:"1px",marginTop:8}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(260px,520px) 170px auto",gap:10,alignItems:"center",marginBottom:18}}>
+        <div style={{position:"relative"}}>
+          <svg style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar driver..." style={{...inp,width:"100%",paddingLeft:38}}/>
+        </div>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inp,width:170}}><option value="all">Todos</option><option value="active">Activos</option><option value="paused">Pausados</option><option value="route">Con ruta</option></select>
+        <button onClick={()=>setAdding(true)} style={{justifySelf:"end",display:"inline-flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:14,border:"1px solid rgba(59,130,246,.38)",background:"linear-gradient(135deg,#2563eb,#4f46e5)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:950,cursor:"pointer",boxShadow:"0 16px 36px rgba(37,99,235,.25)",whiteSpace:"nowrap"}}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Nuevo driver
         </button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:18}}>
-        {[["Total",stats.total,"#60a5fa"],["Activos",stats.active,"#22c55e"],["Pausados",stats.paused,"#f97316"],["En ruta",stats.onRoute,"#a78bfa"]].map(([l,v,c])=>(<div key={l} style={{border:"1px solid rgba(148,163,184,.10)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:18,padding:16}}><div style={{width:9,height:9,borderRadius:"50%",background:c,boxShadow:`0 0 18px ${c}`,marginBottom:16}}/><div style={{fontSize:26,color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:900}}>{v}</div><div style={{fontSize:11,color:"#64748b",fontWeight:800,textTransform:"uppercase",letterSpacing:".8px"}}>{l}</div></div>))}
-      </div>
-      <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:18}}><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por nombre, teléfono, correo..." style={{...inp,flex:1}}/><select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inp,width:170}}><option value="all">Todos</option><option value="active">Activos</option><option value="paused">Pausados</option><option value="route">Con ruta</option></select></div>
       {msg&&<div style={{marginBottom:14,padding:"12px 14px",borderRadius:14,border:"1px solid rgba(34,197,94,.18)",background:"rgba(34,197,94,.08)",color:"#86efac",fontSize:13}}>{msg}</div>}
       {adding&&(<div style={{marginBottom:18,border:"1px solid rgba(59,130,246,.18)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:20,padding:18}}><div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#f8fafc",marginBottom:14}}>Nuevo driver</div><div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.3fr .8fr",gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo" style={inp}/><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono" style={inp}/><input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo login" style={inp}/><select value={form.vehicle} onChange={e=>setForm({...form,vehicle:e.target.value})} style={inp}><option>Moto</option><option>Carro</option><option>Furgoneta</option><option>Camión</option></select></div><div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:14}}><button onClick={()=>setAdding(false)} style={{padding:"9px 14px",borderRadius:12,border:"1px solid rgba(148,163,184,.16)",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Cancelar</button><button onClick={add} style={{padding:"9px 14px",borderRadius:12,border:"none",background:"#2563eb",color:"white",fontWeight:900,cursor:"pointer"}}>Guardar driver</button></div></div>)}
       {list.length===0 ? <div style={{padding:"50px",textAlign:"center",border:"1px dashed rgba(148,163,184,.16)",borderRadius:22,color:"#64748b"}}>No hay drivers para mostrar.</div> : (<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:14}}>{list.map(m=><DriverProfileCard key={m.id} m={m} route={(routes||{})[m.id]} user={USERS.find(u=>u.driverId===m.id)} onToggle={toggle} onRemove={remove}/>)}</div>)}
@@ -9394,7 +9421,7 @@ export default function RapDrive() {
   const navItems=[
     {id:"dashboard",label:"Dashboard",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>},
     {id:"routes",   label:"Rutas",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v6a4 4 0 0 0 4 4h6"/><path d="M19 5v8"/></svg>},
-    {id:"drivers", label:"Drivers", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>},
+    {id:"drivers", label:"Drivers", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2.2c0-1.55-1.25-2.8-2.8-2.8H6.8C5.25 16 4 17.25 4 18.8V21"/><circle cx="10" cy="7.5" r="3.5"/><path d="M20 8v5"/><path d="M17.5 10.5h5"/></svg>},
     {id:"import",   label:"Motor",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>},
     {id:"settings", label:"Config",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>},
   ];
