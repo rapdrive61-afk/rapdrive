@@ -3020,9 +3020,9 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         routeLinesRef.current.glow = new window.google.maps.Polyline({
           map: gMapRef.current,
           path,
-          strokeColor: "#60a5fa",
-          strokeOpacity: 0.10,
-          strokeWeight: 10,
+          strokeColor: "#2563eb",
+          strokeOpacity: 0,
+          strokeWeight: 0,
           zIndex: 1,
           clickable: false,
         });
@@ -3034,7 +3034,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           map: gMapRef.current,
           path,
           strokeColor: "#2563eb",
-          strokeOpacity: 0.92,
+          strokeOpacity: 0.80,
           strokeWeight: 3,
           zIndex: 2,
           clickable: false,
@@ -3051,19 +3051,20 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       if (pinIconCacheRef.current[cacheKey]) return pinIconCacheRef.current[cacheKey];
 
       const color = isDone ? "#22c55e" : "#2563eb";
-      const dark = isDone ? "#15803d" : "#1d4ed8";
-      const fs = label.length > 2 ? 8.5 : 10.5;
-      // Pin sólido, sin filtros, sin animación y con tamaño fijo. Optimizado para que Google Maps no lo reescale durante zoom.
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="40" viewBox="0 0 34 40">
-        <path d="M17 38s12-10.6 12-21A12 12 0 0 0 5 17c0 10.4 12 21 12 21z" fill="" stroke="rgba(255,255,255,.95)" stroke-width="1"/>
-        <circle cx="17" cy="17" r="9.4" fill="" opacity=".30"/>
-        <circle cx="17" cy="17" r="7.6" fill=""/>
-        <text x="17" y="20.5" text-anchor="middle" font-size="" font-weight="900" fill="white" font-family="Arial, sans-serif"></text>
+      const dark  = isDone ? "#16a34a" : "#1d4ed8";
+      const fs = label.length > 2 ? 9 : 11;
+      // MISMO CONCEPTO DEL MAPA ADMIN: pin azul numerado, sólido, tamaño fijo.
+      // Sin animación, sin pulso, sin CSS filter, sin círculo de precisión y sin dependencia del zoom.
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="46" viewBox="0 0 40 46">
+        <path d="M20 44s14-12.4 14-24A14 14 0 0 0 6 20c0 11.6 14 24 14 24z" fill="${color}" stroke="rgba(255,255,255,.96)" stroke-width="1.4"/>
+        <circle cx="20" cy="20" r="10.4" fill="${dark}" opacity=".92"/>
+        <circle cx="20" cy="20" r="13" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1"/>
+        <text x="20" y="24" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
       </svg>`;
       const icon = {
         url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-        scaledSize: new window.google.maps.Size(34, 40),
-        anchor: new window.google.maps.Point(17, 38),
+        scaledSize: new window.google.maps.Size(40, 46),
+        anchor: new window.google.maps.Point(20, 44),
       };
       pinIconCacheRef.current[cacheKey] = icon;
       return icon;
