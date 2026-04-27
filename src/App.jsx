@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V12 PROD POLISH: modal app, GPS realtime, borrar historial y branding mensajería.
+// V15 UBER MAP STABLE: mapa mensajero sin parpadeo, pines fijos y modales internos.
 
 const DELIVERIES = [];
 
@@ -2603,6 +2603,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const mapRef   = useRef(null);
   const gMapRef  = useRef(null);
   const markersRef = useRef([]);
+  const stopMarkersRef = useRef({}); // markers persistentes: no recrear en zoom/polling
+  const routeLinesRef = useRef({ glow:null, core:null });
+  const mapUserInteractingRef = useRef(false);
   const routeFitKeyRef = useRef(null); // evita re-centrar mapa mientras el mensajero hace zoom
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
@@ -2983,6 +2986,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           {elementType:"labels.text.stroke",stylers:[{color:"#ffffff"}]},
         ],
       });
+      gMapRef.current.addListener("dragstart", () => { mapUserInteractingRef.current = true; });
+      gMapRef.current.addListener("zoom_changed", () => { mapUserInteractingRef.current = true; });
+      gMapRef.current.addListener("idle", () => {
+        window.setTimeout(() => { mapUserInteractingRef.current = false; }, 350);
+      });
     });
   }, []);
 
@@ -3000,90 +3008,135 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
   // -- Actualizar marcadores cuando cambian paradas ------------------------------
   useEffect(() => {
-    if (!gMapRef.current) return;
-    markersRef.current.forEach(m => { try { m.setMap(null); } catch(e){} });
-    markersRef.current = [];
+    if (!gMapRef.current || !window.google) return;
     const validStops = stops.filter(s => s.lat && s.lng);
-    if (!validStops.length) return;
-    const bounds = new window.google.maps.LatLngBounds();
-    const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.navStatus!=="visited");
 
-    // ── Draw glow polyline first (so markers render on top) ──
-    const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
-    if (ordered.length > 1) {
-      // Outer glow line (wide, low opacity)
-      const glowLine = new window.google.maps.Polyline({
-        map: gMapRef.current,
-        path: ordered.map(s=>({lat:s.lat,lng:s.lng})),
-        strokeColor: "#60a5fa",
-        strokeOpacity: 0.18,
-        strokeWeight: 14,
-        zIndex: 1,
-      });
-      // Core bright line
-      const coreLine = new window.google.maps.Polyline({
-        map: gMapRef.current,
-        path: ordered.map(s=>({lat:s.lat,lng:s.lng})),
-        strokeColor: "#93c5fd",
-        strokeOpacity: 0.9,
-        strokeWeight: 2.5,
-        zIndex: 2,
-        icons: [{
-          icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.2, strokeColor:"#bfdbfe", strokeWeight:1.5, fillColor:"#bfdbfe", fillOpacity:1 },
-          offset: "100%",
-          repeat: "120px"
-        }],
-      });
-      markersRef.current.push(glowLine, coreLine);
+    // Sin paradas: limpiar todo una sola vez.
+    if (!validStops.length) {
+      Object.values(stopMarkersRef.current || {}).forEach((m) => { try { m.setMap(null); } catch(e){} });
+      stopMarkersRef.current = {};
+      Object.values(routeLinesRef.current || {}).forEach((l) => { try { l?.setMap(null); } catch(e){} });
+      routeLinesRef.current = { glow:null, core:null };
+      markersRef.current = [];
+      routeFitKeyRef.current = null;
+      return;
     }
 
-    // ── Pines premium unificados estilo admin: azul numerado, verde si visitado ──
-    validStops.forEach(stop => {
+    const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
+    const path = ordered.map(s=>({lat:s.lat,lng:s.lng}));
+
+    // Líneas persistentes: actualizar path, NO destruir/recrear en cada polling.
+    if (ordered.length > 1) {
+      if (!routeLinesRef.current.glow) {
+        routeLinesRef.current.glow = new window.google.maps.Polyline({
+          map: gMapRef.current,
+          path,
+          strokeColor: "#60a5fa",
+          strokeOpacity: 0.10,
+          strokeWeight: 10,
+          zIndex: 1,
+          clickable: false,
+        });
+      } else {
+        routeLinesRef.current.glow.setPath(path);
+      }
+      if (!routeLinesRef.current.core) {
+        routeLinesRef.current.core = new window.google.maps.Polyline({
+          map: gMapRef.current,
+          path,
+          strokeColor: "#2563eb",
+          strokeOpacity: 0.92,
+          strokeWeight: 3,
+          zIndex: 2,
+          clickable: false,
+        });
+      } else {
+        routeLinesRef.current.core.setPath(path);
+      }
+    }
+
+    const makeFixedPinIcon = (stop) => {
       const isDone = stop.navStatus === "visited";
       const color = isDone ? "#22c55e" : "#2563eb";
-      const dark = isDone ? "#16a34a" : "#1d4ed8";
+      const dark = isDone ? "#15803d" : "#1d4ed8";
       const label = String(stop.stopNum || "?");
       const fs = label.length > 2 ? 9 : 11;
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="50" viewBox="0 0 44 50">
+      // SVG sin animaciones ni filtros pesados: tamaño fijo y estable en zoom.
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="48" viewBox="0 0 42 48">
         <defs>
-          <filter id="s" x="-40%" y="-25%" width="180%" height="180%">
-            <feDropShadow dx="0" dy="7" stdDeviation="5" flood-color="${color}" flood-opacity=".38"/>
-          </filter>
-          <linearGradient id="g" x1="10" y1="5" x2="34" y2="45" gradientUnits="userSpaceOnUse">
+          <linearGradient id="g" x1="8" y1="4" x2="34" y2="46" gradientUnits="userSpaceOnUse">
             <stop stop-color="#60a5fa"/>
-            <stop offset=".55" stop-color="${color}"/>
+            <stop offset=".58" stop-color="${color}"/>
             <stop offset="1" stop-color="${dark}"/>
           </linearGradient>
         </defs>
-        <g filter="url(#s)">
-          <path d="M22 47s15-13.5 15-26A15 15 0 0 0 7 21c0 12.5 15 26 15 26z" fill="url(#g)"/>
-          <circle cx="22" cy="21" r="12" fill="rgba(3,7,18,.22)" stroke="rgba(255,255,255,.45)" stroke-width="1.5"/>
-          <text x="22" y="25" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
-        </g>
+        <path d="M21 46s14-12.7 14-25A14 14 0 0 0 7 21c0 12.3 14 25 14 25z" fill="url(#g)" stroke="rgba(255,255,255,.8)" stroke-width="1.2"/>
+        <circle cx="21" cy="20.5" r="10.7" fill="rgba(3,7,18,.22)" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>
+        <text x="21" y="24.4" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
       </svg>`;
+      return {
+        url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+        scaledSize: new window.google.maps.Size(42, 48),
+        anchor: new window.google.maps.Point(21, 45),
+      };
+    };
 
-      const marker = new window.google.maps.Marker({
-        map: gMapRef.current,
-        position: { lat: stop.lat, lng: stop.lng },
-        title: `#${stop.stopNum} ${stop.client || ""}`,
-        zIndex: isDone ? 5 : 20,
-        optimized: true,
-        icon: {
-          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-          scaledSize: new window.google.maps.Size(44, 50),
-          anchor: new window.google.maps.Point(22, 47),
-        },
-      });
-      marker.addListener("click", () => {
-        setSelStop(stop);
-        setMapPinPopup(stop);
-      });
-      markersRef.current.push(marker);
-      bounds.extend({ lat: stop.lat, lng: stop.lng });
+    const bounds = new window.google.maps.LatLngBounds();
+    const seen = new Set();
+
+    validStops.forEach((stop, idx) => {
+      const key = String(stop.id || stop.tracking || stop.stopNum || idx);
+      seen.add(key);
+      const pos = { lat: stop.lat, lng: stop.lng };
+      const statusKey = `${stop.navStatus || "pending"}:${stop.stopNum || idx}`;
+      let marker = stopMarkersRef.current[key];
+
+      if (!marker) {
+        marker = new window.google.maps.Marker({
+          map: gMapRef.current,
+          position: pos,
+          title: `#${stop.stopNum} ${stop.client || ""}`,
+          zIndex: stop.navStatus === "visited" ? 5 : 20,
+          optimized: true,
+          icon: makeFixedPinIcon(stop),
+        });
+        marker.__rdStatusKey = statusKey;
+        marker.addListener("click", () => {
+          setSelStop(stop);
+          setMapPinPopup(stop);
+        });
+        stopMarkersRef.current[key] = marker;
+      } else {
+        const current = marker.getPosition?.();
+        if (!current || Math.abs(current.lat() - stop.lat) > 0.000001 || Math.abs(current.lng() - stop.lng) > 0.000001) {
+          marker.setPosition(pos);
+        }
+        marker.setTitle(`#${stop.stopNum} ${stop.client || ""}`);
+        marker.setZIndex(stop.navStatus === "visited" ? 5 : 20);
+        if (marker.__rdStatusKey !== statusKey) {
+          marker.setIcon(makeFixedPinIcon(stop));
+          marker.__rdStatusKey = statusKey;
+        }
+      }
+      bounds.extend(pos);
     });
 
+    // Quitar markers que ya no pertenecen a la ruta, sin tocar los existentes.
+    Object.keys(stopMarkersRef.current).forEach((key) => {
+      if (!seen.has(key)) {
+        try { stopMarkersRef.current[key].setMap(null); } catch(e) {}
+        delete stopMarkersRef.current[key];
+      }
+    });
+
+    markersRef.current = [
+      ...Object.values(stopMarkersRef.current),
+      routeLinesRef.current.glow,
+      routeLinesRef.current.core,
+    ].filter(Boolean);
+
     const fitKey = `${lastSentAt.current || ""}|${validStops.length}|${validStops.map(s => `${s.lat},${s.lng}`).join("|")}`;
-    if (routeFitKeyRef.current !== fitKey) {
+    if (routeFitKeyRef.current !== fitKey && !mapUserInteractingRef.current) {
       gMapRef.current.fitBounds(bounds, { top:24, right:24, bottom:24, left:24 });
       routeFitKeyRef.current = fitKey;
     }
@@ -3415,7 +3468,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ MAP SECTION — solo en tab mapa ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
-        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"auto" }}/>
+        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"none", willChange:"transform" }}/>
 
         {/* map controls bottom-right */}
         <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
@@ -9251,13 +9304,26 @@ const V5Card = ({title,value,sub,icon,color}) => <div style={{background:`linear
 const routeStatsV5 = (routesObj) => { const arr=Object.values(routesObj||{}).filter(Boolean); const stops=arr.flatMap(r=>r.stops||[]); return { active:arr.length, stops:stops.length, visited:stops.filter(s=>s.navStatus==='visited').length, pending:stops.filter(s=>s.navStatus!=='visited').length }; };
 const AdminRoutesV5 = ({ routes }) => {
   const [history,setHistory]=useState([]), [active,setActive]=useState(routes||{}), [selected,setSelected]=useState(null), [query,setQuery]=useState('');
+  const [routeDeleteModal, setRouteDeleteModal] = useState(null);
+  const [routeToast, setRouteToast] = useState(null);
   const mapRef=useRef(null), gMapRef=useRef(null), markersRef=useRef([]);
   const loadRoutesV5 = useCallback(async()=>{ const [h,a]=await Promise.all([FB.get(RD.path("routeHistory")),FB.get(RD.path("routes"))]); const activeData=a||{}; setActive(activeData); const all={}; Object.values(h||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]=r}); Object.values(activeData||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]={...r,isActive:true}}); setHistory(Object.values(all).sort((x,y)=>new Date(y.sentAt||0)-new Date(x.sentAt||0))); },[]);
-  const deleteHistoryRoute = async (r) => { if(!r || r.isActive) return; const ok=window.confirm(`Eliminar del historial: ${r.routeName||"Ruta sin nombre"}?`); if(!ok) return; const key=r.routeId||`${r.driverId}_${r.sentAt}`; await FB.remove(RD.path(`routeHistory/${key}`)); if(selected===r) setSelected(null); await loadRoutesV5(); };
+  const deleteHistoryRoute = async (r) => { if(!r || r.isActive) return; setRouteDeleteModal(r); };
+  const confirmDeleteHistoryRoute = async () => {
+    const r = routeDeleteModal;
+    if(!r || r.isActive) return;
+    const key=r.routeId||`${r.driverId}_${r.sentAt}`;
+    await FB.remove(RD.path(`routeHistory/${key}`));
+    if(selected===r) setSelected(null);
+    setRouteDeleteModal(null);
+    setRouteToast({ title:'Ruta eliminada', message:'La ruta fue eliminada del historial correctamente.' });
+    window.setTimeout(()=>setRouteToast(null), 2800);
+    await loadRoutesV5();
+  };
   useEffect(()=>{ loadRoutesV5(); const t=setInterval(loadRoutesV5,6000); return()=>clearInterval(t); },[loadRoutesV5]);
   useEffect(()=>{ if(!selected) return; loadGoogleMaps().then(()=>{ if(!mapRef.current) return; if(!gMapRef.current){ gMapRef.current=new window.google.maps.Map(mapRef.current,{center:{lat:DEPOT.lat,lng:DEPOT.lng},zoom:12,disableDefaultUI:true,zoomControl:true,zoomControlOptions:{position:window.google.maps.ControlPosition.RIGHT_BOTTOM},styles:[{elementType:'geometry',stylers:[{color:'#07101b'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#14243a'}]},{featureType:'road.highway',elementType:'geometry',stylers:[{color:'#1b3658'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#03070d'}]},{featureType:'poi',stylers:[{visibility:'off'}]},{elementType:'labels.text.fill',stylers:[{color:'#5d708d'}]},{elementType:'labels.text.stroke',stylers:[{color:'#07101b'}]}]}); } markersRef.current.forEach(m=>{try{m.setMap(null)}catch(e){}}); markersRef.current=[]; const stops=(selected.stops||[]).filter(s=>s.lat&&s.lng).sort((a,b)=>(a.stopNum||0)-(b.stopNum||0)); const bounds=new window.google.maps.LatLngBounds(); const depotMarker=new window.google.maps.Marker({map:gMapRef.current,position:{lat:DEPOT.lat,lng:DEPOT.lng},title:'Base / DEPOT',icon:{url:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect x="7" y="7" width="32" height="32" rx="12" fill="#2563eb" stroke="white" stroke-width="2"/><path d="M15 29V18l8-5 8 5v11" fill="none" stroke="white" stroke-width="2"/><path d="M20 29v-7h6v7" fill="none" stroke="white" stroke-width="2"/></svg>`),scaledSize:new window.google.maps.Size(46,46),anchor:new window.google.maps.Point(23,23)}}); markersRef.current.push(depotMarker); bounds.extend({lat:DEPOT.lat,lng:DEPOT.lng}); if(stops.length>1){const line=new window.google.maps.Polyline({map:gMapRef.current,path:[{lat:DEPOT.lat,lng:DEPOT.lng},...stops.map(s=>({lat:s.lat,lng:s.lng})),{lat:DEPOT.lat,lng:DEPOT.lng}],strokeColor:'#3b82f6',strokeOpacity:.8,strokeWeight:3}); markersRef.current.push(line);} stops.forEach(stop=>{ const done=stop.navStatus==='visited'; const color=done?'#22c55e':'#3b82f6'; const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="44" height="50" viewBox="0 0 44 50"><defs><filter id="s"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="${color}" flood-opacity=".35"/></filter></defs><g filter="url(#s)"><path d="M22 47s15-13 15-26A15 15 0 0 0 7 21c0 13 15 26 15 26z" fill="${color}"/><circle cx="22" cy="21" r="11" fill="#07101b" opacity=".28"/><text x="22" y="25" text-anchor="middle" font-size="11" font-weight="900" fill="white" font-family="Arial">${stop.stopNum||''}</text></g></svg>`; const marker=new window.google.maps.Marker({map:gMapRef.current,position:{lat:stop.lat,lng:stop.lng},title:`#${stop.stopNum} ${stop.client||''}`,icon:{url:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(44,50),anchor:new window.google.maps.Point(22,47)}}); markersRef.current.push(marker); bounds.extend({lat:stop.lat,lng:stop.lng}); }); if(stops.length) gMapRef.current.fitBounds(bounds,{top:60,right:60,bottom:60,left:60}); }); },[selected]);
   const stats=routeStatsV5(active); const filtered=history.filter(r=>!query||`${r.routeName||''} ${r.driverName||''} ${(r.stops||[]).map(s=>`${s.client} ${s.tracking} ${s.displayAddr||s.rawAddr}`).join(' ')}`.toLowerCase().includes(query.toLowerCase()));
-  return <div style={{flex:1,display:'flex',flexDirection:'column',background:v5.bg,color:v5.text,overflow:'hidden'}}><div style={{padding:24,borderBottom:`1px solid ${v5.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><div><div style={{color:v5.blue,fontSize:11,fontWeight:1000,letterSpacing:'2px',textTransform:'uppercase'}}>Operación logística</div><h1 style={{margin:'6px 0 0',fontSize:28,fontWeight:1000,letterSpacing:'-.8px'}}>Rutas</h1></div><div style={{display:'flex',alignItems:'center',gap:8,background:v5.panel,border:`1px solid ${v5.line}`,borderRadius:14,padding:'0 14px',minWidth:340}}><V5Icon type="search" size={16} color={v5.muted}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar ruta, mensajero, cliente o tracking..." style={{background:'transparent',border:0,outline:0,color:v5.text,fontSize:13,width:'100%'}}/></div></div><div style={{padding:22,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14}}><V5Card title="Rutas activas" value={stats.active} sub="En campo ahora" color={v5.blue} icon={<V5Icon type="route"/>}/><V5Card title="Paradas" value={stats.stops} sub="Asignadas hoy" color={v5.violet} icon={<V5Icon type="pin"/>}/><V5Card title="Visitadas" value={stats.visited} sub="Progreso interno" color={v5.green} icon={<V5Icon type="chart"/>}/><V5Card title="Pendientes" value={stats.pending} sub="Por visitar" color={v5.amber} icon={<V5Icon type="route"/>}/></div><div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'420px 1fr',gap:0,borderTop:`1px solid ${v5.line}`}}><div style={{borderRight:`1px solid ${v5.line}`,overflow:'auto'}}>{filtered.length===0?<div style={{padding:42,textAlign:'center',color:v5.muted}}>No hay rutas para mostrar</div>:filtered.map((r,i)=>{const st=routeStatsV5({x:r});const sel=selected===r;return <button key={(r.routeId||r.sentAt||i)+i} onClick={()=>setSelected(r)} style={{width:'100%',textAlign:'left',padding:18,border:0,borderBottom:`1px solid ${v5.line}`,background:sel?'#0d1f35':'transparent',cursor:'pointer',color:v5.text}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><div style={{fontSize:15,fontWeight:1000}}>{r.routeName||'Ruta sin nombre'}</div><div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:10,fontWeight:1000,padding:'5px 9px',borderRadius:999,background:r.isActive?'rgba(34,197,94,.12)':'rgba(148,163,184,.08)',color:r.isActive?v5.green:v5.muted}}>{r.isActive?'ACTIVA':'HISTORIAL'}</span>{!r.isActive&&<span onClick={(e)=>{e.stopPropagation();deleteHistoryRoute(r);}} title='Eliminar historial' style={{width:28,height:28,borderRadius:9,display:'grid',placeItems:'center',background:'rgba(239,68,68,.09)',border:'1px solid rgba(239,68,68,.22)',color:v5.red,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v5M14 11v5'/></svg></span>}</div></div><div style={{marginTop:7,color:v5.soft,fontSize:12}}>{r.driverName||'Sin mensajero'} · {(r.stops||[]).length} paradas</div><div style={{marginTop:12,height:7,background:'#06101d',borderRadius:999,overflow:'hidden'}}><div style={{height:'100%',width:`${st.stops?Math.round(st.visited/st.stops*100):0}%`,background:`linear-gradient(90deg,${v5.blue},${v5.green})`}}/></div><div style={{display:'flex',gap:12,marginTop:10,color:v5.muted,fontSize:11,fontWeight:800}}><span>{st.visited} visitadas</span><span>{st.pending} pendientes</span></div></button>})}</div><div style={{position:'relative',minHeight:0}}>{selected?<><div ref={mapRef} style={{position:'absolute',inset:0}}/><div style={{position:'absolute',top:18,left:18,background:'rgba(5,10,18,.86)',border:`1px solid ${v5.line}`,borderRadius:16,padding:14,backdropFilter:'blur(14px)'}}><div style={{fontWeight:1000,fontSize:15}}>{selected.routeName||'Ruta'}</div><div style={{color:v5.soft,fontSize:12,marginTop:4}}>{selected.driverName||'Mensajero'} · {(selected.stops||[]).length} paradas</div></div></>:<div style={{height:'100%',display:'grid',placeItems:'center',color:v5.muted}}>Selecciona una ruta para ver mapa y pines premium</div>}</div></div></div>;
+  return <div style={{flex:1,display:'flex',flexDirection:'column',background:v5.bg,color:v5.text,overflow:'hidden'}}><div style={{padding:24,borderBottom:`1px solid ${v5.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><div><div style={{color:v5.blue,fontSize:11,fontWeight:1000,letterSpacing:'2px',textTransform:'uppercase'}}>Operación logística</div><h1 style={{margin:'6px 0 0',fontSize:28,fontWeight:1000,letterSpacing:'-.8px'}}>Rutas</h1></div><div style={{display:'flex',alignItems:'center',gap:8,background:v5.panel,border:`1px solid ${v5.line}`,borderRadius:14,padding:'0 14px',minWidth:340}}><V5Icon type="search" size={16} color={v5.muted}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar ruta, mensajero, cliente o tracking..." style={{background:'transparent',border:0,outline:0,color:v5.text,fontSize:13,width:'100%'}}/></div></div><div style={{padding:22,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14}}><V5Card title="Rutas activas" value={stats.active} sub="En campo ahora" color={v5.blue} icon={<V5Icon type="route"/>}/><V5Card title="Paradas" value={stats.stops} sub="Asignadas hoy" color={v5.violet} icon={<V5Icon type="pin"/>}/><V5Card title="Visitadas" value={stats.visited} sub="Progreso interno" color={v5.green} icon={<V5Icon type="chart"/>}/><V5Card title="Pendientes" value={stats.pending} sub="Por visitar" color={v5.amber} icon={<V5Icon type="route"/>}/></div><div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'420px 1fr',gap:0,borderTop:`1px solid ${v5.line}`}}><div style={{borderRight:`1px solid ${v5.line}`,overflow:'auto'}}>{filtered.length===0?<div style={{padding:42,textAlign:'center',color:v5.muted}}>No hay rutas para mostrar</div>:filtered.map((r,i)=>{const st=routeStatsV5({x:r});const sel=selected===r;return <button key={(r.routeId||r.sentAt||i)+i} onClick={()=>setSelected(r)} style={{width:'100%',textAlign:'left',padding:18,border:0,borderBottom:`1px solid ${v5.line}`,background:sel?'#0d1f35':'transparent',cursor:'pointer',color:v5.text}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><div style={{fontSize:15,fontWeight:1000}}>{r.routeName||'Ruta sin nombre'}</div><div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:10,fontWeight:1000,padding:'5px 9px',borderRadius:999,background:r.isActive?'rgba(34,197,94,.12)':'rgba(148,163,184,.08)',color:r.isActive?v5.green:v5.muted}}>{r.isActive?'ACTIVA':'HISTORIAL'}</span>{!r.isActive&&<span onClick={(e)=>{e.stopPropagation();deleteHistoryRoute(r);}} title='Eliminar historial' style={{width:28,height:28,borderRadius:9,display:'grid',placeItems:'center',background:'rgba(239,68,68,.09)',border:'1px solid rgba(239,68,68,.22)',color:v5.red,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v5M14 11v5'/></svg></span>}</div></div><div style={{marginTop:7,color:v5.soft,fontSize:12}}>{r.driverName||'Sin mensajero'} · {(r.stops||[]).length} paradas</div><div style={{marginTop:12,height:7,background:'#06101d',borderRadius:999,overflow:'hidden'}}><div style={{height:'100%',width:`${st.stops?Math.round(st.visited/st.stops*100):0}%`,background:`linear-gradient(90deg,${v5.blue},${v5.green})`}}/></div><div style={{display:'flex',gap:12,marginTop:10,color:v5.muted,fontSize:11,fontWeight:800}}><span>{st.visited} visitadas</span><span>{st.pending} pendientes</span></div></button>})}</div><div style={{position:'relative',minHeight:0}}>{selected?<><div ref={mapRef} style={{position:'absolute',inset:0}}/><div style={{position:'absolute',top:18,left:18,background:'rgba(5,10,18,.86)',border:`1px solid ${v5.line}`,borderRadius:16,padding:14,backdropFilter:'blur(14px)'}}><div style={{fontWeight:1000,fontSize:15}}>{selected.routeName||'Ruta'}</div><div style={{color:v5.soft,fontSize:12,marginTop:4}}>{selected.driverName||'Mensajero'} · {(selected.stops||[]).length} paradas</div></div></>:<div style={{height:'100%',display:'grid',placeItems:'center',color:v5.muted}}>Selecciona una ruta para ver mapa y pines premium</div>}</div></div>{routeDeleteModal&&<div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,.64)',backdropFilter:'blur(8px)',display:'grid',placeItems:'center'}}><div style={{width:420,maxWidth:'92vw',background:'linear-gradient(145deg,#0b1626,#07101b)',border:`1px solid ${v5.line}`,borderRadius:24,padding:24,boxShadow:'0 30px 90px rgba(0,0,0,.65)'}}><div style={{width:48,height:48,borderRadius:16,background:'rgba(239,68,68,.12)',border:'1px solid rgba(239,68,68,.28)',display:'grid',placeItems:'center',color:v5.red,marginBottom:16}}><svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v5M14 11v5'/></svg></div><div style={{fontSize:22,fontWeight:1000,color:v5.text,marginBottom:8}}>Eliminar ruta del historial</div><div style={{fontSize:13,lineHeight:1.55,color:v5.soft,marginBottom:20}}>Esta acción eliminará <b style={{color:v5.text}}>{routeDeleteModal.routeName||'Ruta sin nombre'}</b> del historial de esta oficina. No afecta rutas activas.</div><div style={{display:'flex',gap:10,justifyContent:'flex-end'}}><button onClick={()=>setRouteDeleteModal(null)} style={{border:`1px solid ${v5.line}`,background:'transparent',color:v5.soft,borderRadius:14,padding:'11px 15px',fontWeight:900,cursor:'pointer'}}>Cancelar</button><button onClick={confirmDeleteHistoryRoute} style={{border:0,background:v5.red,color:'white',borderRadius:14,padding:'11px 15px',fontWeight:1000,cursor:'pointer'}}>Eliminar</button></div></div></div>}{routeToast&&<div style={{position:'fixed',right:22,bottom:22,zIndex:9998,background:'linear-gradient(145deg,#062015,#07101b)',border:'1px solid rgba(34,197,94,.28)',borderRadius:18,padding:'14px 16px',boxShadow:'0 18px 55px rgba(0,0,0,.5)',color:v5.text}}><div style={{fontWeight:1000,fontSize:14}}>{routeToast.title}</div><div style={{fontSize:12,color:v5.soft,marginTop:3}}>{routeToast.message}</div></div>}</div>;
 };
 const AdminMotorV5 = () => {
   return (
