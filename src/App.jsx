@@ -30,6 +30,7 @@ const DEFAULT_MENSAJEROS = [
 ];
 
 const USERS = [
+  { id:"SUPER-01", name:"Super Admin Rap Drive", email:"super@rapdrive.do", password:"RapDriveSuper2026@", role:"super_admin", avatar:"SA", color:"#8b5cf6" },
   { id:"U-01", name:"Admin Rap Drive",         email:"admin@rapdrive.do",     password:"Rapcargo2026@", role:"admin",  avatar:"AD",      color:"#3b82f6" },
   { id:"U-02", name:"JUAN MOJICA",             email:"jmojica@rapdrive.do",   password:"driver123",     role:"driver", avatar:"JM",   color:"#10b981", driverId:"M-01" },
   { id:"U-03", name:"JUAN ELIAS RODRIGUEZ",    email:"jelias@rapdrive.do",    password:"driver123",     role:"driver", avatar:"JE",     color:"#10b981", driverId:"M-02" },
@@ -40,6 +41,7 @@ const USERS = [
 ];
 
 const ROLE_CONFIG = {
+  super_admin: { label:"Super Admin", color:"#8b5cf6", canSeeAnalytics:true, canManageDrivers:true, canDeleteDeliveries:true, canExport:true },
   admin:  { label:"Administrador", color:"#3b82f6", canSeeAnalytics:true, canManageDrivers:true, canDeleteDeliveries:true, canExport:true  },
   driver: { label:"Mensajero",     color:"#10b981", canSeeAnalytics:false,canManageDrivers:false,canDeleteDeliveries:false,canExport:false },
 };
@@ -942,7 +944,7 @@ const PageRoutes = () => {
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Cliente primero, dirección debajo */}
-                      <div style={{ fontSize:12.5, fontWeight:700, color: isDone?"#10b981": isProb?"#ef4444":"#e2e8f0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:2 }}>
+                      <div style={{ fontSize:12.5, fontWeight:700, color: isDone?"#10b981":"#e2e8f0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:2 }}>
                         {stop.client || "—"}
                         {stop.phone && <span style={{ fontSize:11, color:"#4b5563", fontWeight:400 }}> · {stop.phone}</span>}
                       </div>
@@ -4331,6 +4333,82 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
   );
 };
 
+// --- PAGE: SUPER ADMIN --------------------------------------------------------
+
+const PageSuperAdmin = ({ currentUser, onLogout }) => {
+  const [offices, setOffices] = useState({});
+  const [users, setUsers] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [form, setForm] = useState({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
+
+  const load = useCallback(async () => {
+    const [of, rootUsers] = await Promise.all([FB.get("oficinas"), FB.get("users")]);
+    setOffices(of && typeof of === "object" ? of : {});
+    const allUsers = Object.values(rootUsers || {}).filter(Boolean);
+    const merged = [...USERS];
+    allUsers.forEach(u => { if (u?.id && !merged.find(x => x.id === u.id)) merged.push(u); });
+    setUsers(merged);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const slugify = (txt) => (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o })).sort((a,b) => (a.nombre||a.id).localeCompare(b.nombre||b.id));
+  const stats = { total: officeList.length, active: officeList.filter(o => o.activa !== false).length, disabled: officeList.filter(o => o.activa === false).length, admins: users.filter(u => u.role === "admin" && u.officeId).length };
+  const inp = { background:"#070d16", border:"1px solid #172238", borderRadius:12, padding:"12px 14px", color:"#e2e8f0", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", width:"100%", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)" };
+  const label = { fontSize:11, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:800, letterSpacing:"1.1px", marginBottom:7, textTransform:"uppercase" };
+  const card = { background:"linear-gradient(180deg,#0b1320,#070d16)", border:"1px solid #172238", borderRadius:22, boxShadow:"0 24px 70px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)" };
+
+  const saveOffice = async () => {
+    const nombre = form.nombre.trim();
+    const id = slugify(form.codigo || nombre);
+    if (!nombre || !id) { setMsg("Escribe el nombre de la oficina."); return; }
+    if (!form.adminEmail.trim() || !form.adminPassword.trim()) { setMsg("Crea el login del admin de esta oficina."); return; }
+    setSaving(true); setMsg("");
+    const now = new Date().toISOString();
+    const office = { id, nombre, codigo:id, activa:true, responsable:form.responsable.trim(), telefono:form.telefono.trim(), createdAt:now, createdBy:currentUser?.email||"super_admin", ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 } };
+    const admin = { id:`OA-${id}-${Date.now()}`, name:form.adminName.trim()||`Admin ${nombre}`, email:form.adminEmail.trim().toLowerCase(), password:form.adminPassword, role:"admin", avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(), color:"#3b82f6", officeId:id, officeName:nombre, active:true };
+    await Promise.all([FB.set(`oficinas/${id}`, office), FB.set(`oficinas/${id}/users/${admin.id}`, admin), FB.set(`users/${admin.id}`, admin)]);
+    if (!USERS.find(u => u.id === admin.id)) USERS.push(admin);
+    setForm({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
+    setMsg(`✓ Oficina ${nombre} creada con admin ${admin.email}`);
+    await load(); setSelected(id); setSaving(false);
+  };
+  const toggleOffice = async (id, next) => { await FB.set(`oficinas/${id}/activa`, next); await load(); setMsg(next ? "✓ Oficina habilitada" : "⏸ Oficina deshabilitada"); };
+  const deleteOffice = async (id) => { const o = offices[id]; if (!confirm(`¿Eliminar la oficina ${o?.nombre || id}?`)) return; await FB.set(`oficinas/${id}`, null); await load(); if (selected === id) setSelected(null); setMsg("Oficina eliminada"); };
+  const selectedOffice = selected ? offices[selected] : null;
+  const selectedAdmins = users.filter(u => u.officeId === selected && u.role === "admin");
+
+  return (
+    <div style={{position:"fixed", inset:0, background:"#050912", color:"#f8fafc", fontFamily:"'Inter',sans-serif", overflow:"hidden"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap'); *{box-sizing:border-box} *::-webkit-scrollbar{width:5px}*::-webkit-scrollbar-thumb{background:#1e293b;border-radius:8px}`}</style>
+      <div style={{position:"absolute", inset:0, background:"radial-gradient(circle at 20% 10%,rgba(139,92,246,.18),transparent 30%),radial-gradient(circle at 90% 20%,rgba(59,130,246,.13),transparent 35%),linear-gradient(135deg,#050912,#07101e 55%,#050912)"}}/>
+      <div style={{position:"relative", zIndex:1, display:"flex", height:"100%"}}>
+        <aside style={{width:310, borderRight:"1px solid rgba(148,163,184,.12)", padding:24, background:"rgba(3,7,18,.62)", backdropFilter:"blur(18px)", overflow:"auto"}}>
+          <div style={{display:"flex", alignItems:"center", gap:13, marginBottom:28}}><div style={{width:48,height:48,borderRadius:16,background:"linear-gradient(135deg,#7c3aed,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:900,boxShadow:"0 18px 45px rgba(99,102,241,.35)"}}>SA</div><div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-.4px"}}>Super Admin</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>Control multi-oficina</div></div></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:22}}>{[["Oficinas",stats.total,"#60a5fa"],["Activas",stats.active,"#22c55e"],["Pausadas",stats.disabled,"#f97316"],["Admins",stats.admins,"#a78bfa"]].map(([t,v,c])=><div key={t} style={{...card,padding:14,borderRadius:16}}><div style={{fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:900,color:c}}>{v}</div><div style={{fontSize:10,color:"#64748b",fontWeight:800,letterSpacing:"1px",textTransform:"uppercase"}}>{t}</div></div>)}</div>
+          <div style={{fontSize:11,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.5px",margin:"8px 0 10px",textTransform:"uppercase"}}>Oficinas</div>
+          <div style={{display:"flex",flexDirection:"column",gap:9}}>{officeList.length===0&&<div style={{color:"#475569",fontSize:13,lineHeight:1.5,padding:14,border:"1px dashed #1e293b",borderRadius:16}}>Todavía no hay oficinas. Crea la primera desde el panel principal.</div>}{officeList.map(o=><button key={o.id} onClick={()=>setSelected(o.id)} style={{textAlign:"left",border:"1px solid "+(selected===o.id?"#334155":"#172238"),background:selected===o.id?"rgba(59,130,246,.10)":"rgba(15,23,42,.55)",borderRadius:16,padding:13,cursor:"pointer",color:"#e2e8f0"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}><div style={{fontSize:13,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.nombre}</div><span style={{fontSize:10,color:o.activa===false?"#fb923c":"#22c55e",fontWeight:900}}>{o.activa===false?"PAUSADA":"ACTIVA"}</span></div><div style={{fontSize:11,color:"#64748b",marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.ubicacionBase?.direccion || "Sin ubicación base"}</div></button>)}</div>
+          <button onClick={onLogout} style={{marginTop:24,width:"100%",padding:"12px 14px",borderRadius:14,border:"1px solid #1e293b",background:"rgba(15,23,42,.55)",color:"#94a3b8",fontWeight:800,cursor:"pointer"}}>Cerrar sesión</button>
+        </aside>
+        <main style={{flex:1, padding:28, overflow:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:20,marginBottom:22}}><div><div style={{fontSize:11,color:"#818cf8",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"2px",textTransform:"uppercase"}}>Rap Drive Enterprise</div><h1 style={{fontSize:34,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-1.2px",margin:"6px 0 8px"}}>Gestión de oficinas</h1><p style={{fontSize:14,color:"#94a3b8",maxWidth:720,lineHeight:1.6}}>Crea oficinas, asigna el acceso del administrador responsable y pausa operaciones por incumplimiento de pago o contrato finalizado.</p></div><div style={{...card,padding:"13px 16px",borderRadius:16,minWidth:220}}><div style={{fontSize:11,color:"#64748b",fontWeight:800,textTransform:"uppercase",letterSpacing:"1px"}}>Sesión actual</div><div style={{fontSize:14,fontWeight:800,marginTop:5}}>{currentUser?.email}</div></div></div>
+          {msg&&<div style={{marginBottom:16,padding:"13px 15px",borderRadius:14,background:msg.startsWith("✓")?"rgba(34,197,94,.10)":"rgba(59,130,246,.10)",border:"1px solid rgba(148,163,184,.14)",color:msg.startsWith("✓")?"#86efac":"#93c5fd",fontWeight:700}}>{msg}</div>}
+          <div style={{display:"grid",gridTemplateColumns:"minmax(420px,560px) minmax(420px,1fr)",gap:18,alignItems:"start"}}>
+            <section style={{...card,padding:22}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}><div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900}}>Nueva oficina</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>Crea la oficina y su admin en un solo paso.</div></div><div style={{width:42,height:42,borderRadius:14,background:"rgba(99,102,241,.14)",display:"flex",alignItems:"center",justifyContent:"center"}}>🏢</div></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:12}}><div><div style={label}>Nombre oficina</div><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={inp}/></div><div><div style={label}>Código</div><input value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={inp}/></div></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 170px",gap:12,marginTop:12}}><div><div style={label}>Responsable / contacto</div><input value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={inp}/></div><div><div style={label}>Teléfono</div><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={inp}/></div></div>
+              <div style={{marginTop:12}}><div style={label}>Ubicación base</div><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base / punto de salida" style={inp}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}><div><div style={label}>Latitud</div><input value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={inp}/></div><div><div style={label}>Longitud</div><input value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={inp}/></div></div>
+              <div style={{height:1,background:"#172238",margin:"20px 0"}}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><div style={label}>Nombre admin</div><input value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={inp}/></div><div><div style={label}>Correo admin</div><input value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={inp}/></div></div><div style={{marginTop:12}}><div style={label}>Contraseña inicial</div><input value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={inp}/></div><button onClick={saveOffice} disabled={saving} style={{marginTop:18,width:"100%",padding:"14px 16px",borderRadius:14,border:"none",background:saving?"#334155":"linear-gradient(135deg,#7c3aed,#2563eb)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:".5px",cursor:saving?"default":"pointer",boxShadow:"0 18px 45px rgba(37,99,235,.28)"}}>{saving?"GUARDANDO...":"CREAR OFICINA Y ADMIN"}</button></section>
+            <section style={{...card,padding:22,minHeight:520}}>{!selectedOffice?(<div style={{height:470,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",textAlign:"center",color:"#64748b"}}><div style={{fontSize:48,marginBottom:12}}>👈</div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#cbd5e1"}}>Selecciona una oficina</div><div style={{fontSize:13,marginTop:6}}>Aquí verás sus accesos, estado y ubicación base.</div></div>):(<><div style={{display:"flex",justifyContent:"space-between",gap:18,alignItems:"flex-start",marginBottom:18}}><div><div style={{fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:900}}>{selectedOffice.nombre}</div><div style={{fontSize:12,color:"#64748b",marginTop:5}}>ID: {selected}</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{padding:"10px 13px",borderRadius:12,border:"1px solid #1e293b",background:selectedOffice.activa===false?"rgba(34,197,94,.12)":"rgba(249,115,22,.12)",color:selectedOffice.activa===false?"#86efac":"#fdba74",fontWeight:900,cursor:"pointer"}}>{selectedOffice.activa===false?"Habilitar":"Deshabilitar"}</button><button onClick={()=>deleteOffice(selected)} style={{padding:"10px 13px",borderRadius:12,border:"1px solid rgba(239,68,68,.25)",background:"rgba(239,68,68,.08)",color:"#fca5a5",fontWeight:900,cursor:"pointer"}}>Eliminar</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>ESTADO</div><div style={{fontSize:16,fontWeight:900,color:selectedOffice.activa===false?"#fb923c":"#22c55e",marginTop:4}}>{selectedOffice.activa===false?"Pausada":"Activa"}</div></div><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>ADMINS</div><div style={{fontSize:16,fontWeight:900,marginTop:4}}>{selectedAdmins.length}</div></div><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>RESPONSABLE</div><div style={{fontSize:14,fontWeight:800,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedOffice.responsable||"—"}</div></div></div><div style={{background:"rgba(15,23,42,.42)",border:"1px solid #172238",borderRadius:18,padding:16,marginBottom:16}}><div style={label}>Ubicación base</div><div style={{fontSize:14,fontWeight:800}}>{selectedOffice.ubicacionBase?.direccion||"Sin dirección"}</div><div style={{fontSize:12,color:"#64748b",marginTop:5}}>Lat {selectedOffice.ubicacionBase?.lat||"—"} · Lng {selectedOffice.ubicacionBase?.lng||"—"}</div></div><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:900,margin:"14px 0 10px"}}>Admins de oficina</div><div style={{display:"flex",flexDirection:"column",gap:9}}>{selectedAdmins.length===0&&<div style={{fontSize:13,color:"#64748b",padding:14,border:"1px dashed #1e293b",borderRadius:16}}>No hay admins asignados.</div>}{selectedAdmins.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:15,padding:"12px 14px"}}><div><div style={{fontSize:14,fontWeight:900}}>{a.name}</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>{a.email}</div></div><span style={{fontSize:10,color:a.active===false?"#fb923c":"#22c55e",fontWeight:900}}>{a.active===false?"PAUSADO":"ACTIVO"}</span></div>)}</div></>)}</section>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
 // --- LOGIN SCREEN -------------------------------------------------------------
 
 const LoginScreen = ({ onLogin }) => {
@@ -4346,9 +4424,10 @@ const LoginScreen = ({ onLogin }) => {
   useEffect(() => {
     const loadFBUsers = async () => {
       try {
-        const [usersData, mensUsersData] = await Promise.all([
+        const [usersData, mensUsersData, officeData] = await Promise.all([
           FB.get("users"),
           FB.get("mens_users"),
+          FB.get("oficinas"),
         ]);
         if (usersData && typeof usersData === "object") {
           Object.values(usersData).forEach(u => {
@@ -4358,6 +4437,15 @@ const LoginScreen = ({ onLogin }) => {
         if (mensUsersData && typeof mensUsersData === "object") {
           Object.values(mensUsersData).forEach(u => {
             if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+          });
+        }
+        if (officeData && typeof officeData === "object") {
+          Object.values(officeData).forEach(of => {
+            if (of?.users && typeof of.users === "object") {
+              Object.values(of.users).forEach(u => {
+                if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
+              });
+            }
           });
         }
       } catch(e) { /* Firebase no disponible, usa USERS local */ }
@@ -4376,13 +4464,21 @@ const LoginScreen = ({ onLogin }) => {
       // Si no encontró, reintentar con Firebase directo (por si el useEffect aún no terminó)
       if (!user) {
         try {
-          const [usersData, mensUsersData] = await Promise.all([
+          const [usersData, mensUsersData, officeData] = await Promise.all([
             FB.get("users"),
             FB.get("mens_users"),
+            FB.get("oficinas"),
           ]);
+          const officeUsers = [];
+          if (officeData && typeof officeData === "object") {
+            Object.values(officeData).forEach(of => {
+              if (of?.users && typeof of.users === "object") officeUsers.push(...Object.values(of.users));
+            });
+          }
           const allFB = [
             ...Object.values(usersData || {}),
             ...Object.values(mensUsersData || {}),
+            ...officeUsers,
           ];
           user = allFB.find(u => u && u.email === email.trim().toLowerCase() && u.password === password);
           // Si encontró en Firebase, agrégalo a USERS local para futuras búsquedas
@@ -4390,6 +4486,17 @@ const LoginScreen = ({ onLogin }) => {
         } catch(e) {}
       }
       if (user) {
+        if ((user.role === "admin" || user.role === "driver") && user.officeId) {
+          try {
+            const office = await FB.get(`oficinas/${user.officeId}`);
+            if (!office || office.activa === false) {
+              setError("Esta oficina está deshabilitada. Contacta al Super Admin.");
+              setLoading(false);
+              return;
+            }
+            user.officeName = office.nombre || user.officeName;
+          } catch(e) {}
+        }
         setSuccess(true);
         try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
         setTimeout(() => onLogin(user), 700);
@@ -8632,7 +8739,7 @@ export default function RapDrive() {
     if (typeof window !== "undefined") { window.__rdRouteStore = window.__rdRouteStore || {}; window.__rdRouteStore[driverId] = route; LS.setRoute(driverId, route); }
   };
 
-  const handleLogin  = (user) => setCurrentUser(user);
+  const handleLogin  = (user) => { try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {} setCurrentUser(user); };
   const handleLogout = () => { setLogoutConfirm(false); try { sessionStorage.removeItem("rdSession"); } catch(e) {} setCurrentUser(null); };
 
   const [nav,setNav]=useState("dashboard");
@@ -8840,6 +8947,11 @@ export default function RapDrive() {
 
   const role = currentUser.role;
   const rc   = ROLE_CONFIG[role] || ROLE_CONFIG.driver;
+
+  // -- Panel Super Admin --
+  if (role === "super_admin") {
+    return <PageSuperAdmin currentUser={currentUser} onLogout={handleLogout}/>;
+  }
 
   // -- Panel mensajero --
   if (role === "driver") {
