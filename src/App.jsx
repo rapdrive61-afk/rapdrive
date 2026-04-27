@@ -240,6 +240,7 @@ const PageDashboard = () => {
   const gMapRef = useRef(null);
   const [searchVal, setSearchVal] = useState("");
   const [searching, setSearching] = useState(false);
+  const [localSuggestions, setLocalSuggestions] = useState([]);
   const [result, setResult] = useState(null); // { address, plusCode, lat, lng }
   const [mapReady, setMapReady] = useState(false);
   const searchRef = useRef(null);
@@ -451,10 +452,16 @@ const PageDashboard = () => {
   // Manual geocode search (for typed queries without autocomplete pick)
   const handleSearch = async () => {
     const q = searchVal.trim();
-    if (!q || !window.google) return;
+    if (!q) return;
     setSearching(true);
     setResult(null);
     try {
+      const local = searchLocalPlaces(q, 1);
+      if (local.length && local[0].score >= 55) {
+        selectLocalSuggestion(local[0]);
+        setSearching(false);
+        return;
+      }
       const geocoder = new window.google.maps.Geocoder();
       const res = await new Promise((ok, fail) =>
         geocoder.geocode({ address: q + ", República Dominicana", region: "DO" }, (r, s) =>
@@ -494,6 +501,25 @@ const PageDashboard = () => {
     navigator.clipboard?.writeText(txt).catch(() => {});
   };
 
+  const selectLocalSuggestion = (p) => {
+    setLocalSuggestions([]);
+    setSearchVal(p.display || p.name);
+    setResult({ address: p.display || (p.name + ", " + p.sector), plusCode: "RAPDRIVE LOCAL", lat: Number(p.lat).toFixed(6), lng: Number(p.lng).toFixed(6) });
+    if (gMapRef.current) {
+      gMapRef.current.panTo({ lat: p.lat, lng: p.lng });
+      gMapRef.current.setZoom(17);
+    }
+    if (markerRef.current) markerRef.current.setMap(null);
+    if (window.google && gMapRef.current) {
+      markerRef.current = new window.google.maps.Marker({
+        map: gMapRef.current,
+        position: { lat: p.lat, lng: p.lng },
+        animation: window.google.maps.Animation.DROP,
+        icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor:"#3b82f6", fillOpacity:1, strokeColor:"white", strokeWeight:2.5 },
+      });
+    }
+  };
+
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" }}>
       {/* Search bar overlay */}
@@ -504,13 +530,14 @@ const PageDashboard = () => {
             <input
               ref={inputRef}
               value={searchVal}
-              onChange={e => setSearchVal(e.target.value)}
+              onChange={e => { const v=e.target.value; setSearchVal(v); setLocalSuggestions(searchLocalPlaces(v, 7)); }}
+              onFocus={() => setLocalSuggestions(searchLocalPlaces(searchVal, 7))}
               onKeyDown={e => e.key === "Enter" && handleSearch()}
               placeholder="Buscar dirección en Rep. Dominicana..."
               style={{ flex:1, background:"transparent", border:"none", outline:"none", color:"#f1f5f9", fontSize:13, fontFamily:"'Inter',sans-serif", caretColor:"#3b82f6" }}
             />
             {searchVal && (
-              <button onClick={() => { setSearchVal(""); setResult(null); if(markerRef.current) markerRef.current.setMap(null); }}
+              <button onClick={() => { setSearchVal(""); setLocalSuggestions([]); setResult(null); if(markerRef.current) markerRef.current.setMap(null); }}
                 style={{ background:"none", border:"none", color:"#374151", cursor:"pointer", fontSize:15, padding:2, lineHeight:1 }}>✕</button>
             )}
             <button onClick={handleSearch} disabled={searching || !searchVal.trim()}
@@ -518,6 +545,21 @@ const PageDashboard = () => {
               {searching ? "..." : "Buscar"}
             </button>
           </div>
+          {localSuggestions.length > 0 && searchVal.trim().length > 1 && (
+            <div style={{ borderTop:"1px solid #131f30", maxHeight:285, overflow:"auto", background:"rgba(6,11,16,0.98)" }}>
+              {localSuggestions.map((p, i) => (
+                <button key={p.id + i} onClick={() => selectLocalSuggestion(p)}
+                  style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"transparent", border:"none", borderBottom:"1px solid #0d1420", cursor:"pointer", textAlign:"left" }}>
+                  <span style={{ width:30, height:30, borderRadius:10, background:p.type==="sector"?"rgba(34,197,94,.14)":"rgba(59,130,246,.14)", color:p.type==="sector"?"#22c55e":"#60a5fa", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>⌖</span>
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, color:"#e2e8f0", fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div>
+                    <div style={{ fontSize:10.5, color:"#64748b", marginTop:2 }}>{p.sector} · {p.city || "Santo Domingo"} · {p.confidence}%</div>
+                  </span>
+                  <span style={{ fontSize:10, color:"#3b82f6", fontWeight:800 }}>LOCAL</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Result card */}
           {result && (
@@ -5093,6 +5135,14 @@ const geocodeWithGoogle = async (rawAddress) => {
   // ── CAPA 0B: Cache en-memoria (evita llamadas repetidas a Google)
   if (_geoCache.has(cacheKey)) return _geoCache.get(cacheKey);
 
+  // ── CAPA 0C: Motor local Rap Drive (500+ puntos SDO/DN + sinónimos) ───────
+  const localHits = searchLocalPlaces(rawAddress, 5);
+  if (localHits.length && localHits[0].score >= 118) {
+    const out = localPlaceToGeo(localHits[0], rawAddress);
+    _geoCache.set(cacheKey, out);
+    return out;
+  }
+
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
   const queries = buildQueryVariants(rawAddress);
@@ -6302,6 +6352,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const acRef    = useRef(null);
   const [saving,  setSaving]  = useState(false);
   const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
+  const [localSuggestions, setLocalSuggestions] = useState([]);
   const [errMsg,  setErrMsg]  = useState("");
 
   // Inject light-mode pac-container styles
@@ -6355,6 +6406,14 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
     if (isPlusCode(text)) {
       const r = await decodePlusCodeGoogle(text);
       if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
+    }
+    // Motor local Rap Drive primero
+    const local = searchLocalPlaces(text, 1);
+    if (local.length && local[0].score >= 55) {
+      const p = local[0];
+      setFound({ display: p.display || (p.name + ", " + p.sector), lat: p.lat, lng: p.lng, confidence: p.confidence });
+      setLocalSuggestions([]);
+      setSaving(false); return;
     }
     // Google geocoder
     const r = await geocodeWithGoogle(text);
@@ -6465,6 +6524,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
 const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
   const ref = useRef(null);
   const acRef = useRef(null);
+  const [localSuggestions, setLocalSuggestions] = useState([]);
   useEffect(() => {
     loadGoogleMaps().then(() => {
       setTimeout(() => {
@@ -6481,11 +6541,29 @@ const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
       }, 60);
     });
   }, []);
+  const chooseLocal = (p) => {
+    setLocalSuggestions([]);
+    onChange(p.display || p.name);
+    onSelect({ display:p.display || (p.name + ", " + p.sector), lat:p.lat, lng:p.lng, confidence:p.confidence || 90, source:"rapdrive_local_dataset" });
+  };
   return (
-    <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
-      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
+    <div style={{ position:"relative", width:"100%" }}>
+      <input ref={ref} value={value} onChange={e => { const v=e.target.value; onChange(v); setLocalSuggestions(searchLocalPlaces(v, 8)); }} placeholder={placeholder || "Buscar dirección en RD..."}
+        style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
+      {localSuggestions.length > 0 && String(value||"").trim().length > 1 && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, zIndex:9999, background:"#06101d", border:"1px solid #1e3550", borderRadius:12, boxShadow:"0 18px 45px rgba(0,0,0,.45)", overflow:"hidden", maxHeight:260, overflowY:"auto" }}>
+          {localSuggestions.map((p,i)=>(
+            <button key={p.id+i} onClick={() => chooseLocal(p)} style={{ width:"100%", border:"none", borderBottom:"1px solid #0d1420", background:"transparent", padding:"10px 12px", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:9 }}>
+              <span style={{ width:27, height:27, borderRadius:9, background:"rgba(59,130,246,.13)", color:"#60a5fa", display:"flex", alignItems:"center", justifyContent:"center" }}>⌖</span>
+              <span style={{ flex:1, minWidth:0 }}><div style={{ color:"#e2e8f0", fontSize:12, fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div><div style={{ color:"#64748b", fontSize:10.5 }}>{p.sector} · {p.confidence}%</div></span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN
@@ -7777,6 +7855,184 @@ const SDO_ANCHORS = {
   "pantoja":                         { lat: 18.5500, lng: -70.0100, city: "Santo Domingo Norte" },
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MOTOR LOCAL RAP DRIVE — SDO + LOS ALCARRIZOS + DN
+// Capa propia para direcciones dominicanas: sinónimos, ranking, autocompletado
+// y dataset local 500+ generado desde sectores/anclas/corredores.
+// ─────────────────────────────────────────────────────────────────────────────
+const RD_SYNONYMS = [
+  [/\bkm\s*9\b/g, "kilometro 9"], [/\bkm9\b/g, "kilometro 9"], [/\bk\s*9\b/g, "kilometro 9"],
+  [/\bkm\s*13\b/g, "kilometro 13"], [/\bkm13\b/g, "kilometro 13"], [/\bkm\s*14\b/g, "kilometro 14"], [/\bkm14\b/g, "kilometro 14"],
+  [/\balcarizo\b/g, "alcarrizos"], [/\balcarrizo\b/g, "alcarrizos"], [/\blos alcarisos\b/g, "los alcarrizos"], [/\blos alcarizos\b/g, "los alcarrizos"],
+  [/\bmanogua\s*yabo\b/g, "manoguayabo"], [/\bmanoguayavo\b/g, "manoguayabo"], [/\bmano guayabo\b/g, "manoguayabo"],
+  [/\bherrera\s*oeste\b/g, "herrera"], [/\bbuenos aire\b/g, "buenos aires"], [/\bbuenos aires herrera\b/g, "buenos aires de herrera"],
+  [/\bduart\b/g, "duarte"], [/\bduate\b/g, "duarte"], [/\b27 feb\b/g, "27 de febrero"], [/\b27 febrero\b/g, "27 de febrero"],
+  [/\bindep\b/g, "independencia"], [/\bindependecia\b/g, "independencia"], [/\bprol\b/g, "prolongacion"], [/\bprol\.\b/g, "prolongacion"],
+  [/\bav\b/g, "avenida"], [/\bave\b/g, "avenida"], [/\bavda\b/g, "avenida"], [/\bc\/\b/g, "calle"], [/\bc\.\b/g, "calle"],
+  [/\bres\b/g, "residencial"], [/\burb\b/g, "urbanizacion"], [/\bens\b/g, "ensanche"], [/\besq\b/g, "esquina"],
+  [/\bprice smart\b/g, "pricesmart"], [/\bdn\b/g, "distrito nacional"], [/\bsdo\b/g, "santo domingo oeste"], [/\bsd oeste\b/g, "santo domingo oeste"],
+];
+
+const rdNormalize = (txt) => {
+  let t = String(txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  t = t.replace(/[.,;:()#º°]/g, " ").replace(/[\-/]/g, " ").replace(/\s+/g, " ").trim();
+  RD_SYNONYMS.forEach(([re, repl]) => { t = t.replace(re, repl); });
+  return t.replace(/\s+/g, " ").trim();
+};
+
+const rdSafeKey = (txt) => rdNormalize(txt).replace(/[.#$/[\]]/g, "_").slice(0, 140);
+
+const rdDist = (a, b) => {
+  a = rdNormalize(a); b = rdNormalize(b);
+  if (!a || !b) return 99;
+  const m = Array.from({length:a.length+1}, (_,i)=>[i]);
+  for (let j=1;j<=b.length;j++) m[0][j]=j;
+  for (let i=1;i<=a.length;i++) for (let j=1;j<=b.length;j++) m[i][j] = Math.min(m[i-1][j]+1, m[i][j-1]+1, m[i-1][j-1] + (a[i-1]===b[j-1]?0:1));
+  return m[a.length][b.length];
+};
+
+const rdOffset = (base, i, radius=0.006) => {
+  const angle = ((i * 137.508) % 360) * Math.PI / 180;
+  const r = radius * (0.25 + ((i % 9) / 10));
+  return { lat: +(base.lat + Math.sin(angle) * r).toFixed(6), lng: +(base.lng + Math.cos(angle) * r).toFixed(6) };
+};
+
+const RD_BASE_LANDMARKS = [
+  ["Hospital Marcelino Velez Santana", "Herrera", 18.4800, -70.0100, ["marcelino velez", "hospital herrera", "hospital de herrera"]],
+  ["Plaza Duarte Herrera", "Herrera", 18.4878, -70.0035, ["duarte herrera", "plaza duarte", "duarte sdo"]],
+  ["Zona Industrial de Herrera", "Herrera", 18.4830, -70.0200, ["zona industrial herrera", "industrial herrera"]],
+  ["Avenida Isabel Aguiar", "Herrera", 18.5050, -70.0280, ["isabel aguiar", "av isabel aguiar"]],
+  ["Prolongacion 27 de Febrero", "Santo Domingo Oeste", 18.4780, -70.0050, ["27 de febrero oeste", "prol 27", "prolongacion 27"]],
+  ["Autopista Duarte Km 9", "Km 9", 18.4720, -69.9800, ["km9", "kilometro 9", "autopista duarte km 9"]],
+  ["Manoguayabo Centro", "Manoguayabo", 18.5200, -70.0450, ["manoguayabo", "centro manoguayabo"]],
+  ["Bayona Centro", "Bayona", 18.5120, -70.0320, ["bayona", "bayona centro"]],
+  ["Engombe", "Engombe", 18.5250, -70.0600, ["engombe", "altos de engombe"]],
+  ["Hato Nuevo", "Hato Nuevo", 18.5350, -70.0750, ["hato nuevo"]],
+  ["Los Alcarrizos Centro", "Los Alcarrizos", 18.5450, -70.1050, ["los alcarrizos", "alcarrizos", "alcarizos"]],
+  ["Hospital Vinicio Calventi", "Los Alcarrizos", 18.5355, -70.0900, ["vinicio calventi", "hospital calventi", "calventi"]],
+  ["Pedro Brand", "Pedro Brand", 18.5600, -70.1200, ["pedro brand"]],
+  ["Pantoja", "Pantoja", 18.5500, -70.0100, ["pantoja"]],
+  ["Residencial Carmen Renata", "Herrera", 18.4910, -70.0060, ["carmen renata", "res carmen renata"]],
+  ["Buenos Aires de Herrera", "Herrera", 18.4865, -70.0105, ["buenos aires herrera", "buenos aires de herrera"]],
+  ["El Cafe de Herrera", "Herrera", 18.4820, -70.0180, ["el cafe", "cafe de herrera", "el cafe de herrera"]],
+  ["Las Palmas de Herrera", "Herrera", 18.4840, -70.0060, ["las palmas", "palmas de herrera"]],
+  ["Las Caobas", "Las Caobas", 18.5020, -70.0180, ["las caobas", "caobas"]],
+  ["La Venta", "Bayona", 18.5100, -70.0300, ["la venta"]],
+  ["Batey Bienvenido", "Hato Nuevo", 18.5400, -70.0800, ["batey bienvenido", "bienvenido"]],
+  ["Caballona", "Hato Nuevo", 18.5380, -70.0780, ["caballona"]],
+  ["Ciudad Agraria", "Hato Nuevo", 18.5300, -70.0700, ["ciudad agraria"]],
+  ["UASD", "Distrito Nacional", 18.4639, -69.9187, ["uasd", "universidad autonoma"]],
+  ["Agora Mall", "Distrito Nacional", 18.4826, -69.9385, ["agora", "agora mall"]],
+  ["Blue Mall", "Distrito Nacional", 18.4736, -69.9391, ["blue mall"]],
+  ["Acropolis Center", "Distrito Nacional", 18.4728, -69.9396, ["acropolis", "acropolis center"]],
+  ["Sambil", "Distrito Nacional", 18.4887, -69.9317, ["sambil"]],
+  ["Piantini", "Distrito Nacional", 18.4745, -69.9312, ["piantini"]],
+  ["Naco", "Distrito Nacional", 18.4796, -69.9273, ["naco"]],
+  ["Evaristo Morales", "Distrito Nacional", 18.4820, -69.9340, ["evaristo morales"]],
+  ["Bella Vista", "Distrito Nacional", 18.4680, -69.9340, ["bella vista"]],
+  ["Gazcue", "Distrito Nacional", 18.4768, -69.9115, ["gazcue"]],
+  ["Zona Colonial", "Distrito Nacional", 18.4740, -69.8930, ["zona colonial", "colonial"]],
+  ["Ciudad Nueva", "Distrito Nacional", 18.4810, -69.9040, ["ciudad nueva"]],
+  ["Cristo Rey", "Distrito Nacional", 18.4960, -69.9530, ["cristo rey"]],
+  ["Villa Consuelo", "Distrito Nacional", 18.4895, -69.9200, ["villa consuelo"]],
+  ["Capotillo", "Distrito Nacional", 18.5040, -69.9360, ["capotillo"]],
+  ["Arroyo Hondo", "Distrito Nacional", 18.4910, -69.9650, ["arroyo hondo"]],
+  ["Los Prados", "Distrito Nacional", 18.5100, -69.9600, ["los prados"]],
+  ["Los Cacicazgos", "Distrito Nacional", 18.4590, -69.9440, ["los cacicazgos", "cacicazgos"]],
+  ["Mirador Sur", "Distrito Nacional", 18.4630, -69.9510, ["mirador sur"]],
+  ["Avenida Winston Churchill", "Distrito Nacional", 18.4720, -69.9390, ["churchill", "winston churchill"]],
+  ["Avenida Abraham Lincoln", "Distrito Nacional", 18.4760, -69.9325, ["lincoln", "abraham lincoln"]],
+  ["Avenida 27 de Febrero", "Distrito Nacional", 18.4700, -69.9200, ["27 de febrero dn", "avenida 27"]],
+  ["Avenida Maximo Gomez", "Distrito Nacional", 18.4800, -69.9150, ["maximo gomez", "gomez"]],
+  ["Avenida John F Kennedy", "Distrito Nacional", 18.4860, -69.9300, ["kennedy", "john f kennedy"]],
+  ["Avenida Tiradentes", "Distrito Nacional", 18.4820, -69.9250, ["tiradentes"]],
+];
+
+const RD_SECTOR_SEEDS = Object.entries(SDO_ANCHORS).map(([name, v]) => ({ name, sector:name, lat:v.lat, lng:v.lng, city:v.city }));
+const RD_REFERENCE_TEMPLATES = ["Entrada principal", "Parada de carro publico", "Parada de motoconcho", "Bomba de gasolina", "Farmacia popular", "Colmado principal", "Supermercado cercano", "Iglesia", "Escuela", "Polideportivo", "Cancha", "Destacamento", "Parque", "Centro comunal", "Ferreteria", "Plaza comercial", "Banco popular cercano", "Cajero", "Cruce principal", "Esquina comercial", "Puente peatonal", "Car wash", "Pica pollo", "Panaderia", "Repuesto", "Taller", "Centro medico", "Laboratorio", "Gimnasio", "Colegio", "Mercado", "Junta de vecinos"];
+const RD_ROAD_TEMPLATES = ["Calle 1", "Calle 2", "Calle 3", "Calle 4", "Calle 5", "Calle 6", "Calle 7", "Calle 8", "Calle Principal", "Calle Central", "Calle Duarte", "Calle Mella", "Calle Sanchez", "Calle Restauracion", "Calle Libertad", "Calle Progreso", "Calle Las Mercedes", "Calle Enriquillo", "Avenida Principal", "Avenida Duarte", "Avenida Las Palmas", "Prolongacion 27 de Febrero", "Autopista Duarte", "Carretera Vieja", "Callejon Principal", "Entrada del sector"];
+
+const RD_LOCAL_PLACES = (() => {
+  const out = [];
+  const add = (name, sector, lat, lng, aliases=[], type="referencia", priority=60) => {
+    const id = rdSafeKey(name + " " + sector);
+    out.push({ id, name, sector, city: sector === "Distrito Nacional" ? "Distrito Nacional" : "Santo Domingo Oeste", lat:+lat, lng:+lng, aliases, type, priority, search: rdNormalize([name, sector, ...(aliases||[])].join(" ")) });
+  };
+  RD_BASE_LANDMARKS.forEach(([name, sector, lat, lng, aliases]) => add(name, sector, lat, lng, aliases, "landmark", 95));
+  RD_SECTOR_SEEDS.forEach((b, idx) => {
+    const nice = b.name.replace(/\b\w/g, c=>c.toUpperCase());
+    add(nice, b.city, b.lat, b.lng, [b.name, b.city], "sector", 82);
+    RD_REFERENCE_TEMPLATES.slice(0, 12).forEach((ref, i) => {
+      const c = rdOffset(b, idx*31+i, 0.0048);
+      add(ref + " " + nice, b.city, c.lat, c.lng, [ref, b.name], "referencia", 68);
+    });
+    RD_ROAD_TEMPLATES.slice(0, 10).forEach((road, i) => {
+      const c = rdOffset(b, idx*47+i+13, 0.0055);
+      add(road + ", " + nice, b.city, c.lat, c.lng, [road, b.name], "calle", 64);
+    });
+  });
+  return out.slice(0, 950);
+})();
+
+const _rdLocalCache = new Map();
+try {
+  const saved = typeof localStorage !== "undefined" ? JSON.parse(localStorage.getItem("rdLocalGeoCache") || "{}") : {};
+  Object.entries(saved || {}).forEach(([k,v]) => _rdLocalCache.set(k,v));
+} catch(e) {}
+const saveLocalCache = (key, value) => {
+  _rdLocalCache.set(key, value);
+  try {
+    const obj = Object.fromEntries([..._rdLocalCache.entries()].slice(-700));
+    localStorage.setItem("rdLocalGeoCache", JSON.stringify(obj));
+  } catch(e) {}
+};
+
+const rdScorePlace = (query, p) => {
+  const q = rdNormalize(query);
+  if (!q) return 0;
+  const words = q.split(" ").filter(Boolean);
+  let score = 0;
+  if (p.search === q) score += 140;
+  if (p.search.includes(q)) score += 78;
+  if (q.includes(rdNormalize(p.name))) score += 72;
+  if (p.aliases?.some(a => rdNormalize(a) === q)) score += 115;
+  if (p.aliases?.some(a => rdNormalize(a).includes(q) || q.includes(rdNormalize(a)))) score += 65;
+  words.forEach(w => { if (w.length > 2 && p.search.includes(w)) score += 12; });
+  const d = Math.min(rdDist(q, p.name), ...(p.aliases||[]).map(a => rdDist(q, a)));
+  if (d <= 1) score += 55; else if (d <= 2) score += 35; else if (d <= 3) score += 18;
+  if (/herrera|alcarrizos|manoguayabo|bayona|caobas|engombe|hato nuevo|sdo|santo domingo oeste/.test(q) && p.city === "Santo Domingo Oeste") score += 18;
+  if (/dn|distrito nacional|piantini|naco|gazcue|bella vista|uasd|colonial/.test(q) && p.city === "Distrito Nacional") score += 18;
+  score += Math.min(p.priority || 50, 100) / 5;
+  return Math.round(score);
+};
+
+const searchLocalPlaces = (query, limit=8) => {
+  const q = rdNormalize(query);
+  if (!q || q.length < 2) return [];
+  const cached = _rdLocalCache.get(q);
+  if (cached?.suggestions) return cached.suggestions.slice(0, limit);
+  const results = RD_LOCAL_PLACES
+    .map(p => ({ ...p, score: rdScorePlace(q, p) }))
+    .filter(p => p.score >= 38)
+    .sort((a,b) => b.score - a.score)
+    .slice(0, limit)
+    .map(p => ({ ...p, display: p.name + " · " + p.sector, confidence: Math.min(99, Math.max(58, Math.round(p.score / 1.55))) }));
+  saveLocalCache(q, { suggestions: results, ts: Date.now() });
+  return results;
+};
+
+const localPlaceToGeo = (p, raw) => ({
+  ok:true,
+  lat:p.lat,
+  lng:p.lng,
+  display:p.display || (p.name + ", " + p.sector),
+  confidence:p.confidence || 86,
+  types:[p.type || "local_reference"],
+  source:"rapdrive_local_dataset",
+  allResults:searchLocalPlaces(raw || p.name, 3).map(x => ({ display:x.display, lat:x.lat, lng:x.lng, confidence:x.confidence }))
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // NIVEL 3: CACHE DE APRENDIZAJE PERSISTENTE
 // Cuando el admin corrige manualmente una dirección, la corrección se guarda
@@ -7822,6 +8078,8 @@ const findAnchor = (rawAddress) => {
     const kn = k.normalize("NFD").replace(/[̀-ͯ]/g, "");
     if (t.includes(kn)) return SDO_ANCHORS[k];
   }
+  const local = searchLocalPlaces(rawAddress, 1)[0];
+  if (local && local.score >= 70) return { lat: local.lat, lng: local.lng, city: local.city || local.sector };
   return null;
 };
 
