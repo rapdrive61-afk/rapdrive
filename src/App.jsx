@@ -4379,15 +4379,17 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [openActions, setOpenActions] = useState(null);
   const [form, setForm] = useState({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
 
   const load = useCallback(async () => {
     const [of, rootUsers] = await Promise.all([FB.get("oficinas"), FB.get("users")]);
-    setOffices(of && typeof of === "object" ? of : {});
+    const cleanOffices = of && typeof of === "object" ? of : {};
+    setOffices(cleanOffices);
     const allUsers = Object.values(rootUsers || {}).filter(Boolean);
     const merged = [...USERS];
     allUsers.forEach(u => { if (u?.id && !merged.find(x => x.id === u.id)) merged.push(u); });
-    Object.values(of || {}).forEach(o => {
+    Object.values(cleanOffices || {}).forEach(o => {
       Object.values(o?.users || {}).forEach(u => { if (u?.id && !merged.find(x => x.id === u.id)) merged.push(u); });
     });
     setUsers(merged);
@@ -4446,6 +4448,8 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
       officeName:nombre,
       active:true
     };
+    const currentOffice = await FB.get(`oficinas/${id}`);
+    if (currentOffice) { setSaving(false); setMsg("Ya existe una oficina con ese código. Usa otro código."); return; }
     const office = {
       id,
       nombre,
@@ -4454,6 +4458,7 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
       responsable:form.responsable.trim(),
       telefono:form.telefono.trim(),
       createdAt:now,
+      updatedAt:now,
       createdBy:currentUser?.email || "super_admin",
       ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 },
       mensajeros:{},
@@ -4478,6 +4483,7 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
 
   const toggleOffice = async (id, next) => {
     await FB.set(`oficinas/${id}/activa`, next);
+    await FB.set(`oficinas/${id}/updatedAt`, new Date().toISOString());
     await load();
     setMsg(next ? "Oficina habilitada." : "Oficina pausada.");
   };
@@ -4496,12 +4502,12 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
   };
 
   const ui = {
-    bg:"#060b12", panel:"#0b1220", panel2:"#0f172a", card:"#101827", card2:"#0d1524", line:"#1e2d44",
-    text:"#f8fafc", muted:"#94a3b8", soft:"#dbeafe", blue:"#3b82f6", green:"#22c55e", red:"#fb7185", amber:"#f59e0b", purple:"#a78bfa", cyan:"#22d3ee"
+    bg:"#060b10", panel:"#0b1320", panel2:"#0f1b2d", card:"#0f1726", card2:"#111d30", line:"#1f314c",
+    text:"#f8fafc", muted:"#8fa7c7", soft:"#dbeafe", blue:"#3b82f6", green:"#22c55e", red:"#fb7185", amber:"#f59e0b", purple:"#a78bfa", cyan:"#22d3ee"
   };
 
   const SvgIcon = ({ name, color=ui.blue, size=20 }) => {
-    const common = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth:2.2, strokeLinecap:"round", strokeLinejoin:"round" };
+    const common = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth:2.15, strokeLinecap:"round", strokeLinejoin:"round" };
     const paths = {
       office:<><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v16"/><path d="M9 21v-4h3v4"/><path d="M8 7h1M12 7h1M8 11h1M12 11h1M19 21V10h1a1 1 0 0 1 1 1v10"/></>,
       active:<><path d="M20 6 9 17l-5-5"/></>,
@@ -4512,25 +4518,27 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
       search:<><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
       plus:<><path d="M12 5v14M5 12h14"/></>,
       logout:<><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5"/></>,
-      settings:<><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.3.4.7.8 1.1 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></>
+      dots:<><path d="M12 12h.01M19 12h.01M5 12h.01"/></>,
+      base:<><path d="M12 21s7-4.35 7-11a7 7 0 0 0-14 0c0 6.65 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></>,
+      pulse:<><path d="M3 12h4l3-7 4 14 3-7h4"/></>
     };
     return <svg {...common}>{paths[name] || paths.office}</svg>;
   };
 
-  const card = { background:`linear-gradient(180deg,${ui.panel2},${ui.panel})`, border:`1px solid ${ui.line}`, borderRadius:18, boxShadow:"0 18px 44px rgba(0,0,0,.22)" };
-  const input = { height:44, border:`1px solid ${ui.line}`, borderRadius:13, background:"#070d16", color:ui.text, padding:"0 14px", fontSize:14, outline:"none", width:"100%" };
+  const card = { background:`linear-gradient(180deg,rgba(17,29,48,.98),rgba(11,19,32,.98))`, border:`1px solid ${ui.line}`, borderRadius:18, boxShadow:"0 18px 44px rgba(0,0,0,.22)" };
+  const input = { height:44, border:`1px solid ${ui.line}`, borderRadius:13, background:"#07111f", color:ui.text, padding:"0 14px", fontSize:14, outline:"none", width:"100%" };
   const btn = { height:42, borderRadius:13, border:`1px solid ${ui.line}`, background:"#0b1322", color:ui.soft, padding:"0 15px", fontWeight:900, cursor:"pointer" };
   const primary = { ...btn, border:"none", color:"white", background:"linear-gradient(135deg,#2563eb,#4f46e5)", boxShadow:"0 14px 34px rgba(37,99,235,.35)" };
   const label = { display:"block", fontSize:11, color:ui.muted, fontWeight:900, marginBottom:7, letterSpacing:".7px", textTransform:"uppercase" };
-  const statusBadge = (active) => <span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:999, color:active?"#bbf7d0":"#fecdd3", background:active?"rgba(34,197,94,.12)":"rgba(251,113,133,.12)", border:`1px solid ${active?"rgba(34,197,94,.32)":"rgba(251,113,133,.32)"}`, fontSize:12, fontWeight:900 }}><span style={{ width:7, height:7, borderRadius:999, background:active?ui.green:ui.red, boxShadow:`0 0 12px ${active?ui.green:ui.red}` }}/>{active ? "Activa" : "Pausada"}</span>;
+  const statusBadge = (active) => <span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"6px 10px", borderRadius:999, color:active?"#bbf7d0":"#fecdd3", background:active?"rgba(34,197,94,.12)":"rgba(251,113,133,.12)", border:`1px solid ${active?"rgba(34,197,94,.32)":"rgba(251,113,133,.32)"}`, fontSize:12, fontWeight:900 }}><span style={{ width:7, height:7, borderRadius:999, background:active?ui.green:ui.red, boxShadow:`0 0 10px ${active?ui.green:ui.red}` }}/>{active ? "Activa" : "Pausada"}</span>;
 
   const metricCards = [
-    { label:"Oficinas", value:stats.total, note:"Total creadas", icon:"office", color:ui.blue },
+    { label:"Oficinas", value:stats.total, note:"Total", icon:"office", color:ui.blue },
     { label:"Activas", value:stats.active, note:"Operando", icon:"active", color:ui.green },
     { label:"Pausadas", value:stats.disabled, note:"Bloqueadas", icon:"pause", color:ui.red },
     { label:"Admins", value:stats.admins, note:"Accesos", icon:"shield", color:ui.purple },
     { label:"Mensajeros", value:stats.drivers, note:"Registrados", icon:"users", color:ui.cyan },
-    { label:"Rutas activas", value:stats.routes, note:"En campo", icon:"route", color:ui.amber },
+    { label:"Rutas", value:stats.routes, note:"Activas", icon:"route", color:ui.amber },
   ];
 
   const riskItems = [
@@ -4540,97 +4548,87 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
   ];
 
   return (
-    <div style={{ position:"fixed", inset:0, background:`radial-gradient(circle at 16% 0%,rgba(37,99,235,.20),transparent 34%), radial-gradient(circle at 90% 12%,rgba(79,70,229,.16),transparent 32%), ${ui.bg}`, color:ui.text, fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');*{box-sizing:border-box}*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-track{background:#060b12}*::-webkit-scrollbar-thumb{background:#26374f;border-radius:999px}.rdInput:focus{border-color:#3b82f6!important;box-shadow:0 0 0 4px rgba(59,130,246,.13)!important}.rdRow:hover{background:#111c2d!important}.rdBtn:hover{transform:translateY(-1px);filter:brightness(1.08)}.rdMetric:hover{transform:translateY(-2px);border-color:#34507a!important}`}</style>
-      <div style={{ display:"grid", gridTemplateColumns:"290px 1fr", height:"100%" }}>
-        <aside style={{ borderRight:`1px solid ${ui.line}`, background:"linear-gradient(180deg,#0b1322,#070c15)", padding:22, display:"flex", flexDirection:"column", gap:20 }}>
+    <div style={{ position:"fixed", inset:0, background:`radial-gradient(circle at 10% -10%,rgba(37,99,235,.20),transparent 34%), radial-gradient(circle at 90% 10%,rgba(124,58,237,.14),transparent 30%), ${ui.bg}`, color:ui.text, fontFamily:"'Inter',system-ui,sans-serif", overflow:"hidden" }}>
+      <style>{`
+        .rdSA *{box-sizing:border-box}.rdSA button,.rdSA input,.rdSA select{font-family:inherit}.rdSA ::placeholder{color:#627896}.rdSA .rdHover{transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease}.rdSA .rdHover:hover{transform:translateY(-2px);border-color:#31527e;box-shadow:0 18px 55px rgba(0,0,0,.28)}.rdSA .rdBtn{transition:transform .14s ease,filter .14s ease,background .14s ease}.rdSA .rdBtn:hover{transform:translateY(-1px);filter:brightness(1.08)}.rdSA .rdInput:focus{border-color:#3b82f6;box-shadow:0 0 0 4px rgba(59,130,246,.13)}.rdSA .rdRow:hover{background:rgba(59,130,246,.055)}.rdSA .rdScroll::-webkit-scrollbar{width:10px;height:10px}.rdSA .rdScroll::-webkit-scrollbar-thumb{background:#233a59;border-radius:999px}.rdSA .rdScroll::-webkit-scrollbar-track{background:transparent}
+      `}</style>
+      <div className="rdSA" style={{ display:"grid", gridTemplateColumns:"292px 1fr", height:"100%" }}>
+        <aside style={{ background:"linear-gradient(180deg,#0b1322,#070d16)", borderRight:`1px solid ${ui.line}`, padding:22, display:"flex", flexDirection:"column", gap:18 }}>
           <div style={{ display:"flex", alignItems:"center", gap:13 }}>
-            <div style={{ width:48, height:48, borderRadius:16, background:"linear-gradient(135deg,#2563eb,#4f46e5)", display:"grid", placeItems:"center", boxShadow:"0 16px 38px rgba(37,99,235,.38)" }}><SvgIcon name="office" color="white" size={23}/></div>
-            <div><div style={{ fontSize:18, fontWeight:1000, letterSpacing:"-.5px" }}>Rap Drive</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>Super Admin</div></div>
+            <div style={{ width:46, height:46, borderRadius:14, display:"grid", placeItems:"center", background:"linear-gradient(135deg,#2563eb,#60a5fa)", boxShadow:"0 14px 34px rgba(37,99,235,.28)", fontWeight:1000 }}>RD</div>
+            <div><div style={{ fontWeight:1000, fontSize:18 }}>Rap Drive</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>Centro de control</div></div>
           </div>
-
-          <nav style={{ display:"grid", gap:10, marginTop:4 }}>
+          <nav style={{ display:"grid", gap:9, marginTop:8 }}>
             {[
-              ["Oficinas", stats.total, "office", ui.blue],
-              ["Actividad", officeList.length, "route", ui.green],
-              ["Riesgos", riskItems.reduce((n,r)=>n+r.value,0), "shield", ui.amber],
-              ["Accesos", stats.admins, "users", ui.purple],
-            ].map(([t,v,ic,c],i)=>(
-              <div key={t} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 14px", borderRadius:16, background:i===0?"rgba(59,130,246,.16)":"rgba(255,255,255,.04)", border:`1px solid ${i===0?"rgba(59,130,246,.38)":"rgba(255,255,255,.075)"}` }}>
-                <div style={{ display:"flex", alignItems:"center", gap:11 }}><SvgIcon name={ic} color={c} size={20}/><span style={{ fontSize:13, fontWeight:900 }}>{t}</span></div>
-                <b style={{ color:i===0?"#93c5fd":ui.soft, fontSize:18 }}>{v}</b>
-              </div>
-            ))}
+              ["office","Oficinas",stats.total,ui.blue],
+              ["pulse","Actividad",officeList.length,ui.green],
+              ["shield","Riesgos",riskItems.reduce((n,r)=>n+r.value,0),ui.red],
+              ["users","Accesos",stats.admins,ui.purple],
+            ].map(([ic,labelText,val,color],i)=><div key={labelText} className="rdHover" style={{ height:54, borderRadius:15, border:`1px solid ${i===0?"#31527e":ui.line}`, background:i===0?"rgba(59,130,246,.12)":"rgba(255,255,255,.03)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px" }}><div style={{ display:"flex", alignItems:"center", gap:10 }}><SvgIcon name={ic} color={color} size={18}/><span style={{ fontWeight:900 }}>{labelText}</span></div><b style={{ color, fontSize:18 }}>{val}</b></div>)}
           </nav>
-
-          <div style={{ ...card, padding:16, marginTop:2 }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}><span style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Salud operativa</span><b>{health}%</b></div>
-            <div style={{ height:9, background:"#111827", borderRadius:999, overflow:"hidden", border:`1px solid ${ui.line}` }}><div style={{ height:"100%", width:`${health}%`, background:"linear-gradient(90deg,#22c55e,#3b82f6)", borderRadius:999 }}/></div>
-            <div style={{ color:ui.muted, fontSize:12, marginTop:12 }}>{stats.active} oficinas activas · {stats.routes} rutas activas</div>
+          <div style={{ ...card, padding:16, marginTop:4 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:9 }}><span style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Salud operativa</span><b>{health}%</b></div>
+            <div style={{ height:9, background:"#101a2b", borderRadius:999, overflow:"hidden" }}><div style={{ height:"100%", width:`${health}%`, background:"linear-gradient(90deg,#22c55e,#3b82f6)", borderRadius:999 }}/></div>
+            <div style={{ color:ui.muted, fontSize:12, marginTop:12 }}>{stats.active} activas · {stats.routes} rutas activas</div>
           </div>
-
-          <div style={{ marginTop:"auto", display:"grid", gap:11 }}>
-            <div style={{ ...card, padding:15 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Sesión actual</div><div style={{ marginTop:10, fontWeight:1000, fontSize:13 }}>{currentUser?.email}</div></div>
-            <button className="rdBtn" onClick={confirmLogout} style={{ ...btn, width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:9 }}><SvgIcon name="logout" color={ui.soft} size={18}/> Cerrar sesión</button>
+          <div style={{ marginTop:"auto", display:"grid", gap:12 }}>
+            <div style={{ ...card, padding:16 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, letterSpacing:1, textTransform:"uppercase" }}>Sesión actual</div><div style={{ marginTop:10, fontWeight:900, color:ui.soft, overflow:"hidden", textOverflow:"ellipsis" }}>{currentUser?.email}</div></div>
+            <button className="rdBtn" onClick={confirmLogout} style={{ ...btn, width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}><SvgIcon name="logout" color={ui.soft} size={17}/> Cerrar sesión</button>
           </div>
         </aside>
 
-        <main style={{ overflow:"auto", padding:26 }}>
+        <main className="rdScroll" style={{ overflow:"auto", padding:24 }}>
           <div style={{ maxWidth:1480, margin:"0 auto" }}>
             <section style={{ display:"grid", gridTemplateColumns:"repeat(6,minmax(0,1fr))", gap:14, marginBottom:16 }}>
-              {metricCards.map(m=>(
-                <div className="rdMetric" key={m.label} style={{ ...card, padding:18, transition:"all .16s ease", minHeight:132 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>{m.label}</span><SvgIcon name={m.icon} color={m.color} size={22}/></div>
-                  <div style={{ fontSize:34, fontWeight:1000, lineHeight:1, marginTop:20 }}>{m.value}</div>
-                  <div style={{ color:"#9fb4d3", fontSize:12, marginTop:10 }}>{m.note}</div>
-                </div>
-              ))}
+              {metricCards.map(m => <div key={m.label} className="rdHover" style={{ ...card, minHeight:116, padding:17, position:"relative", overflow:"hidden" }}>
+                <div style={{ position:"absolute", right:-18, top:-18, width:92, height:92, borderRadius:30, background:`radial-gradient(circle,${m.color}26,transparent 65%)` }}/>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}><span style={{ color:ui.muted, fontSize:13, fontWeight:1000 }}>{m.label}</span><div style={{ width:34, height:34, display:"grid", placeItems:"center", borderRadius:12, background:`${m.color}14`, border:`1px solid ${m.color}32` }}><SvgIcon name={m.icon} color={m.color} size={18}/></div></div>
+                <div style={{ fontSize:36, fontWeight:1000, lineHeight:1, marginTop:14 }}>{m.value}</div>
+                <div style={{ color:ui.muted, fontSize:12, marginTop:7 }}>{m.note}</div>
+              </div>)}
             </section>
 
-            {msg && <div style={{ marginBottom:14, padding:"12px 14px", borderRadius:14, background:"rgba(59,130,246,.12)", border:`1px solid rgba(59,130,246,.28)`, color:ui.soft, fontWeight:800 }}>{msg}</div>}
+            {msg && <div style={{ marginBottom:14, padding:"12px 14px", borderRadius:14, background:"rgba(34,197,94,.10)", border:"1px solid rgba(34,197,94,.25)", color:"#bbf7d0", fontWeight:800 }}>{msg}</div>}
 
-            <section style={{ ...card, overflow:"hidden" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 20px", borderBottom:`1px solid ${ui.line}` }}>
-                <div>
-                  <div style={{ fontSize:21, fontWeight:1000, letterSpacing:"-.4px" }}>Oficinas</div>
-                  <div style={{ color:ui.muted, fontSize:13, marginTop:4 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div>
-                </div>
+            <section style={{ ...card, overflow:"visible" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:20, borderBottom:`1px solid ${ui.line}` }}>
+                <div><div style={{ fontSize:22, fontWeight:1000 }}>Oficinas</div><div style={{ color:ui.muted, fontSize:13, marginTop:5 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div></div>
                 <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                  <div style={{ position:"relative", width:360 }}><span style={{ position:"absolute", left:14, top:12 }}><SvgIcon name="search" color={ui.muted} size={17}/></span><input className="rdInput" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...input, paddingLeft:42 }}/></div>
-                  <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...input, width:156 }}><option value="all">Todas</option><option value="active">Activas</option><option value="paused">Pausadas</option></select>
+                  <div style={{ position:"relative", width:360 }}><div style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)" }}><SvgIcon name="search" color={ui.muted} size={17}/></div><input className="rdInput" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...input, paddingLeft:42 }}/></div>
+                  <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...input, width:150 }}><option value="all">Todas</option><option value="active">Activas</option><option value="paused">Pausadas</option></select>
                   <button className="rdBtn" onClick={()=>setShowCreate(true)} style={{ ...primary, display:"flex", alignItems:"center", gap:8 }}><SvgIcon name="plus" color="white" size={18}/> Nueva oficina</button>
                 </div>
               </div>
 
-              <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1.25fr .75fr 1.5fr .6fr .6fr .8fr", padding:"14px 18px", color:ui.muted, fontSize:11, fontWeight:1000, letterSpacing:".6px", textTransform:"uppercase", borderBottom:`1px solid ${ui.line}` }}>
-                <div>Oficina</div><div>Admin</div><div>Estado</div><div>Base</div><div>Mens.</div><div>Rutas</div><div>Acciones</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1.25fr .75fr 1.25fr .55fr .55fr 70px", padding:"0 20px", height:48, alignItems:"center", color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase", letterSpacing:.7, borderBottom:`1px solid ${ui.line}` }}>
+                <div>Oficina</div><div>Admin</div><div>Estado</div><div>Base</div><div>Mens.</div><div>Rutas</div><div style={{ textAlign:"right" }}>Acción</div>
               </div>
 
               {filteredOffices.length === 0 ? <div style={{ padding:54, textAlign:"center", color:ui.muted }}><SvgIcon name="office" color={ui.blue} size={42}/><div style={{ fontWeight:1000, color:ui.text, marginTop:14, fontSize:18 }}>No hay oficinas para mostrar</div><div style={{ marginTop:6 }}>Crea la primera oficina desde el botón “Nueva oficina”.</div></div> : filteredOffices.map(o => {
                 const admins = users.filter(u => u.officeId === o.id && (u.role === "admin" || u.role === "office_admin"));
-                const active = o.activa !== false;
-                return <div className="rdRow" key={o.id} onClick={()=>setSelected(o.id)} style={{ display:"grid", gridTemplateColumns:"1.55fr 1.25fr .75fr 1.5fr .6fr .6fr .8fr", alignItems:"center", padding:"16px 18px", borderBottom:`1px solid ${ui.line}`, cursor:"pointer", transition:"all .14s ease" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}><div style={{ width:43, height:43, borderRadius:14, background:"linear-gradient(135deg,rgba(59,130,246,.28),rgba(79,70,229,.16))", border:"1px solid rgba(59,130,246,.35)", display:"grid", placeItems:"center" }}><SvgIcon name="office" color="#93c5fd" size={21}/></div><div style={{ minWidth:0 }}><div style={{ fontWeight:1000, fontSize:16, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{o.nombre}</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>{o.responsable || o.id}</div></div></div>
-                  <div style={{ color:ui.soft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{admins[0]?.email || "Sin admin"}</div>
-                  <div>{statusBadge(active)}</div>
-                  <div style={{ color:ui.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{o.ubicacionBase?.direccion || "Sin base"}</div>
+                const admin = admins[0];
+                return <div key={o.id} className="rdRow" onClick={()=>setSelected(o.id)} style={{ display:"grid", gridTemplateColumns:"1.5fr 1.25fr .75fr 1.25fr .55fr .55fr 70px", padding:"15px 20px", alignItems:"center", borderBottom:`1px solid ${ui.line}`, cursor:"pointer", position:"relative" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}><div style={{ width:42, height:42, borderRadius:14, background:"linear-gradient(135deg,#1d4ed8,#60a5fa)", display:"grid", placeItems:"center", fontWeight:1000, boxShadow:"0 12px 28px rgba(37,99,235,.25)" }}>{(o.nombre||o.id).slice(0,2).toUpperCase()}</div><div style={{ minWidth:0 }}><div style={{ fontSize:16, fontWeight:1000, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{o.nombre || o.id}</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>{o.responsable || "Sin responsable"}</div></div></div>
+                  <div style={{ color:ui.soft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{admin?.email || "Sin admin"}</div>
+                  <div>{statusBadge(o.activa !== false)}</div>
+                  <div style={{ color:ui.soft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:7 }}><SvgIcon name="base" color={ui.muted} size={16}/>{o.ubicacionBase?.direccion || "Sin base"}</div>
                   <div style={{ fontWeight:1000 }}>{countObj(o.mensajeros)}</div>
                   <div style={{ fontWeight:1000 }}>{countObj(o.routes)}</div>
-                  <div><button className="rdBtn" onClick={(e)=>{e.stopPropagation();toggleOffice(o.id,!active)}} style={{ ...btn, height:34, padding:"0 10px", color:active?"#fecdd3":"#bbf7d0" }}>{active?"Pausar":"Activar"}</button></div>
+                  <div style={{ textAlign:"right", position:"relative" }} onClick={e=>e.stopPropagation()}><button className="rdBtn" onClick={()=>setOpenActions(openActions===o.id?null:o.id)} style={{ ...btn, width:40, padding:0 }}><SvgIcon name="dots" color={ui.soft}/></button>{openActions===o.id && <div style={{ position:"absolute", right:0, top:46, zIndex:10, minWidth:170, ...card, padding:7 }}><button className="rdBtn" onClick={()=>{setSelected(o.id);setOpenActions(null);}} style={{ ...btn, width:"100%", textAlign:"left", marginBottom:6 }}>Ver detalle</button><button className="rdBtn" onClick={()=>{toggleOffice(o.id, o.activa===false);setOpenActions(null);}} style={{ ...btn, width:"100%", textAlign:"left", marginBottom:6 }}>{o.activa===false?"Habilitar":"Pausar"}</button><button className="rdBtn" onClick={()=>{deleteOffice(o.id);setOpenActions(null);}} style={{ ...btn, width:"100%", textAlign:"left", color:"#fecdd3" }}>Eliminar</button></div>}</div>
                 </div>
               })}
             </section>
 
-            <div style={{ display:"grid", gridTemplateColumns:selectedOffice?"1fr 420px":"1fr", gap:16, marginTop:16 }}>
+            <div style={{ display:"grid", gridTemplateColumns:selectedOffice?"1fr 430px":"1fr", gap:16, marginTop:16 }}>
               <section style={{ ...card, padding:18 }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}><div style={{ fontSize:18, fontWeight:1000 }}>Actividad operacional</div><SvgIcon name="route" color={ui.green}/></div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}><div style={{ fontSize:18, fontWeight:1000 }}>Actividad operacional</div><SvgIcon name="pulse" color={ui.green}/></div>
                 <div style={{ display:"grid", gap:10 }}>
                   {(officeList.length ? officeList.slice(0,6) : [{ nombre:"Aún no hay actividad registrada", activa:true }]).map((o,i)=><div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:13, border:`1px solid ${ui.line}`, borderRadius:15, background:"rgba(255,255,255,.03)" }}><span style={{ width:10, height:10, borderRadius:999, background:o.activa===false?ui.red:ui.green, boxShadow:`0 0 12px ${o.activa===false?ui.red:ui.green}` }}/><div><div style={{ fontWeight:900 }}>{o.activa===false?"Oficina pausada":"Oficina operativa"}</div><div style={{ color:ui.muted, fontSize:13, marginTop:3 }}>{o.nombre}</div></div></div>)}
                 </div>
               </section>
 
               {selectedOffice && <aside style={{ ...card, padding:18 }}>
-                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:16 }}><div><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Detalle</div><div style={{ fontSize:22, fontWeight:1000, marginTop:6 }}>{selectedOffice.nombre}</div><div style={{ color:ui.muted, fontSize:12, marginTop:5 }}>ID: {selected}</div></div><button className="rdBtn" onClick={()=>setSelected(null)} style={{ ...btn, width:36, height:36, padding:0 }}>×</button></div>
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:16 }}><div><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Detalle oficina</div><div style={{ fontSize:22, fontWeight:1000, marginTop:6 }}>{selectedOffice.nombre}</div><div style={{ color:ui.muted, fontSize:12, marginTop:5 }}>ID: {selected}</div></div><button className="rdBtn" onClick={()=>setSelected(null)} style={{ ...btn, width:36, height:36, padding:0 }}>×</button></div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
                   {[ ["Estado", statusBadge(selectedOffice.activa !== false)], ["Mensajeros", countObj(selectedOffice.mensajeros)], ["Rutas", countObj(selectedOffice.routes)], ["Admins", selectedAdmins.length] ].map(([k,v])=><div key={k} style={{ padding:13, borderRadius:15, border:`1px solid ${ui.line}`, background:"rgba(255,255,255,.035)" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>{k}</div><div style={{ marginTop:7, fontWeight:1000, fontSize:typeof v === "number" ? 24 : 13 }}>{v}</div></div>)}
                 </div>
