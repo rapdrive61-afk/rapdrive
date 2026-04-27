@@ -5603,17 +5603,15 @@ const buildQueryVariants = (raw) => {
     variants.add(s);
   }
 
-  // 3. Si tiene sector/residencial, construir variante con solo el sector + ciudad
+  // 3. Sector/residencial solo como CONTEXTO: nunca como query principal.
+  // Antes el motor probaba solo el sector y eso movía paquetes al centro del barrio.
   const secMatch = s.match(/(?:sector|ens(?:anche)?|res(?:idencial)?|urb(?:anizaci[oó]n)?|reparto)\s+([^,]+)/i);
   if (secMatch) {
     const sec = secMatch[1].trim();
-    variants.add(sec + SD);
-    variants.add(sec + ", Santo Domingo Este" + RD);
-    variants.add(sec + ", Santo Domingo Oeste" + RD);
-    // Agregar calle + sector para mayor precisión
-    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación)\s+[^,]+/i);
+    const calleMatch = expanded.match(/(?:Calle|Avenida|Av\.|Prolongación|Residencial|Urbanización)\s+[^,]+/i);
     if (calleMatch) {
       variants.add(calleMatch[0].trim() + ", " + sec + SD);
+      variants.add(calleMatch[0].trim() + ", " + sec + DN);
     }
   }
 
@@ -5721,6 +5719,17 @@ const expandRDAddress = (s) => {
     [/\bensanche\s+ozama\b/gi, "Ensanche Ozama, Santo Domingo"],
     [/\barroyo\s+hondo\b/gi,   "Arroyo Hondo, Santo Domingo"],
     [/\bcmdo\b/gi,             "Cristo Rey, Santo Domingo"],
+    [/\bcolinas\s+de\s+los\s+r[ií]os\b/gi, "Colinas de Los Ríos, Distrito Nacional"],
+    [/\blos\s+r[ií]os\b/gi,     "Los Ríos, Distrito Nacional"],
+    [/\blos\s+girasoles\s*(?:iii|3|tercero)\b/gi, "Los Girasoles III, Distrito Nacional"],
+    [/\blos\s+girasoles\s*(?:ii|2|segundo)\b/gi, "Los Girasoles II, Distrito Nacional"],
+    [/\blos\s+girasoles\s*(?:i|1|primero)?\b/gi, "Los Girasoles I, Distrito Nacional"],
+    [/\bciudad\s+real\s*(?:ii|2)?\b/gi, "Ciudad Real II, Distrito Nacional"],
+    [/\baltos\s+de\s+arroyo\s+hondo\b/gi, "Altos de Arroyo Hondo, Distrito Nacional"],
+    [/\barroyo\s+manzano\b/gi, "Arroyo Manzano, Distrito Nacional"],
+    [/\bvilla\s+marina\b/gi, "Villa Marina, Distrito Nacional"],
+    [/\bla\s+esperanza\b/gi, "La Esperanza, Distrito Nacional"],
+    [/\bmonumental\b/gi, "Avenida Monumental, Distrito Nacional"],
 
     // ── Santo Domingo Oeste – Zona Herrera (núcleo principal) ─────────────────
     [/\bherrera\b(?!\s+de)/gi,                 "Herrera, Santo Domingo Oeste"],
@@ -6141,8 +6150,29 @@ const scoreGoogleResult = (result, original) => {
     if (anyMatch) score = Math.min(score + 3, 99);
   }
 
-  // Penalizar si el resultado es solo país/provincia (demasiado vago)
+  const addrTokens = new Set(rdAddrTokens(addr));
+  const origTokens = rdAddrTokens(original);
+  if (origTokens.length) {
+    const important = origTokens.filter(w => !/^\d+$/.test(w));
+    const hits = important.filter(w => addrTokens.has(w) || addrLower.includes(w)).length;
+    score += Math.min(14, Math.round((hits / Math.max(important.length,1)) * 14));
+    if (hits === 0 && important.length >= 2) score -= 18;
+  }
+
+  const anchor = rdContextHint(original);
+  if (anchor) {
+    const dAnchor = hav({lat,lng}, anchor);
+    if (dAnchor <= 3) score += 10;
+    else if (dAnchor <= 6) score += 5;
+    else if (dAnchor > 18) score -= 25;
+    else if (dAnchor > 10) score -= 12;
+  }
+
+  score += rdBaseDistanceBonus(lat, lng);
+
+  // Penalizar si el resultado es solo país/provincia/sector genérico (demasiado vago)
   if (types.includes("country") || types.includes("administrative_area_level_1")) score = Math.min(score, 20);
+  if ((types.includes("neighborhood") || types.includes("sublocality")) && /calle|avenida|av\.?|#|no\.?|residencial|edificio/i.test(original)) score = Math.min(score, 67);
 
   return Math.min(Math.max(score, 1), 99);
 };
@@ -6210,6 +6240,25 @@ const hav = (a, b) => {
   const R = 6371, dl = ((b.lat - a.lat) * Math.PI) / 180, dg = ((b.lng - a.lng) * Math.PI) / 180;
   const x = Math.sin(dl / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dg / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+const rdNormText = (v) => String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+const rdAddrTokens = (v) => rdNormText(v).split(" ").filter(w => w.length > 2 && !["santo","domingo","republica","dominicana","distrito","nacional","calle","avenida","sector","residencial","edificio","apartamento","apto","casa"].includes(w));
+const rdContextHint = (txt) => findAnchor(txt) || null;
+const rdBaseDistanceBonus = (lat, lng) => {
+  const d = hav({lat,lng}, DEPOT);
+  if (d <= 2.5) return 12;
+  if (d <= 5) return 9;
+  if (d <= 8) return 6;
+  if (d <= 12) return 2;
+  if (d > 35) return -18;
+  if (d > 20) return -8;
+  return 0;
+};
+const rdBuildStrictStopQuery = (raw, sector, ciudad, provincia, cp, addr2="") => {
+  const clean = [raw, sector, ciudad, provincia, cp].filter(Boolean).join(", ");
+  const ref = addr2 ? ` referencia ${addr2}` : "";
+  return `${clean}${ref}`.replace(/\s+/g," ").trim();
 };
 
 // --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
@@ -8105,6 +8154,25 @@ const SDO_ANCHORS = {
   "30 de mayo":                      { lat: 18.4900, lng: -69.9500, city: "Distrito Nacional" },
   "la julia":                        { lat: 18.4930, lng: -69.9430, city: "Distrito Nacional" },
   "los prados":                      { lat: 18.5100, lng: -69.9600, city: "Distrito Nacional" },
+  "los rios":                        { lat: 18.5058, lng: -69.9758, city: "Distrito Nacional" },
+  "los ríos":                        { lat: 18.5058, lng: -69.9758, city: "Distrito Nacional" },
+  "colinas de los rios":             { lat: 18.5085, lng: -69.9810, city: "Distrito Nacional" },
+  "colinas de los ríos":             { lat: 18.5085, lng: -69.9810, city: "Distrito Nacional" },
+  "los girasoles i":                 { lat: 18.5310, lng: -69.9960, city: "Distrito Nacional" },
+  "los girasoles ii":                { lat: 18.5335, lng: -69.9990, city: "Distrito Nacional" },
+  "los girasoles iii":               { lat: 18.5360, lng: -70.0020, city: "Distrito Nacional" },
+  "los girasoles":                   { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
+  "ciudad real":                     { lat: 18.5372, lng: -69.9840, city: "Distrito Nacional" },
+  "ciudad real ii":                  { lat: 18.5385, lng: -69.9865, city: "Distrito Nacional" },
+  "altos de arroyo hondo":           { lat: 18.5265, lng: -69.9690, city: "Distrito Nacional" },
+  "arroyo manzano":                  { lat: 18.5460, lng: -69.9790, city: "Distrito Nacional" },
+  "villa marina":                    { lat: 18.5108, lng: -69.9925, city: "Distrito Nacional" },
+  "la esperanza":                    { lat: 18.5075, lng: -69.9720, city: "Distrito Nacional" },
+  "residencial monumental":          { lat: 18.5320, lng: -69.9965, city: "Distrito Nacional" },
+  "avenida monumental":              { lat: 18.5305, lng: -69.9960, city: "Distrito Nacional" },
+  "monumental":                      { lat: 18.5305, lng: -69.9960, city: "Distrito Nacional" },
+  "carrefour autopista duarte":      { lat: 18.5018, lng: -69.9826, city: "Distrito Nacional" },
+  "republica de colombia":           { lat: 18.5300, lng: -69.9700, city: "Distrito Nacional" },
 
   // ══ SANTO DOMINGO ESTE ════════════════════════════════════════════════════
   "villa duarte":                    { lat: 18.5010, lng: -69.8400, city: "Santo Domingo Este" },
@@ -8117,7 +8185,7 @@ const SDO_ANCHORS = {
 
   // ══ SANTO DOMINGO NORTE ════════════════════════════════════════════════════
   "villa mella":                     { lat: 18.5850, lng: -69.9650, city: "Santo Domingo Norte" },
-  "los girasoles":                   { lat: 18.5700, lng: -69.9700, city: "Santo Domingo Norte" },
+  "los girasoles norte":             { lat: 18.5700, lng: -69.9700, city: "Santo Domingo Norte" },
   "el almirante":                    { lat: 18.5750, lng: -69.9600, city: "Santo Domingo Norte" },
   "sabana perdida":                  { lat: 18.6000, lng: -69.9400, city: "Santo Domingo Norte" },
   "guaricano":                       { lat: 18.5550, lng: -69.9800, city: "Santo Domingo Norte" },
@@ -8356,9 +8424,8 @@ const CircuitEngine = () => {
       const ciudad   = mapping.ciudad    ? String(row[mapping.ciudad]    || "").trim() : "";
       const provincia= mapping.provincia ? String(row[mapping.provincia] || "").trim() : "";
       const cp       = mapping.cp        ? String(row[mapping.cp]        || "").trim() : "";
-      // Build enriched query: address + addr2 + sector + ciudad + provincia
-      const enrichedParts = [raw, addr2, sector, ciudad, provincia, cp].filter(Boolean);
-      const enrichedRaw = enrichedParts.join(", ");
+      // Build enriched query: la ubicación del Excel manda. Sector es contexto, dirección 2 solo referencia al final.
+      const enrichedRaw = rdBuildStrictStopQuery(raw, sector, ciudad, provincia, cp, addr2);
       const stop = {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
@@ -8487,6 +8554,30 @@ const CircuitEngine = () => {
     setStops(prev => optimizeRoute([...prev]));
     setRoutesOptStatus("✓ Re-optimizado con motor de zonas v3");
     setTimeout(() => setRoutesOptStatus(""), 3000);
+    setReoptimizing(false);
+  };
+
+  const reprocessLowConfidence = async () => {
+    const targets = stops.filter(s => !s.geocoded || s.status === "error" || (s.confidence || 0) < 75);
+    if (!targets.length) { setRoutesOptStatus("✓ No hay ubicaciones críticas"); setTimeout(()=>setRoutesOptStatus(""),2500); return; }
+    setReoptimizing(true);
+    setRoutesOptStatus(`Reprocesando ${targets.length} ubicaciones con prioridad al Excel…`);
+    const updates = {};
+    for (let i=0; i<targets.length; i++) {
+      const s = targets[i];
+      const query = rdBuildStrictStopQuery(s.rawAddr || s.displayAddr, s.sector, s.ciudad, s.provincia, s.cp, s.addr2 || s.notes || "");
+      try {
+        const r = await geocodeWithGoogle(query);
+        if (r.ok && (r.confidence || 0) >= Math.max(55, s.confidence || 0)) {
+          updates[s.id] = { lat:r.lat, lng:r.lng, displayAddr:r.display || query, confidence:r.confidence, status:r.confidence>=70?"ok":"warning", issue:r.confidence<70?"Revisar: confianza media":"", allResults:r.allResults||[], geocoded:true, source:r.source||"reprocess" };
+        }
+      } catch(e) {}
+      setRoutesOptStatus(`Reprocesando ${i+1}/${targets.length} ubicaciones…`);
+      await new Promise(r=>setTimeout(r,35));
+    }
+    setStops(prev => optimizeRoute(prev.map(s => updates[s.id] ? { ...s, ...updates[s.id] } : s)));
+    setRoutesOptStatus("✓ Ubicaciones críticas reprocesadas");
+    setTimeout(()=>setRoutesOptStatus(""),3500);
     setReoptimizing(false);
   };
 
@@ -9016,6 +9107,12 @@ const CircuitEngine = () => {
                 <button onClick={() => setPhase(phase === "review" ? "route" : "review")} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#059669,#10b981)", color: "white", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", boxShadow: "0 3px 12px #10b98130", minWidth: 100 }}>
                   {phase === "review" ? "Ver ruta →" : "← Revisar"}
                 </button>
+                {phase === "review" && (statsWarn > 0 || statsError > 0) && <button onClick={reprocessLowConfidence} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "1px solid rgba(245,158,11,.35)", background: "rgba(245,158,11,.10)", color: "#fbbf24", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", minWidth: 128 }}>
+                  Reprocesar bajas
+                </button>}
+                {phase === "review" && (statsWarn > 0 || statsError > 0) && <button onClick={() => setClientSearch("__LOW__")} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", color: "#fca5a5", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", minWidth: 118 }}>
+                  Ver problemas
+                </button>}
                   {phase === "route" && (
                   <button
                     onClick={async () => {
@@ -9104,7 +9201,9 @@ const CircuitEngine = () => {
               <div style={{ flex:1, overflow:"auto" }}>
                 {(() => {
                   const q = clientSearch.trim().toLowerCase();
-                  const list = q
+                  const list = q === "__low__"
+                    ? stops.filter(s => s.status === "error" || (s.confidence || 0) < 75)
+                    : q
                     ? stops.filter(s =>
                         (s.client||"").toLowerCase().includes(q) ||
                         (s.displayAddr||"").toLowerCase().includes(q) ||
