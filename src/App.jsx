@@ -95,6 +95,38 @@ const FB = {
 
 // LS: memoria local + Firebase como puente cross-browser
 const _memStore = { routes: {}, chats: {}, mens: null };
+
+// Normaliza mensajeros para evitar duplicados cuando Firebase mezcla arrays y objetos.
+// Prioridad: id -> email -> teléfono -> nombre. Mantiene un solo registro por mensajero.
+const normalizeMensajeros = (data) => {
+  const raw = Array.isArray(data)
+    ? data
+    : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+
+  const byKey = {};
+  raw.filter(Boolean).forEach((m) => {
+    const cleanName  = String(m.name || "").trim().toUpperCase();
+    const cleanEmail = String(m.email || "").trim().toLowerCase();
+    const cleanPhone = String(m.phone || "").replace(/\D/g, "");
+    const key = m.id || cleanEmail || cleanPhone || cleanName;
+    if (!key) return;
+
+    if (!byKey[key]) {
+      byKey[key] = { ...m, name: cleanName || m.name, email: cleanEmail || m.email, phone: cleanPhone || m.phone };
+    } else {
+      byKey[key] = { ...byKey[key], ...m, name: cleanName || byKey[key].name, email: cleanEmail || byKey[key].email, phone: cleanPhone || byKey[key].phone };
+    }
+  });
+
+  return Object.values(byKey);
+};
+
+const mensajerosToMap = (arr) => {
+  const map = {};
+  normalizeMensajeros(arr).forEach((m) => { if (m && m.id) map[m.id] = m; });
+  return map;
+};
+
 const LS = {
   getRoutes: () => ({ ..._memStore.routes }),
   setRoute:  (id, r) => {
@@ -107,7 +139,13 @@ const LS = {
     FB.set(RD.path(`chats/${id}`), c);
   },
   getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
-  setMens:   (m) => { _memStore.mens = m; FB.set(RD.path("mensajeros"), m); },
+  setMens:   (m) => {
+    const clean = normalizeMensajeros(m);
+    _memStore.mens = clean;
+    if (typeof window !== "undefined") window.__rdMensajeros = clean;
+    // Guardar como objeto por ID evita que se duplique al agregar también por ruta /mensajeros/{id}.
+    FB.set(RD.path("mensajeros"), mensajerosToMap(clean));
+  },
   // Sin cola: una sola ruta activa por mensajero.
   // Ubicaciones en tiempo real de mensajeros
   setLocation: (driverId, loc) => {
@@ -133,12 +171,12 @@ if (typeof window !== "undefined") {
   });
   // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
   FB.get(RD.path("mensajeros")).then(data => {
-    const arr = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+    const arr = normalizeMensajeros(data);
     _memStore.mens = arr; window.__rdMensajeros = arr;
   });
   // Cargar nodo alternativo mensajeros/ (copia individual por id)
   FB.get(RD.path("mensajeros")).then(data => {
-    const fromFB = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+    const fromFB = normalizeMensajeros(data);
     _memStore.mens = fromFB;
     window.__rdMensajeros = fromFB;
   });
@@ -1330,19 +1368,41 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
   const inp={background:"#070d16",border:"1px solid rgba(148,163,184,.14)",borderRadius:12,padding:"11px 13px",color:"#e2e8f0",outline:"none",fontSize:13,width:"100%"};
   const add=async()=>{
     const name=form.name.trim().toUpperCase();
+    const cleanPhone=form.phone.trim().replace(/\D/g, "");
     if(!name||!officeId){setMsg("Falta nombre u oficina.");return;}
+    const email=form.email.trim().toLowerCase() || `${name.split(" ")[0].toLowerCase()}@rapdrive.do`;
+
+    const alreadyExists = (mensajeros||[]).some(m =>
+      String(m.email||"").toLowerCase() === email ||
+      (cleanPhone && String(m.phone||"").replace(/\D/g, "") === cleanPhone) ||
+      String(m.name||"").trim().toUpperCase() === name
+    );
+    if (alreadyExists) {
+      setMsg(`⚠ ${name} ya existe en esta oficina. No se creó duplicado.`);
+      setTimeout(()=>setMsg(""),5000);
+      return;
+    }
+
     const initials=name.split(" ").map(w=>w[0]).join("").slice(0,2);
     const newId="M-"+Date.now();
-    const email=form.email.trim().toLowerCase() || `${name.split(" ")[0].toLowerCase()}@rapdrive.do`;
-    const newMens={id:newId,name,initials,phone:form.phone.trim(),email,vehicle:form.vehicle||"Moto",active:true,color:"#3b82f6",officeId,createdAt:Date.now()};
+    const newMens={id:newId,name,initials,phone:cleanPhone,email,vehicle:form.vehicle||"Moto",active:true,color:"#3b82f6",officeId,createdAt:Date.now()};
     const newUser={id:"U-"+Date.now(),name,email,password:"driver123",role:"driver",avatar:initials,officeId,officeName:currentUser?.officeName||currentUser?.officeId||"Oficina",color:"#10b981",driverId:newId,active:true};
-    setMensajeros(prev=>{const updated=[...prev,newMens]; LS.setMens(updated); return updated;});
-    USERS.push(newUser);
-    await Promise.all([FB.set(`oficinas/${officeId}/mensajeros/${newId}`,newMens),FB.set(`oficinas/${officeId}/users/${newUser.id}`,newUser),FB.set(`users/${newUser.id}`,newUser)]);
+
+    const updated = normalizeMensajeros([...(mensajeros||[]), newMens]);
+    setMensajeros(updated);
+    _memStore.mens = updated;
+    if (typeof window !== "undefined") window.__rdMensajeros = updated;
+    if (!USERS.find(u => u.email === email || u.driverId === newId)) USERS.push(newUser);
+
+    await Promise.all([
+      FB.set(`oficinas/${officeId}/mensajeros`, mensajerosToMap(updated)),
+      FB.set(`oficinas/${officeId}/users/${newUser.id}`,newUser),
+      FB.set(`users/${newUser.id}`,newUser)
+    ]);
     setForm({name:"",phone:"",email:"",vehicle:"Moto"}); setAdding(false); setMsg(`✓ ${name} creado · Login: ${email} / driver123`); setTimeout(()=>setMsg(""),6000);
   };
-  const toggle=(id)=>setMensajeros(prev=>{const updated=prev.map(m=>m.id===id?{...m,active:!(m.active!==false)}:m); LS.setMens(updated); const changed=updated.find(m=>m.id===id); if(officeId&&changed)FB.set(`oficinas/${officeId}/mensajeros/${id}`,changed); return updated;});
-  const remove=(id,name)=>{if(!window.confirm(`¿Eliminar ${name}?`))return; setMensajeros(prev=>{const updated=prev.filter(m=>m.id!==id); LS.setMens(updated); return updated;}); const u=USERS.find(u=>u.driverId===id); if(officeId)FB.set(`oficinas/${officeId}/mensajeros/${id}`,null); if(officeId&&u)FB.set(`oficinas/${officeId}/users/${u.id}`,null); if(u)FB.set(`users/${u.id}`,null);};
+  const toggle=(id)=>setMensajeros(prev=>{const updated=normalizeMensajeros(prev.map(m=>m.id===id?{...m,active:!(m.active!==false)}:m)); LS.setMens(updated); return updated;});
+  const remove=(id,name)=>{if(!window.confirm(`¿Eliminar ${name}?`))return; const u=USERS.find(u=>u.driverId===id); setMensajeros(prev=>{const updated=normalizeMensajeros(prev.filter(m=>m.id!==id)); LS.setMens(updated); return updated;}); if(officeId&&u)FB.set(`oficinas/${officeId}/users/${u.id}`,null); if(u)FB.set(`users/${u.id}`,null);};
   return (
     <div style={{flex:1,overflow:"auto",padding:"24px",background:"radial-gradient(circle at top left,rgba(37,99,235,.10),transparent 32%),#060b10"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:16}}>
@@ -7095,11 +7155,11 @@ const ImportModal = ({ onClose, onImported }) => {
               <div style={{background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(59,130,246,0.03))",border:"1px solid rgba(59,130,246,0.18)",borderRadius:13,padding:"16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <div>
-                    <div style={{fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#60a5fa"}}>⚡ Optimizador de ruta</div>
+                    <div style={{fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#60a5fa"}}>📦 Motor de mensajería</div>
                     <div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Vecino más cercano desde la base · Mínima distancia total</div>
                   </div>
                   <button onClick={runOptimize} style={{padding:"8px 16px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"white",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px #3b82f630"}}>
-                    ⚡ Optimizar
+                    📦 Optimizar
                   </button>
                 </div>
                 {optimized ? (
@@ -7621,7 +7681,7 @@ const AddressIntelligencePanel = ({ onClose }) => {
                   />
                 </div>
                 <button onClick={runBulk} style={{padding:"10px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px #3b82f630"}}>
-                  ⚡ Analizar {bulkText.split("\n").filter(l=>l.trim()).length} direcciones
+                  📦 Analizar {bulkText.split("\n").filter(l=>l.trim()).length} direcciones
                 </button>
                 {results.length>0 && (
                   <div style={{fontSize:11,color:"#2d4a60",textAlign:"center"}}>
@@ -9164,6 +9224,9 @@ const AdminConfigV5 = ({ currentUser }) => {
 };
 
 export default function RapDrive() {
+  useEffect(() => {
+    try { document.title = "Rap Drive Mensajería"; } catch(e) {}
+  }, []);
   // -- Phase 6: Auth --
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -9193,10 +9256,12 @@ export default function RapDrive() {
     if (typeof window !== "undefined") window.__rdOfficeId = currentUser?.officeId || null;
     if (!currentUser?.officeId) { setMensajeros([]); _memStore.mens = []; window.__rdMensajeros = []; return; }
     FB.get(`oficinas/${currentUser.officeId}/mensajeros`).then(data => {
-      const arr = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+      const arr = normalizeMensajeros(data);
       setMensajeros(arr);
       _memStore.mens = arr;
       window.__rdMensajeros = arr;
+      // Si Firebase tenía mezcla array+objeto, se corrige una sola vez al entrar.
+      FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
     });
   }, [currentUser?.officeId]);
 
@@ -9423,7 +9488,7 @@ export default function RapDrive() {
     {id:"dashboard",label:"Dashboard",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>},
     {id:"routes",   label:"Rutas",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v6a4 4 0 0 0 4 4h6"/><path d="M19 5v8"/></svg>},
     {id:"drivers", label:"Drivers", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2.2c0-1.55-1.25-2.8-2.8-2.8H6.8C5.25 16 4 17.25 4 18.8V21"/><circle cx="10" cy="7.5" r="3.5"/><path d="M20 8v5"/><path d="M17.5 10.5h5"/></svg>},
-    {id:"import",   label:"Motor",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>},
+    {id:"import",   label:"Motor",    icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 14h3l2-4h6l2 4h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 10V7h5l2 3"/><path d="M4 10h3"/><path d="M14 5h3l3 4v3"/><path d="M10 3h4v4h-4z"/></svg>},
     {id:"settings", label:"Config",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>},
   ];
 
