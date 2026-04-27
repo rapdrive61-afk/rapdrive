@@ -3326,7 +3326,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
   return (
     <div
-      style={{ position:"fixed",inset:0,background:"#060c14",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",color:"#f1f5f9",overflow:"hidden" }}
+      style={{ position:"fixed",inset:0,background:"linear-gradient(180deg,#050914 0%,#07111f 48%,#050914 100%)",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",color:"#f1f5f9",overflow:"hidden" }}
       onPointerMove={handleSheetDragMove}
       onPointerUp={handleSheetDragEnd}
       onPointerLeave={handleSheetDragEnd}
@@ -3351,15 +3351,18 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         .rd-menu-item:hover{background:rgba(255,255,255,0.06)!important}
         .rd-chip-active{background:#1a2d4a!important;border-color:#2563eb!important;color:#60a5fa!important}
         .rd-chip:hover{border-color:#1e3550!important}
+        .rd-driver-shell{background:linear-gradient(180deg,#050914,#07111f)!important}
+        .rd-glass{background:rgba(8,16,30,.86)!important;border:1px solid rgba(148,163,184,.12)!important;box-shadow:0 16px 45px rgba(0,0,0,.34)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
+        .rd-soft-card{background:linear-gradient(145deg,rgba(15,30,55,.92),rgba(8,16,30,.95))!important;border:1px solid rgba(96,165,250,.16)!important;box-shadow:0 12px 34px rgba(2,6,23,.4)!important}
       `}</style>
 
       {/* ══ HEADER PREMIUM ══ */}
-      <div style={{ flexShrink:0, position:"relative", background:"#06090f", borderBottom:"1px solid rgba(255,255,255,0.06)", height:68, display:"flex", alignItems:"center", paddingLeft:14, paddingRight:14, gap:12, zIndex:100, overflow:"hidden" }}>
+      <div style={{ flexShrink:0, position:"relative", background:"linear-gradient(180deg,#08111f 0%,#050914 100%)", borderBottom:"1px solid rgba(96,165,250,0.14)", height:78, display:"flex", alignItems:"center", paddingLeft:14, paddingRight:14, gap:12, zIndex:100, overflow:"hidden", boxShadow:"0 10px 30px rgba(0,0,0,.28)" }}>
         <div style={{ position:"absolute", top:-30, left:-20, width:120, height:80, borderRadius:"50%", background:"radial-gradient(ellipse,rgba(59,130,246,0.18) 0%,transparent 70%)", pointerEvents:"none" }}/>
 
         {/* Menu button */}
         <button onClick={()=>setMenuOpen(o=>!o)} className="rd-btn"
-          style={{ width:42, height:42, borderRadius:13, flexShrink:0, cursor:"pointer", border:"none", background:"transparent", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+          style={{ width:46, height:46, borderRadius:15, flexShrink:0, cursor:"pointer", border:"none", background:"transparent", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
           <div style={{ position:"absolute", inset:0, borderRadius:13, background:menuOpen?"rgba(59,130,246,0.18)":"rgba(255,255,255,0.05)", border:`1px solid ${menuOpen?"rgba(59,130,246,0.4)":"rgba(255,255,255,0.09)"}`, transition:"all .18s" }}/>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ position:"relative", zIndex:1, overflow:"visible" }}>
             <line x1="2" y1={menuOpen?9:5} x2="16" y2={menuOpen?9:5}
@@ -3379,7 +3382,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           <input ref={photoInputRef} type="file" accept="image/*"
             onChange={handlePhotoUpload} style={{ display:"none" }}/>
           <div onClick={() => setPhotoMenuOpen(o => !o)} style={{
-            width:42, height:42, borderRadius:14, overflow:"hidden", cursor:"pointer",
+            width:48, height:48, borderRadius:16, overflow:"hidden", cursor:"pointer",
             background:"linear-gradient(135deg,#1e3a6e 0%,#1d4ed8 55%,#3b82f6 100%)",
             display:"flex", alignItems:"center", justifyContent:"center",
             fontSize:14, fontWeight:900, color:"white", letterSpacing:"-0.5px",
@@ -3447,13 +3450,38 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
         {/* Botón mapa */}
         <button onClick={()=>setTab(t=>t==="mapa"?"route":"mapa")} className="rd-btn"
-          style={{ width:42, height:42, borderRadius:13, border:`1px solid ${tab==="mapa"?"rgba(59,130,246,0.4)":"rgba(255,255,255,0.08)"}`, background:tab==="mapa"?"rgba(59,130,246,0.18)":"rgba(255,255,255,0.04)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, transition:"all .15s" }}>
+          style={{ width:46, height:46, borderRadius:15, border:`1px solid ${tab==="mapa"?"rgba(59,130,246,0.48)":"rgba(255,255,255,0.09)"}`, background:tab==="mapa"?"linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))":"rgba(255,255,255,0.045)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, transition:"all .15s", boxShadow:tab==="mapa"?"0 8px 24px rgba(37,99,235,.22)":"none" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={tab==="mapa"?"#60a5fa":"rgba(255,255,255,0.45)"} strokeWidth="1.8">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
             <line x1="8" y1="2" x2="8" y2="18"/>
             <line x1="16" y1="6" x2="16" y2="22"/>
           </svg>
         </button>
+      </div>
+
+      {/* ══ DRIVER COMMAND STRIP — resumen ejecutivo del turno ══ */}
+      <div style={{ flexShrink:0, padding:"10px 12px", background:"linear-gradient(180deg,rgba(5,9,20,.98),rgba(7,17,31,.94))", borderBottom:"1px solid rgba(96,165,250,.10)", display:"grid", gridTemplateColumns:stops.length?"1.4fr .8fr .8fr":"1fr", gap:8 }}>
+        {stops.length > 0 ? (
+          <>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"linear-gradient(135deg,rgba(37,99,235,.18),rgba(8,16,30,.88))", border:"1px solid rgba(96,165,250,.18)", minWidth:0 }}>
+              <div style={{ fontSize:9, color:"rgba(147,197,253,.72)", fontWeight:900, letterSpacing:"1.4px", textTransform:"uppercase", marginBottom:4 }}>Ruta activa</div>
+              <div style={{ fontSize:14, color:"#f8fafc", fontWeight:900, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{myRoute?.routeName || "Ruta del día"}</div>
+            </div>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
+              <div style={{ fontSize:18, color:"#60a5fa", fontWeight:1000, lineHeight:1 }}>{pct}%</div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PROGRESO</div>
+            </div>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
+              <div style={{ fontSize:18, color:locationStatus==="active"?"#22c55e":"#f59e0b", fontWeight:1000, lineHeight:1 }}>{pending.length}</div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PENDIENTES</div>
+            </div>
+          </>
+        ) : (
+          <div style={{ borderRadius:16, padding:"12px 14px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 12px #22c55e70":"none" }}/>
+            <div style={{ fontSize:13, color:"rgba(226,232,240,.82)", fontWeight:800 }}>Esperando asignación de ruta</div>
+          </div>
+        )}
       </div>
 
       {/* ══ MAP SECTION — solo en tab mapa ══ */}
@@ -3576,7 +3604,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         {/* No route overlay */}
         {!myRoute && (
           <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,background:"rgba(6,12,20,0.96)" }}>
-            <div style={{ width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30 }}>📭</div>
+            <div style={{ width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30 }}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(147,197,253,.86)" strokeWidth="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73L13 2.27a2 2 0 0 0-2 0L4 6.27A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg></div>
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.6)",marginBottom:6 }}>Sin ruta asignada</div>
               <div style={{ display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 16px" }}>
@@ -3628,7 +3656,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
             display:"flex",
             flexDirection:"column",
             overflow:"hidden",
-            background:"#070d18",
+            background:"linear-gradient(180deg,#07111f,#050914)",
           }}>
 
 
@@ -3636,7 +3664,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           {/* ── RUTA ACTIVA block ── */}
           {myRoute && (
             <div style={{ padding:"6px 10px 0", flexShrink:0 }}>
-              <div style={{ background:"linear-gradient(135deg,rgba(14,30,60,0.85),rgba(10,20,45,0.85))", border:"1px solid rgba(59,130,246,0.18)", borderRadius:14, padding:"10px 13px", position:"relative", overflow:"hidden" }}>
+              <div style={{ background:"linear-gradient(135deg,rgba(29,78,216,0.25),rgba(8,16,30,0.96))", border:"1px solid rgba(96,165,250,0.20)", borderRadius:18, padding:"12px 14px", position:"relative", overflow:"hidden", boxShadow:"0 12px 34px rgba(2,6,23,.34)" }}>
                 {/* Subtle glow */}
                 <div style={{ position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:"rgba(59,130,246,0.08)",filter:"blur(24px)",pointerEvents:"none" }}/>
 
@@ -4337,7 +4365,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                 <div style={{ padding:"10px 14px 48px" }}>
                   {/* Version */}
                   <div style={{ textAlign:"center", marginBottom:10 }}>
-                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.1)", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>RAP DRIVE v2.0</span>
+                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.1)", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>RAP DRIVE FIELD</span>
                   </div>
                   {/* Logout */}
                   <button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn"
@@ -4353,7 +4381,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         )}
 
       {/* ══ BOTTOM NAV ══ */}
-      <div style={{ flexShrink:0,background:"#060c14",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",zIndex:200,boxShadow:"0 -1px 0 rgba(255,255,255,0.04)" }}>
+      <div style={{ flexShrink:0,background:"rgba(5,9,20,.98)",borderTop:"1px solid rgba(96,165,250,0.14)",display:"flex",zIndex:200,boxShadow:"0 -12px 34px rgba(0,0,0,.34)", backdropFilter:"blur(18px)", WebkitBackdropFilter:"blur(18px)" }}>
         {[
           { id:"route", label:"Ruta",
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
@@ -4364,7 +4392,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
             icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
           <button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn"
-            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"10px 0 16px",border:"none",background:tab===item.id?"rgba(59,130,246,0.08)":"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.35)",cursor:"pointer",position:"relative",transition:"all .15s" }}>
+            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"12px 0 18px",border:"none",background:tab===item.id?"rgba(59,130,246,0.08)":"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.35)",cursor:"pointer",position:"relative",transition:"all .15s" }}>
             {item.badge>0 && tab!==item.id && (
               <div style={{ position:"absolute",top:8,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:"50%",background:"#3b82f6",border:"2px solid #080f18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontWeight:800,padding:"0 3px" }}>{item.badge>9?"9+":item.badge}</div>
             )}
