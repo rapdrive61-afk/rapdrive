@@ -89,7 +89,7 @@ const FB = {
   // Borra un nodo en Firebase sin tocar los demás
   remove: async (path) => {
     try {
-      await fetch(`/.json`, { method: "DELETE" });
+      await fetch(`${FB_URL}/${path}.json`, { method: "DELETE" });
     } catch(e) { console.warn("FB.remove error", e); }
   },
   // Lee un nodo de Firebase
@@ -2606,6 +2606,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const routeFitKeyRef = useRef(null); // evita re-centrar mapa mientras el mensajero hace zoom
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
+  const routeStopsSigRef = useRef(""); // evita refrescar/recontraer el mapa con polling de la misma ruta
   // IDs ya vistos — nunca se reinyectan desde Firebase
   const seenRouteIds = useRef(new Set());
 
@@ -2830,13 +2831,24 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       // SIN COLA: cualquier ruta nueva que llegue reemplaza directamente la ruta activa.
       const previousSentAt = lastSentAt.current;
       lastSentAt.current = route.sentAt || routeKey;
-      if (previousSentAt !== lastSentAt.current) routeFitKeyRef.current = null;
+      const isNewRoute = previousSentAt !== lastSentAt.current;
+      if (isNewRoute) routeFitKeyRef.current = null;
+
+      const nextSig = route.stops.map(s => `${s.stopNum||""}:${s.lat||""}:${s.lng||""}:${s.navStatus||""}`).join("|");
+      const sameStops = routeStopsSigRef.current === nextSig;
+
       if (!window.__rdRouteStore) window.__rdRouteStore = {};
       window.__rdRouteStore[myKey] = route;
       _memStore.routes[myKey] = route;
       onUpdateRoute(myKey, route);
-      setStops(route.stops);
-      setTab("route");
+
+      // No mandar al mensajero de vuelta a la lista cuando está usando el mapa.
+      // Solo abrir lista automáticamente cuando llega una ruta NUEVA.
+      if (!sameStops) {
+        routeStopsSigRef.current = nextSig;
+        setStops(route.stops);
+      }
+      if (isNewRoute) setTab("route");
       try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
     };
 
@@ -3025,78 +3037,41 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       markersRef.current.push(glowLine, coreLine);
     }
 
-    // ── Premium teardrop markers ──
+    // ── Pines premium unificados estilo admin: azul numerado, verde si visitado ──
     validStops.forEach(stop => {
       const isDone = stop.navStatus === "visited";
-      const isProb = false;
-      const isNow  = stop === currentStop;
-      const label  = String(stop.stopNum || "?");
-      const fs     = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
-
-      // Paleta de color por estado
-      const mc = isDone ? "#10b981" : isProb ? "#ef4444" : isNow ? "#3b82f6" : "#f59e0b";
-      const mc2 = isDone ? "#059669" : isProb ? "#dc2626" : isNow ? "#1d4ed8" : "#d97706";
-      const light = isDone ? "rgba(167,243,208,0.7)" : isProb ? "rgba(254,202,202,0.7)" : isNow ? "rgba(191,219,254,0.8)" : "rgba(253,230,138,0.75)";
-
-      // Tamaño: pin actual = grande con halo, resto = normal
-      const W = isNow ? 44 : 34;
-      const H = isNow ? 56 : 44;
-      const ballR = isNow ? 16 : 12.5;
-      const ballCX = W / 2;
-      const ballCY = ballR + (isNow ? 4 : 3);
-      // Punta del pin — debajo del círculo
-      const tipX = ballCX;
-      const tipY = H - (isNow ? 4 : 3);
-
-      const id = `p${stop.stopNum||"x"}`;
-
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      const color = isDone ? "#22c55e" : "#2563eb";
+      const dark = isDone ? "#16a34a" : "#1d4ed8";
+      const label = String(stop.stopNum || "?");
+      const fs = label.length > 2 ? 9 : 11;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="50" viewBox="0 0 44 50">
         <defs>
-          <radialGradient id="bg${id}" cx="42%" cy="32%" r="68%">
-            <stop offset="0%" stop-color="${light}"/>
-            <stop offset="55%" stop-color="${mc}"/>
-            <stop offset="100%" stop-color="${mc2}"/>
-          </radialGradient>
-          <radialGradient id="glow${id}" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="${mc}" stop-opacity="0.55"/>
-            <stop offset="100%" stop-color="${mc}" stop-opacity="0"/>
-          </radialGradient>
-          <filter id="sh${id}" x="-50%" y="-30%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="${isNow?3.5:2}" flood-color="${mc2}" flood-opacity="${isNow?0.65:0.45}"/>
+          <filter id="s" x="-40%" y="-25%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="7" stdDeviation="5" flood-color="${color}" flood-opacity=".38"/>
           </filter>
+          <linearGradient id="g" x1="10" y1="5" x2="34" y2="45" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#60a5fa"/>
+            <stop offset=".55" stop-color="${color}"/>
+            <stop offset="1" stop-color="${dark}"/>
+          </linearGradient>
         </defs>
-
-        ${isNow ? `<ellipse cx="${ballCX}" cy="${ballCY}" rx="${ballR+8}" ry="${ballR+8}" fill="url(#glow${id})"/>` : ""}
-
-        <!-- Pin shape -->
-        <g filter="url(#sh${id})">
-          <path d="M${ballCX-7},${ballCY+ballR-4} Q${ballCX},${tipY+6} ${tipX},${tipY} Q${ballCX},${tipY+6} ${ballCX+7},${ballCY+ballR-4}Z"
-            fill="url(#bg${id})"/>
-          <circle cx="${ballCX}" cy="${ballCY}" r="${ballR}"
-            fill="url(#bg${id})"
-            stroke="rgba(255,255,255,${isNow?0.6:0.4})"
-            stroke-width="${isNow?2:1.5}"/>
-          <ellipse cx="${ballCX-ballR*0.22}" cy="${ballCY-ballR*0.28}"
-            rx="${ballR*0.42}" ry="${ballR*0.26}"
-            fill="rgba(255,255,255,0.32)"
-            transform="rotate(-25,${ballCX-ballR*0.22},${ballCY-ballR*0.28})"/>
+        <g filter="url(#s)">
+          <path d="M22 47s15-13.5 15-26A15 15 0 0 0 7 21c0 12.5 15 26 15 26z" fill="url(#g)"/>
+          <circle cx="22" cy="21" r="12" fill="rgba(3,7,18,.22)" stroke="rgba(255,255,255,.45)" stroke-width="1.5"/>
+          <text x="22" y="25" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
         </g>
-
-        <!-- Siempre mostrar el número de parada -->
-        <text x="${ballCX}" y="${ballCY+0.5}" text-anchor="middle" dominant-baseline="central"
-          font-size="${fs}" font-weight="900" fill="white"
-          font-family="-apple-system,BlinkMacSystemFont,sans-serif" letter-spacing="-0.5" opacity="0.97">${label}</text>
       </svg>`;
 
       const marker = new window.google.maps.Marker({
         map: gMapRef.current,
         position: { lat: stop.lat, lng: stop.lng },
-        title: `#${stop.stopNum} ${stop.client}`,
-        zIndex: isNow ? 999 : isDone ? 1 : isProb ? 2 : 10,
+        title: `#${stop.stopNum} ${stop.client || ""}`,
+        zIndex: isDone ? 5 : 20,
+        optimized: true,
         icon: {
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-          scaledSize: new window.google.maps.Size(W, H),
-          anchor: new window.google.maps.Point(W / 2, H - 2), // punta del pin al suelo
+          scaledSize: new window.google.maps.Size(44, 50),
+          anchor: new window.google.maps.Point(22, 47),
         },
       });
       marker.addListener("click", () => {
