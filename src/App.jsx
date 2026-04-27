@@ -4372,11 +4372,11 @@ const MensajeroManager = ({ mensajeros, setMensajeros, currentUser }) => {
 
 const PageSuperAdmin = ({ currentUser, onLogout }) => {
   const [offices, setOffices] = useState({});
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([...USERS]);
   const [selected, setSelected] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [form, setForm] = useState({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
@@ -4392,17 +4392,26 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     });
     setUsers(merged);
   }, []);
+
   useEffect(() => { load(); }, [load]);
 
-  const slugify = (txt) => (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-  const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o })).sort((a,b) => (a.nombre||a.id).localeCompare(b.nombre||b.id));
+  const slugify = (txt) => (txt || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+
+  const countObj = (v) => Array.isArray(v) ? v.length : (v && typeof v === "object" ? Object.values(v).filter(Boolean).length : 0);
+  const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o })).sort((a,b) => (a.nombre || a.id).localeCompare(b.nombre || b.id));
   const filteredOffices = officeList.filter(o => {
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || [o.nombre, o.id, o.responsable, o.telefono, o.ubicacionBase?.direccion].some(v => String(v || "").toLowerCase().includes(q));
     const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? o.activa !== false : o.activa === false);
     return matchesQuery && matchesStatus;
   });
-  const countObj = (v) => Array.isArray(v) ? v.length : (v && typeof v === "object" ? Object.values(v).filter(Boolean).length : 0);
+
   const stats = {
     total: officeList.length,
     active: officeList.filter(o => o.activa !== false).length,
@@ -4411,13 +4420,13 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     drivers: officeList.reduce((n,o)=>n+countObj(o.mensajeros),0),
     routes: officeList.reduce((n,o)=>n+countObj(o.routes),0),
   };
-  const health = stats.total ? Math.round((stats.active / stats.total) * 100) : 0;
+
   const selectedOffice = selected ? offices[selected] : null;
   const selectedAdmins = users.filter(u => u.officeId === selected && (u.role === "admin" || u.role === "office_admin"));
-  const selectedDrivers = selectedOffice ? countObj(selectedOffice.mensajeros) : 0;
-  const selectedRoutes = selectedOffice ? countObj(selectedOffice.routes) : 0;
+  const health = stats.total ? Math.round((stats.active / stats.total) * 100) : 0;
 
   const resetForm = () => setForm({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
+
   const saveOffice = async () => {
     const nombre = form.nombre.trim();
     const id = slugify(form.codigo || nombre);
@@ -4425,46 +4434,105 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     if (!form.adminEmail.trim() || !form.adminPassword.trim()) { setMsg("Crea el login del admin de esta oficina."); return; }
     setSaving(true); setMsg("");
     const now = new Date().toISOString();
-    const office = {
-      id, nombre, codigo:id, activa:true,
-      responsable:form.responsable.trim(), telefono:form.telefono.trim(),
-      createdAt:now, createdBy:currentUser?.email||"super_admin",
-      ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 },
-      mensajeros:{}, routes:{}, routeHistory:{}, locations:{}, users:{}
-    };
     const admin = {
       id:`OA-${id}-${Date.now()}`,
-      name:form.adminName.trim()||`Admin ${nombre}`,
+      name:form.adminName.trim() || `Admin ${nombre}`,
       email:form.adminEmail.trim().toLowerCase(),
       password:form.adminPassword,
       role:"admin",
-      avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
-      color:"#3b82f6", officeId:id, officeName:nombre, active:true
+      avatar:(form.adminName.trim() || nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+      color:"#3b82f6",
+      officeId:id,
+      officeName:nombre,
+      active:true
     };
-    office.users[admin.id] = admin;
-    await Promise.all([FB.set(`oficinas/${id}`, office), FB.set(`users/${admin.id}`, admin)]);
+    const office = {
+      id,
+      nombre,
+      codigo:id,
+      activa:true,
+      responsable:form.responsable.trim(),
+      telefono:form.telefono.trim(),
+      createdAt:now,
+      createdBy:currentUser?.email || "super_admin",
+      ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 },
+      mensajeros:{},
+      routes:{},
+      routeHistory:{},
+      locations:{},
+      users:{ [admin.id]: admin }
+    };
+    await Promise.all([
+      FB.set(`oficinas/${id}`, office),
+      FB.set(`oficinas/${id}/users/${admin.id}`, admin),
+      FB.set(`users/${admin.id}`, admin)
+    ]);
     if (!USERS.find(u => u.id === admin.id)) USERS.push(admin);
-    resetForm(); setShowCreate(false); setMsg(`Oficina ${nombre} creada correctamente.`);
-    await load(); setSelected(id); setSaving(false);
+    resetForm();
+    setShowCreate(false);
+    await load();
+    setSelected(id);
+    setMsg(`Oficina ${nombre} creada correctamente.`);
+    setSaving(false);
   };
-  const toggleOffice = async (id, next) => { await FB.set(`oficinas/${id}/activa`, next); await load(); setMsg(next ? "Oficina habilitada." : "Oficina pausada."); };
-  const deleteOffice = async (id) => { const o = offices[id]; if (!confirm(`¿Eliminar la oficina ${o?.nombre || id}?`)) return; await FB.set(`oficinas/${id}`, null); await load(); if (selected === id) setSelected(null); setMsg("Oficina eliminada."); };
+
+  const toggleOffice = async (id, next) => {
+    await FB.set(`oficinas/${id}/activa`, next);
+    await load();
+    setMsg(next ? "Oficina habilitada." : "Oficina pausada.");
+  };
+
+  const deleteOffice = async (id) => {
+    const o = offices[id];
+    if (!confirm(`¿Eliminar la oficina ${o?.nombre || id}? Esta acción no se puede deshacer.`)) return;
+    await FB.set(`oficinas/${id}`, null);
+    await load();
+    if (selected === id) setSelected(null);
+    setMsg("Oficina eliminada.");
+  };
+
+  const confirmLogout = () => {
+    if (confirm("¿Quieres cerrar la sesión del Super Admin?")) onLogout?.();
+  };
 
   const ui = {
-    bg:"#090d14", panel:"#0f1724", panel2:"#111c2b", card:"#101827", line:"#22314a", text:"#f8fafc", muted:"#91a4bf", soft:"#cbd5e1", blue:"#3b82f6", green:"#22c55e", red:"#f43f5e", amber:"#f59e0b", purple:"#8b5cf6"
+    bg:"#060b12", panel:"#0b1220", panel2:"#0f172a", card:"#101827", card2:"#0d1524", line:"#1e2d44",
+    text:"#f8fafc", muted:"#94a3b8", soft:"#dbeafe", blue:"#3b82f6", green:"#22c55e", red:"#fb7185", amber:"#f59e0b", purple:"#a78bfa", cyan:"#22d3ee"
   };
-  const input = { height:44, border:`1px solid ${ui.line}`, borderRadius:12, background:"#0b1220", color:ui.text, padding:"0 14px", fontSize:14, outline:"none", width:"100%" };
-  const label = { display:"block", fontSize:11, color:ui.muted, fontWeight:900, marginBottom:7, letterSpacing:".7px", textTransform:"uppercase" };
-  const glass = { background:"linear-gradient(180deg,rgba(16,24,39,.96),rgba(12,18,30,.96))", border:`1px solid ${ui.line}`, borderRadius:20, boxShadow:"0 24px 80px rgba(0,0,0,.32)" };
-  const btn = { height:42, borderRadius:12, border:`1px solid ${ui.line}`, background:"#101827", color:ui.soft, padding:"0 15px", fontWeight:900, cursor:"pointer" };
-  const primary = { ...btn, border:"none", color:"white", background:"linear-gradient(135deg,#2563eb,#4f46e5)", boxShadow:"0 16px 32px rgba(37,99,235,.28)" };
-  const IconBox = ({ children, color=ui.blue }) => <div style={{ width:38, height:38, borderRadius:13, background:`linear-gradient(135deg,${color}24,${color}10)`, border:`1px solid ${color}35`, display:"grid", placeItems:"center", color, fontWeight:1000, fontSize:14 }}>{children}</div>;
-  const Status = ({ active }) => <span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:999, fontSize:12, fontWeight:900, color:active?"#bbf7d0":"#fecdd3", background:active?"rgba(34,197,94,.13)":"rgba(244,63,94,.13)", border:`1px solid ${active?"rgba(34,197,94,.28)":"rgba(244,63,94,.28)"}` }}><span style={{ width:7, height:7, borderRadius:999, background:active?ui.green:ui.red, boxShadow:`0 0 12px ${active?ui.green:ui.red}` }}/>{active?"Activa":"Pausada"}</span>;
 
-  const activity = [
-    ...officeList.slice(0,5).map(o => ({ title:o.activa===false?"Oficina pausada":"Oficina operativa", text:o.nombre || o.id, tone:o.activa===false?ui.red:ui.green })),
-    ...(officeList.length===0?[{ title:"Sin oficinas creadas", text:"Crea tu primera oficina para iniciar operación.", tone:ui.amber }]:[])
+  const SvgIcon = ({ name, color=ui.blue, size=20 }) => {
+    const common = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth:2.2, strokeLinecap:"round", strokeLinejoin:"round" };
+    const paths = {
+      office:<><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v16"/><path d="M9 21v-4h3v4"/><path d="M8 7h1M12 7h1M8 11h1M12 11h1M19 21V10h1a1 1 0 0 1 1 1v10"/></>,
+      active:<><path d="M20 6 9 17l-5-5"/></>,
+      pause:<><path d="M10 4H6v16h4V4Z"/><path d="M18 4h-4v16h4V4Z"/></>,
+      users:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+      route:<><path d="M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M8.5 14.5 15.5 9.5"/></>,
+      shield:<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></>,
+      search:<><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
+      plus:<><path d="M12 5v14M5 12h14"/></>,
+      logout:<><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5"/></>,
+      settings:<><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.3.4.7.8 1.1 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></>
+    };
+    return <svg {...common}>{paths[name] || paths.office}</svg>;
+  };
+
+  const card = { background:`linear-gradient(180deg,${ui.panel2},${ui.panel})`, border:`1px solid ${ui.line}`, borderRadius:18, boxShadow:"0 18px 44px rgba(0,0,0,.22)" };
+  const input = { height:44, border:`1px solid ${ui.line}`, borderRadius:13, background:"#070d16", color:ui.text, padding:"0 14px", fontSize:14, outline:"none", width:"100%" };
+  const btn = { height:42, borderRadius:13, border:`1px solid ${ui.line}`, background:"#0b1322", color:ui.soft, padding:"0 15px", fontWeight:900, cursor:"pointer" };
+  const primary = { ...btn, border:"none", color:"white", background:"linear-gradient(135deg,#2563eb,#4f46e5)", boxShadow:"0 14px 34px rgba(37,99,235,.35)" };
+  const label = { display:"block", fontSize:11, color:ui.muted, fontWeight:900, marginBottom:7, letterSpacing:".7px", textTransform:"uppercase" };
+  const statusBadge = (active) => <span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:999, color:active?"#bbf7d0":"#fecdd3", background:active?"rgba(34,197,94,.12)":"rgba(251,113,133,.12)", border:`1px solid ${active?"rgba(34,197,94,.32)":"rgba(251,113,133,.32)"}`, fontSize:12, fontWeight:900 }}><span style={{ width:7, height:7, borderRadius:999, background:active?ui.green:ui.red, boxShadow:`0 0 12px ${active?ui.green:ui.red}` }}/>{active ? "Activa" : "Pausada"}</span>;
+
+  const metricCards = [
+    { label:"Oficinas", value:stats.total, note:"Total creadas", icon:"office", color:ui.blue },
+    { label:"Activas", value:stats.active, note:"Operando", icon:"active", color:ui.green },
+    { label:"Pausadas", value:stats.disabled, note:"Bloqueadas", icon:"pause", color:ui.red },
+    { label:"Admins", value:stats.admins, note:"Accesos", icon:"shield", color:ui.purple },
+    { label:"Mensajeros", value:stats.drivers, note:"Registrados", icon:"users", color:ui.cyan },
+    { label:"Rutas activas", value:stats.routes, note:"En campo", icon:"route", color:ui.amber },
   ];
+
   const riskItems = [
     { label:"Oficinas pausadas", value:stats.disabled, tone:ui.red },
     { label:"Sin mensajeros", value:officeList.filter(o=>countObj(o.mensajeros)===0).length, tone:ui.amber },
@@ -4472,65 +4540,110 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
   ];
 
   return (
-    <div style={{ position:"fixed", inset:0, background:`radial-gradient(circle at 25% 0%,rgba(59,130,246,.18),transparent 30%), radial-gradient(circle at 80% 20%,rgba(139,92,246,.13),transparent 32%), ${ui.bg}`, color:ui.text, fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');*{box-sizing:border-box}*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-track{background:#090d14}*::-webkit-scrollbar-thumb{background:#26374f;border-radius:999px}.rdRow:hover{background:#121f31!important;transform:translateY(-1px)}.rdInput:focus{border-color:#3b82f6!important;box-shadow:0 0 0 4px rgba(59,130,246,.12)!important}.rdPulse{animation:rdpulse 2s infinite}@keyframes rdpulse{0%,100%{opacity:1}50%{opacity:.45}}`}</style>
-      <div style={{ display:"grid", gridTemplateColumns:"292px 1fr", height:"100%" }}>
-        <aside style={{ borderRight:`1px solid ${ui.line}`, background:"linear-gradient(180deg,#0d1421,#080d16)", padding:22, display:"flex", flexDirection:"column", gap:22 }}>
+    <div style={{ position:"fixed", inset:0, background:`radial-gradient(circle at 16% 0%,rgba(37,99,235,.20),transparent 34%), radial-gradient(circle at 90% 12%,rgba(79,70,229,.16),transparent 32%), ${ui.bg}`, color:ui.text, fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');*{box-sizing:border-box}*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-track{background:#060b12}*::-webkit-scrollbar-thumb{background:#26374f;border-radius:999px}.rdInput:focus{border-color:#3b82f6!important;box-shadow:0 0 0 4px rgba(59,130,246,.13)!important}.rdRow:hover{background:#111c2d!important}.rdBtn:hover{transform:translateY(-1px);filter:brightness(1.08)}.rdMetric:hover{transform:translateY(-2px);border-color:#34507a!important}`}</style>
+      <div style={{ display:"grid", gridTemplateColumns:"290px 1fr", height:"100%" }}>
+        <aside style={{ borderRight:`1px solid ${ui.line}`, background:"linear-gradient(180deg,#0b1322,#070c15)", padding:22, display:"flex", flexDirection:"column", gap:20 }}>
           <div style={{ display:"flex", alignItems:"center", gap:13 }}>
-            <div style={{ width:46, height:46, borderRadius:15, background:"linear-gradient(135deg,#2563eb,#7c3aed)", boxShadow:"0 18px 45px rgba(37,99,235,.34)", display:"grid", placeItems:"center", fontWeight:1000 }}>RD</div>
-            <div><div style={{ fontSize:17, fontWeight:1000, letterSpacing:"-.4px" }}>Rap Drive</div><div style={{ fontSize:12, color:ui.muted, marginTop:4 }}>Command Center</div></div>
+            <div style={{ width:48, height:48, borderRadius:16, background:"linear-gradient(135deg,#2563eb,#4f46e5)", display:"grid", placeItems:"center", boxShadow:"0 16px 38px rgba(37,99,235,.38)" }}><SvgIcon name="office" color="white" size={23}/></div>
+            <div><div style={{ fontSize:18, fontWeight:1000, letterSpacing:"-.5px" }}>Rap Drive</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>Super Admin</div></div>
           </div>
-          <nav style={{ display:"grid", gap:9 }}>
-            {[ ["Oficinas",stats.total,"OF"], ["Actividad",activity.length,"AC"], ["Riesgos",riskItems.reduce((n,r)=>n+r.value,0),"RG"], ["Accesos",stats.admins,"AD"] ].map(([t,v,ic],i)=>(
-              <div key={t} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 15px", borderRadius:15, background:i===0?"rgba(59,130,246,.16)":"rgba(255,255,255,.045)", border:`1px solid ${i===0?"rgba(59,130,246,.35)":"rgba(255,255,255,.075)"}` }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}><IconBox color={i===0?ui.blue:ui.muted}>{ic}</IconBox><span style={{ fontSize:13, fontWeight:900 }}>{t}</span></div>
+
+          <nav style={{ display:"grid", gap:10, marginTop:4 }}>
+            {[
+              ["Oficinas", stats.total, "office", ui.blue],
+              ["Actividad", officeList.length, "route", ui.green],
+              ["Riesgos", riskItems.reduce((n,r)=>n+r.value,0), "shield", ui.amber],
+              ["Accesos", stats.admins, "users", ui.purple],
+            ].map(([t,v,ic,c],i)=>(
+              <div key={t} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 14px", borderRadius:16, background:i===0?"rgba(59,130,246,.16)":"rgba(255,255,255,.04)", border:`1px solid ${i===0?"rgba(59,130,246,.38)":"rgba(255,255,255,.075)"}` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:11 }}><SvgIcon name={ic} color={c} size={20}/><span style={{ fontSize:13, fontWeight:900 }}>{t}</span></div>
                 <b style={{ color:i===0?"#93c5fd":ui.soft, fontSize:18 }}>{v}</b>
               </div>
             ))}
           </nav>
-          <div style={{ ...glass, padding:16, borderRadius:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}><span style={{ color:ui.muted, fontWeight:900, fontSize:12 }}>Salud operativa</span><b>{health}%</b></div>
-            <div style={{ height:8, borderRadius:999, background:"#0a101b", overflow:"hidden", border:`1px solid ${ui.line}` }}><div style={{ width:`${health}%`, height:"100%", borderRadius:999, background:"linear-gradient(90deg,#22c55e,#3b82f6)", boxShadow:"0 0 18px rgba(34,197,94,.35)" }}/></div>
-            <div style={{ color:ui.muted, fontSize:12, lineHeight:1.5, marginTop:12 }}>{stats.active} oficinas activas · {stats.routes} rutas activas</div>
+
+          <div style={{ ...card, padding:16, marginTop:2 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}><span style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Salud operativa</span><b>{health}%</b></div>
+            <div style={{ height:9, background:"#111827", borderRadius:999, overflow:"hidden", border:`1px solid ${ui.line}` }}><div style={{ height:"100%", width:`${health}%`, background:"linear-gradient(90deg,#22c55e,#3b82f6)", borderRadius:999 }}/></div>
+            <div style={{ color:ui.muted, fontSize:12, marginTop:12 }}>{stats.active} oficinas activas · {stats.routes} rutas activas</div>
           </div>
-          <div style={{ marginTop:"auto", ...glass, padding:16, borderRadius:18 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:900, textTransform:"uppercase", letterSpacing:".7px" }}>Sesión actual</div><div style={{ fontSize:13, fontWeight:900, marginTop:8, wordBreak:"break-all" }}>{currentUser?.email}</div></div>
-          <button onClick={onLogout} style={{ ...btn, width:"100%" }}>Cerrar sesión</button>
+
+          <div style={{ marginTop:"auto", display:"grid", gap:11 }}>
+            <div style={{ ...card, padding:15 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Sesión actual</div><div style={{ marginTop:10, fontWeight:1000, fontSize:13 }}>{currentUser?.email}</div></div>
+            <button className="rdBtn" onClick={confirmLogout} style={{ ...btn, width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:9 }}><SvgIcon name="logout" color={ui.soft} size={18}/> Cerrar sesión</button>
+          </div>
         </aside>
-        <main style={{ overflow:"auto", padding:28 }}>
-          <div style={{ maxWidth:1500, margin:"0 auto" }}>
-            <header style={{ ...glass, padding:22, borderRadius:24, marginBottom:18, background:"linear-gradient(135deg,rgba(16,24,39,.96),rgba(15,23,42,.88)), linear-gradient(90deg,rgba(59,130,246,.22),rgba(139,92,246,.13))" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:20 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:15 }}><IconBox color={ui.blue}>HQ</IconBox><div><div style={{ display:"inline-flex", alignItems:"center", gap:8, color:"#93c5fd", fontSize:12, fontWeight:1000, letterSpacing:".8px", textTransform:"uppercase" }}><span className="rdPulse" style={{ width:8, height:8, borderRadius:999, background:ui.green, boxShadow:`0 0 16px ${ui.green}` }}/> Rap Drive Enterprise</div><h1 style={{ margin:"5px 0 0", fontSize:30, lineHeight:1.05, letterSpacing:"-.9px", fontWeight:1000 }}>Centro de control multi-oficina</h1></div></div>
-                <div style={{ display:"flex", gap:10, alignItems:"center" }}><button onClick={load} style={btn}>Actualizar</button><button onClick={()=>setShowCreate(true)} style={primary}>+ Nueva oficina</button></div>
-              </div>
-            </header>
-            {msg && <div style={{ marginBottom:16, padding:"13px 15px", borderRadius:14, border:`1px solid ${msg.includes("creada")||msg.includes("habilitada")?"rgba(34,197,94,.32)":"rgba(59,130,246,.35)"}`, background:msg.includes("creada")||msg.includes("habilitada")?"rgba(34,197,94,.10)":"rgba(59,130,246,.10)", color:ui.soft, fontWeight:800 }}>{msg}</div>}
+
+        <main style={{ overflow:"auto", padding:26 }}>
+          <div style={{ maxWidth:1480, margin:"0 auto" }}>
             <section style={{ display:"grid", gridTemplateColumns:"repeat(6,minmax(0,1fr))", gap:14, marginBottom:16 }}>
-              {[ ["Oficinas",stats.total,"Total creadas",ui.blue], ["Activas",stats.active,"Operando",ui.green], ["Pausadas",stats.disabled,"Bloqueadas",ui.red], ["Admins",stats.admins,"Accesos",ui.purple], ["Mensajeros",stats.drivers,"Registrados","#06b6d4"], ["Rutas activas",stats.routes,"En campo",ui.amber] ].map(([a,b,c,color])=>(
-                <div key={a} style={{ ...glass, padding:18, minHeight:120 }}><div style={{ display:"flex", justifyContent:"space-between", color:ui.muted, fontSize:12, fontWeight:900 }}><span>{a}</span><span style={{ width:9, height:9, borderRadius:999, background:color, boxShadow:`0 0 16px ${color}` }}/></div><div style={{ fontSize:34, fontWeight:1000, marginTop:16, letterSpacing:"-1px" }}>{b}</div><div style={{ color:ui.muted, fontSize:12, marginTop:6 }}>{c}</div></div>
+              {metricCards.map(m=>(
+                <div className="rdMetric" key={m.label} style={{ ...card, padding:18, transition:"all .16s ease", minHeight:132 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>{m.label}</span><SvgIcon name={m.icon} color={m.color} size={22}/></div>
+                  <div style={{ fontSize:34, fontWeight:1000, lineHeight:1, marginTop:20 }}>{m.value}</div>
+                  <div style={{ color:"#9fb4d3", fontSize:12, marginTop:10 }}>{m.note}</div>
+                </div>
               ))}
             </section>
-            <div style={{ display:"grid", gridTemplateColumns:selectedOffice?"1fr 390px":"1fr", gap:16, alignItems:"start" }}>
-              <section style={{ ...glass, overflow:"hidden" }}>
-                <div style={{ padding:18, borderBottom:`1px solid ${ui.line}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:14, flexWrap:"wrap" }}>
-                  <div><div style={{ fontSize:20, fontWeight:1000 }}>Oficinas registradas</div><div style={{ fontSize:13, color:ui.muted, marginTop:4 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div></div>
-                  <div style={{ display:"flex", gap:10 }}><input className="rdInput" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...input, width:330 }}/><select className="rdInput" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...input, width:145 }}><option value="all">Todas</option><option value="active">Activas</option><option value="disabled">Pausadas</option></select></div>
+
+            {msg && <div style={{ marginBottom:14, padding:"12px 14px", borderRadius:14, background:"rgba(59,130,246,.12)", border:`1px solid rgba(59,130,246,.28)`, color:ui.soft, fontWeight:800 }}>{msg}</div>}
+
+            <section style={{ ...card, overflow:"hidden" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 20px", borderBottom:`1px solid ${ui.line}` }}>
+                <div>
+                  <div style={{ fontSize:21, fontWeight:1000, letterSpacing:"-.4px" }}>Oficinas</div>
+                  <div style={{ color:ui.muted, fontSize:13, marginTop:4 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1.35fr 1fr .75fr 1.25fr .65fr .65fr 100px", gap:0, padding:"12px 16px", borderBottom:`1px solid ${ui.line}`, background:"rgba(255,255,255,.025)", color:ui.muted, fontSize:11, fontWeight:1000, letterSpacing:".7px", textTransform:"uppercase" }}><div>Oficina</div><div>Admin</div><div>Estado</div><div>Base</div><div>Mens.</div><div>Rutas</div><div>Acciones</div></div>
-                {filteredOffices.length===0 ? <div style={{ padding:58, textAlign:"center" }}><div style={{ width:54, height:54, margin:"0 auto 14px", borderRadius:18, display:"grid", placeItems:"center", background:"rgba(59,130,246,.12)", border:"1px solid rgba(59,130,246,.28)", color:"#93c5fd", fontWeight:1000 }}>OF</div><div style={{ fontSize:18, fontWeight:1000 }}>No hay oficinas para mostrar</div><div style={{ color:ui.muted, marginTop:8 }}>Crea la primera oficina o cambia el filtro.</div></div> : filteredOffices.map(o => {
-                  const admins = users.filter(u=>u.officeId===o.id && (u.role==="admin" || u.role==="office_admin")); const active = o.activa !== false;
-                  return <div key={o.id} className="rdRow" onClick={()=>setSelected(o.id)} style={{ display:"grid", gridTemplateColumns:"1.35fr 1fr .75fr 1.25fr .65fr .65fr 100px", gap:0, alignItems:"center", padding:"14px 16px", borderBottom:`1px solid ${ui.line}`, cursor:"pointer", transition:"all .16s", background:selected===o.id?"rgba(59,130,246,.10)":"transparent" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}><div style={{ width:40, height:40, borderRadius:14, display:"grid", placeItems:"center", background:"linear-gradient(135deg,rgba(59,130,246,.28),rgba(139,92,246,.16))", border:"1px solid rgba(59,130,246,.28)", color:"#bfdbfe", fontWeight:1000 }}>{(o.nombre||o.id).slice(0,2).toUpperCase()}</div><div style={{ minWidth:0 }}><div style={{ fontWeight:1000, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{o.nombre||o.id}</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>{o.responsable || "Sin responsable"}</div></div></div>
-                    <div style={{ color:ui.soft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{admins[0]?.email || "Sin admin"}</div><div><Status active={active}/></div><div style={{ color:ui.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{o.ubicacionBase?.direccion || "Sin base"}</div><div style={{ fontWeight:1000 }}>{countObj(o.mensajeros)}</div><div style={{ fontWeight:1000 }}>{countObj(o.routes)}</div><div><button onClick={(e)=>{e.stopPropagation();toggleOffice(o.id,!active)}} style={{ ...btn, height:34, padding:"0 10px", color:active?"#fecdd3":"#bbf7d0" }}>{active?"Pausar":"Activar"}</button></div>
-                  </div>})}
+                <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                  <div style={{ position:"relative", width:360 }}><span style={{ position:"absolute", left:14, top:12 }}><SvgIcon name="search" color={ui.muted} size={17}/></span><input className="rdInput" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...input, paddingLeft:42 }}/></div>
+                  <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...input, width:156 }}><option value="all">Todas</option><option value="active">Activas</option><option value="paused">Pausadas</option></select>
+                  <button className="rdBtn" onClick={()=>setShowCreate(true)} style={{ ...primary, display:"flex", alignItems:"center", gap:8 }}><SvgIcon name="plus" color="white" size={18}/> Nueva oficina</button>
+                </div>
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1.25fr .75fr 1.5fr .6fr .6fr .8fr", padding:"14px 18px", color:ui.muted, fontSize:11, fontWeight:1000, letterSpacing:".6px", textTransform:"uppercase", borderBottom:`1px solid ${ui.line}` }}>
+                <div>Oficina</div><div>Admin</div><div>Estado</div><div>Base</div><div>Mens.</div><div>Rutas</div><div>Acciones</div>
+              </div>
+
+              {filteredOffices.length === 0 ? <div style={{ padding:54, textAlign:"center", color:ui.muted }}><SvgIcon name="office" color={ui.blue} size={42}/><div style={{ fontWeight:1000, color:ui.text, marginTop:14, fontSize:18 }}>No hay oficinas para mostrar</div><div style={{ marginTop:6 }}>Crea la primera oficina desde el botón “Nueva oficina”.</div></div> : filteredOffices.map(o => {
+                const admins = users.filter(u => u.officeId === o.id && (u.role === "admin" || u.role === "office_admin"));
+                const active = o.activa !== false;
+                return <div className="rdRow" key={o.id} onClick={()=>setSelected(o.id)} style={{ display:"grid", gridTemplateColumns:"1.55fr 1.25fr .75fr 1.5fr .6fr .6fr .8fr", alignItems:"center", padding:"16px 18px", borderBottom:`1px solid ${ui.line}`, cursor:"pointer", transition:"all .14s ease" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}><div style={{ width:43, height:43, borderRadius:14, background:"linear-gradient(135deg,rgba(59,130,246,.28),rgba(79,70,229,.16))", border:"1px solid rgba(59,130,246,.35)", display:"grid", placeItems:"center" }}><SvgIcon name="office" color="#93c5fd" size={21}/></div><div style={{ minWidth:0 }}><div style={{ fontWeight:1000, fontSize:16, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{o.nombre}</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>{o.responsable || o.id}</div></div></div>
+                  <div style={{ color:ui.soft, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{admins[0]?.email || "Sin admin"}</div>
+                  <div>{statusBadge(active)}</div>
+                  <div style={{ color:ui.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{o.ubicacionBase?.direccion || "Sin base"}</div>
+                  <div style={{ fontWeight:1000 }}>{countObj(o.mensajeros)}</div>
+                  <div style={{ fontWeight:1000 }}>{countObj(o.routes)}</div>
+                  <div><button className="rdBtn" onClick={(e)=>{e.stopPropagation();toggleOffice(o.id,!active)}} style={{ ...btn, height:34, padding:"0 10px", color:active?"#fecdd3":"#bbf7d0" }}>{active?"Pausar":"Activar"}</button></div>
+                </div>
+              })}
+            </section>
+
+            <div style={{ display:"grid", gridTemplateColumns:selectedOffice?"1fr 420px":"1fr", gap:16, marginTop:16 }}>
+              <section style={{ ...card, padding:18 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}><div style={{ fontSize:18, fontWeight:1000 }}>Actividad operacional</div><SvgIcon name="route" color={ui.green}/></div>
+                <div style={{ display:"grid", gap:10 }}>
+                  {(officeList.length ? officeList.slice(0,6) : [{ nombre:"Aún no hay actividad registrada", activa:true }]).map((o,i)=><div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:13, border:`1px solid ${ui.line}`, borderRadius:15, background:"rgba(255,255,255,.03)" }}><span style={{ width:10, height:10, borderRadius:999, background:o.activa===false?ui.red:ui.green, boxShadow:`0 0 12px ${o.activa===false?ui.red:ui.green}` }}/><div><div style={{ fontWeight:900 }}>{o.activa===false?"Oficina pausada":"Oficina operativa"}</div><div style={{ color:ui.muted, fontSize:13, marginTop:3 }}>{o.nombre}</div></div></div>)}
+                </div>
               </section>
-              {selectedOffice && <aside style={{ ...glass, padding:18, position:"sticky", top:0 }}><div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", marginBottom:16 }}><div><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase", letterSpacing:".7px" }}>Detalle de oficina</div><div style={{ fontSize:22, fontWeight:1000, marginTop:6 }}>{selectedOffice.nombre}</div><div style={{ color:ui.muted, fontSize:13, marginTop:5 }}>ID: {selected}</div></div><button onClick={()=>setSelected(null)} style={{ ...btn, width:36, height:36, padding:0 }}>×</button></div><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}><div style={{ ...glass, padding:14, boxShadow:"none" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Estado</div><div style={{ marginTop:8 }}><Status active={selectedOffice.activa !== false}/></div></div><div style={{ ...glass, padding:14, boxShadow:"none" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Rutas</div><div style={{ fontSize:24, fontWeight:1000, marginTop:5 }}>{selectedRoutes}</div></div><div style={{ ...glass, padding:14, boxShadow:"none" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Mensajeros</div><div style={{ fontSize:24, fontWeight:1000, marginTop:5 }}>{selectedDrivers}</div></div><div style={{ ...glass, padding:14, boxShadow:"none" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>Admins</div><div style={{ fontSize:24, fontWeight:1000, marginTop:5 }}>{selectedAdmins.length}</div></div></div><div style={{ ...glass, padding:15, boxShadow:"none", marginBottom:12 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Base / DEPOT</div><div style={{ fontWeight:900, marginTop:8 }}>{selectedOffice.ubicacionBase?.direccion || "Sin dirección"}</div><div style={{ color:ui.muted, fontSize:12, marginTop:6 }}>Lat {selectedOffice.ubicacionBase?.lat || "—"} · Lng {selectedOffice.ubicacionBase?.lng || "—"}</div></div><div style={{ ...glass, padding:15, boxShadow:"none", marginBottom:14 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Administrador</div>{selectedAdmins.length?selectedAdmins.map(a=><div key={a.id} style={{ marginTop:10, padding:12, borderRadius:14, background:"rgba(255,255,255,.035)", border:`1px solid ${ui.line}` }}><div style={{ fontWeight:1000 }}>{a.name}</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>{a.email}</div></div>):<div style={{ color:ui.muted, marginTop:10 }}>Sin admin asignado.</div>}</div><div style={{ display:"flex", gap:9 }}><button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{ flex:1, ...primary, background:selectedOffice.activa===false?"linear-gradient(135deg,#16a34a,#22c55e)":"linear-gradient(135deg,#ea580c,#f59e0b)" }}>{selectedOffice.activa===false?"Habilitar":"Pausar"}</button><button onClick={()=>deleteOffice(selected)} style={{ ...btn, color:"#fecdd3" }}>Eliminar</button></div></aside>}
+
+              {selectedOffice && <aside style={{ ...card, padding:18 }}>
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:16 }}><div><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Detalle</div><div style={{ fontSize:22, fontWeight:1000, marginTop:6 }}>{selectedOffice.nombre}</div><div style={{ color:ui.muted, fontSize:12, marginTop:5 }}>ID: {selected}</div></div><button className="rdBtn" onClick={()=>setSelected(null)} style={{ ...btn, width:36, height:36, padding:0 }}>×</button></div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+                  {[ ["Estado", statusBadge(selectedOffice.activa !== false)], ["Mensajeros", countObj(selectedOffice.mensajeros)], ["Rutas", countObj(selectedOffice.routes)], ["Admins", selectedAdmins.length] ].map(([k,v])=><div key={k} style={{ padding:13, borderRadius:15, border:`1px solid ${ui.line}`, background:"rgba(255,255,255,.035)" }}><div style={{ color:ui.muted, fontSize:12, fontWeight:900 }}>{k}</div><div style={{ marginTop:7, fontWeight:1000, fontSize:typeof v === "number" ? 24 : 13 }}>{v}</div></div>)}
+                </div>
+                <div style={{ padding:14, borderRadius:15, border:`1px solid ${ui.line}`, background:"rgba(255,255,255,.035)", marginBottom:12 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Base / DEPOT</div><div style={{ marginTop:8, fontWeight:900 }}>{selectedOffice.ubicacionBase?.direccion || "Sin dirección"}</div><div style={{ color:ui.muted, fontSize:12, marginTop:5 }}>Lat {selectedOffice.ubicacionBase?.lat || "—"} · Lng {selectedOffice.ubicacionBase?.lng || "—"}</div></div>
+                <div style={{ padding:14, borderRadius:15, border:`1px solid ${ui.line}`, background:"rgba(255,255,255,.035)", marginBottom:14 }}><div style={{ color:ui.muted, fontSize:11, fontWeight:1000, textTransform:"uppercase" }}>Admin</div>{selectedAdmins.length ? selectedAdmins.map(a=><div key={a.id} style={{ marginTop:10 }}><b>{a.name}</b><div style={{ color:ui.muted, fontSize:12, marginTop:3 }}>{a.email}</div></div>) : <div style={{ color:ui.muted, marginTop:8 }}>Sin admin asignado.</div>}</div>
+                <div style={{ display:"flex", gap:9 }}><button className="rdBtn" onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{ flex:1, ...primary, background:selectedOffice.activa===false?"linear-gradient(135deg,#16a34a,#22c55e)":"linear-gradient(135deg,#ea580c,#f59e0b)" }}>{selectedOffice.activa===false?"Habilitar":"Pausar"}</button><button className="rdBtn" onClick={()=>deleteOffice(selected)} style={{ ...btn, color:"#fecdd3" }}>Eliminar</button></div>
+              </aside>}
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1.35fr .65fr", gap:16, marginTop:16 }}><section style={{ ...glass, padding:18 }}><div style={{ fontSize:18, fontWeight:1000, marginBottom:14 }}>Actividad operacional</div><div style={{ display:"grid", gap:10 }}>{activity.map((a,i)=><div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:13, border:`1px solid ${ui.line}`, borderRadius:15, background:"rgba(255,255,255,.03)" }}><span style={{ width:10, height:10, borderRadius:999, background:a.tone, boxShadow:`0 0 12px ${a.tone}` }}/><div><div style={{ fontWeight:900 }}>{a.title}</div><div style={{ color:ui.muted, fontSize:13, marginTop:3 }}>{a.text}</div></div></div>)}</div></section><section style={{ ...glass, padding:18 }}><div style={{ fontSize:18, fontWeight:1000, marginBottom:14 }}>Riesgos</div><div style={{ display:"grid", gap:10 }}>{riskItems.map(r=><div key={r.label} style={{ padding:14, borderRadius:15, background:`${r.tone}12`, border:`1px solid ${r.tone}35` }}><div style={{ color:r.tone, fontWeight:1000, fontSize:22 }}>{r.value}</div><div style={{ color:ui.soft, fontWeight:900 }}>{r.label}</div></div>)}</div></section></div>
           </div>
         </main>
       </div>
-      {showCreate && <div style={{ position:"fixed", inset:0, zIndex:60, background:"rgba(0,0,0,.62)", backdropFilter:"blur(10px)", display:"flex", alignItems:"center", justifyContent:"center", padding:22 }}><div style={{ width:"min(820px,100%)", maxHeight:"92vh", overflow:"auto", ...glass, boxShadow:"0 40px 120px rgba(0,0,0,.6)" }}><div style={{ padding:22, borderBottom:`1px solid ${ui.line}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}><div><div style={{ color:"#93c5fd", fontSize:12, fontWeight:1000, textTransform:"uppercase", letterSpacing:".8px" }}>Nueva oficina</div><div style={{ fontSize:24, fontWeight:1000, marginTop:5 }}>Crear operación y acceso admin</div><div style={{ color:ui.muted, marginTop:5 }}>La oficina inicia con 0 mensajeros. El admin los crea luego.</div></div><button onClick={()=>{setShowCreate(false); resetForm();}} style={{ ...btn, width:38, height:38, padding:0 }}>×</button></div><div style={{ padding:22 }}><div style={{ display:"grid", gridTemplateColumns:"1fr 180px", gap:14 }}><div><label style={label}>Nombre oficina</label><input className="rdInput" value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={input}/></div><div><label style={label}>Código</label><input className="rdInput" value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={input}/></div></div><div style={{ display:"grid", gridTemplateColumns:"1fr 180px", gap:14, marginTop:14 }}><div><label style={label}>Responsable</label><input className="rdInput" value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={input}/></div><div><label style={label}>Teléfono</label><input className="rdInput" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={input}/></div></div><div style={{ marginTop:14 }}><label style={label}>Base / DEPOT</label><input className="rdInput" value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base de la oficina" style={input}/></div><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:14 }}><div><label style={label}>Latitud</label><input className="rdInput" value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={input}/></div><div><label style={label}>Longitud</label><input className="rdInput" value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={input}/></div></div><div style={{ height:1, background:ui.line, margin:"22px 0" }}/><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}><div><label style={label}>Nombre admin</label><input className="rdInput" value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={input}/></div><div><label style={label}>Correo admin</label><input className="rdInput" value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={input}/></div></div><div style={{ marginTop:14 }}><label style={label}>Contraseña inicial</label><input className="rdInput" value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={input}/></div><div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:22 }}><button onClick={()=>{setShowCreate(false); resetForm();}} style={btn}>Cancelar</button><button onClick={saveOffice} disabled={saving} style={{ ...primary, opacity:saving?.7:1 }}>{saving?"Guardando...":"Crear oficina y admin"}</button></div></div></div></div>}
+
+      {showCreate && <div style={{ position:"fixed", inset:0, zIndex:60, background:"rgba(0,0,0,.65)", backdropFilter:"blur(10px)", display:"flex", alignItems:"center", justifyContent:"center", padding:22 }}><div style={{ width:"min(820px,100%)", maxHeight:"92vh", overflow:"auto", ...card, boxShadow:"0 40px 120px rgba(0,0,0,.62)" }}><div style={{ padding:22, borderBottom:`1px solid ${ui.line}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}><div><div style={{ fontSize:24, fontWeight:1000 }}>Nueva oficina</div><div style={{ color:ui.muted, marginTop:6 }}>La oficina inicia con 0 mensajeros. El admin los crea luego.</div></div><button className="rdBtn" onClick={()=>{setShowCreate(false); resetForm();}} style={{ ...btn, width:38, height:38, padding:0 }}>×</button></div><div style={{ padding:22 }}><div style={{ display:"grid", gridTemplateColumns:"1fr 180px", gap:14 }}><div><label style={label}>Nombre oficina</label><input className="rdInput" value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={input}/></div><div><label style={label}>Código</label><input className="rdInput" value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={input}/></div></div><div style={{ display:"grid", gridTemplateColumns:"1fr 180px", gap:14, marginTop:14 }}><div><label style={label}>Responsable</label><input className="rdInput" value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={input}/></div><div><label style={label}>Teléfono</label><input className="rdInput" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={input}/></div></div><div style={{ marginTop:14 }}><label style={label}>Base / DEPOT</label><input className="rdInput" value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base de la oficina" style={input}/></div><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:14 }}><div><label style={label}>Latitud</label><input className="rdInput" value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={input}/></div><div><label style={label}>Longitud</label><input className="rdInput" value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={input}/></div></div><div style={{ height:1, background:ui.line, margin:"22px 0" }}/><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}><div><label style={label}>Nombre admin</label><input className="rdInput" value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={input}/></div><div><label style={label}>Correo admin</label><input className="rdInput" value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={input}/></div></div><div style={{ marginTop:14 }}><label style={label}>Contraseña inicial</label><input className="rdInput" value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={input}/></div><div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:22 }}><button className="rdBtn" onClick={()=>{setShowCreate(false); resetForm();}} style={btn}>Cancelar</button><button className="rdBtn" onClick={saveOffice} disabled={saving} style={{ ...primary, opacity:saving?.7:1 }}>{saving?"Guardando...":"Crear oficina y admin"}</button></div></div></div></div>}
     </div>
   );
 };
