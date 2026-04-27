@@ -20,24 +20,10 @@ const ANALYTICS_DATA = {
 };
 
 // --- MENSAJEROS (MUTABLE via Admin) ------------------------------------------
-const DEFAULT_MENSAJEROS = [
-  { id:"M-01", name:"JUAN MOJICA",          initials:"JM", phone:"8091000001", color:"#3b82f6", active:true },
-  { id:"M-02", name:"JUAN ELIAS RODRIGUEZ", initials:"JE", phone:"8091000002", color:"#3b82f6", active:true },
-  { id:"M-03", name:"OMALIS REYES",         initials:"OR", phone:"8091000003", color:"#3b82f6", active:true },
-  { id:"M-04", name:"CARLOS ALFREDO",       initials:"CA", phone:"8091000004", color:"#3b82f6", active:true },
-  { id:"M-05", name:"ERIBERTO REYNOSO",     initials:"ER", phone:"8091000005", color:"#3b82f6", active:true },
-  { id:"M-06", name:"DOUGLAS SANTIAGO",     initials:"DS", phone:"8091000006", color:"#3b82f6", active:true },
-];
+const DEFAULT_MENSAJEROS = [];
 
 const USERS = [
-  { id:"SUPER-01", name:"Super Admin Rap Drive", email:"super@rapdrive.do", password:"RapDriveSuper2026@", role:"super_admin", avatar:"SA", color:"#8b5cf6" },
-  { id:"U-01", name:"Admin Rap Drive",         email:"admin@rapdrive.do",     password:"Rapcargo2026@", role:"admin",  avatar:"AD",      color:"#3b82f6" },
-  { id:"U-02", name:"JUAN MOJICA",             email:"jmojica@rapdrive.do",   password:"driver123",     role:"driver", avatar:"JM",   color:"#10b981", driverId:"M-01" },
-  { id:"U-03", name:"JUAN ELIAS RODRIGUEZ",    email:"jelias@rapdrive.do",    password:"driver123",     role:"driver", avatar:"JE",     color:"#10b981", driverId:"M-02" },
-  { id:"U-04", name:"OMALIS REYES",            email:"oreyes@rapdrive.do",    password:"driver123",     role:"driver", avatar:"OR",    color:"#10b981", driverId:"M-03" },
-  { id:"U-05", name:"CARLOS ALFREDO",          email:"calfredo@rapdrive.do",  password:"driver123",     role:"driver", avatar:"CA",   color:"#10b981", driverId:"M-04" },
-  { id:"U-06", name:"DOUGLAS SANTIAGO",        email:"dsantiago@rapdrive.do", password:"driver123",     role:"driver", avatar:"DS", color:"#10b981", driverId:"M-06" },
-  { id:"U-07", name:"ERIBERTO REYNOSO",        email:"ereynoso@rapdrive.do",  password:"driver123",     role:"driver", avatar:"ER",   color:"#10b981", driverId:"M-05" },
+  { id:"SUPER-01", name:"Super Admin Rap Drive", email:"super@rapdrive.do", password:"RapDriveSuper2026@", role:"super_admin", avatar:"SA", color:"#2563eb" },
 ];
 
 const ROLE_CONFIG = {
@@ -54,6 +40,24 @@ const ROLE_CONFIG = {
 // La URL tiene este formato: https://TU-PROYECTO-default-rtdb.firebaseio.com
 // En las Reglas de Firebase pon: { "rules": { ".read": true, ".write": true } }
 const FB_URL = "https://rapdrive-default-rtdb.firebaseio.com";
+
+const RD = {
+  officeId: () => {
+    try {
+      if (typeof window !== "undefined" && window.__rdOfficeId) return window.__rdOfficeId;
+      if (typeof sessionStorage !== "undefined") {
+        const s = JSON.parse(sessionStorage.getItem("rdSession") || "null");
+        return s?.officeId || null;
+      }
+    } catch(e) {}
+    return null;
+  },
+  path: (path) => {
+    const clean = String(path || "").replace(/^\/+/, "");
+    const oid = RD.officeId();
+    return oid ? `oficinas/${oid}/${clean}` : clean;
+  }
+};
 
 const FB = {
   // Escribe un nodo en Firebase
@@ -94,21 +98,21 @@ const LS = {
   getRoutes: () => ({ ..._memStore.routes }),
   setRoute:  (id, r) => {
     _memStore.routes[id] = r;
-    FB.set(`routes/${id}`, r);
+    FB.set(RD.path(`routes/${id}`), r);
   },
   getChats:  () => ({ ..._memStore.chats }),
   setChat:   (id, c) => {
     _memStore.chats[id] = c;
-    FB.set(`chats/${id}`, c);
+    FB.set(RD.path(`chats/${id}`), c);
   },
   getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
-  setMens:   (m) => { _memStore.mens = m; FB.set("mens", m); },
+  setMens:   (m) => { _memStore.mens = m; FB.set(RD.path("mensajeros"), m); },
   // Sin cola: una sola ruta activa por mensajero.
   // Ubicaciones en tiempo real de mensajeros
   setLocation: (driverId, loc) => {
     if (!window.__rdLocations) window.__rdLocations = {};
     window.__rdLocations[driverId] = loc;
-    FB.set(`locations/${driverId}`, loc);
+    FB.set(RD.path(`locations/${driverId}`), loc);
   },
   getLocations: () => window.__rdLocations || {},
 };
@@ -120,28 +124,22 @@ if (typeof window !== "undefined") {
 
 
   // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
-  FB.get("routes").then(data => {
+  FB.get(RD.path("routes")).then(data => {
     if (data) { _memStore.routes = data; window.__rdRouteStore = data; }
   });
-  FB.get("chats").then(data => {
+  FB.get(RD.path("chats")).then(data => {
     if (data) { _memStore.chats = data; window.__rdChatStore = data; }
   });
   // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
-  FB.get("mens").then(data => {
-    if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
+  FB.get(RD.path("mensajeros")).then(data => {
+    const arr = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+    _memStore.mens = arr; window.__rdMensajeros = arr;
   });
   // Cargar nodo alternativo mensajeros/ (copia individual por id)
-  FB.get("mensajeros").then(data => {
-    if (data && typeof data === "object") {
-      const fromFB = Object.values(data).filter(Boolean);
-      if (fromFB.length > 0) {
-        const current = _memStore.mens || DEFAULT_MENSAJEROS;
-        const merged = [...current];
-        fromFB.forEach(m => { if (m.id && !merged.find(x => x.id === m.id)) merged.push(m); });
-        _memStore.mens = merged;
-        window.__rdMensajeros = merged;
-      }
-    }
+  FB.get(RD.path("mensajeros")).then(data => {
+    const fromFB = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+    _memStore.mens = fromFB;
+    window.__rdMensajeros = fromFB;
   });
   FB.get("users").then(data => {
     if (data && typeof data === "object") {
@@ -279,7 +277,7 @@ const PageDashboard = () => {
   // Listen to all driver locations from Firebase
   useEffect(() => {
     // Initial load
-    FB.get("locations").then(data => {
+    FB.get(RD.path("locations")).then(data => {
       if (data && typeof data === "object") {
         setLiveLocations(data);
         if (!window.__rdLocations) window.__rdLocations = {};
@@ -287,7 +285,7 @@ const PageDashboard = () => {
       }
     });
     // Real-time updates via SSE
-    const unsub = FB.listen("locations", (data) => {
+    const unsub = FB.listen(RD.path("locations"), (data) => {
       if (data && typeof data === "object") {
         setLiveLocations(prev => ({ ...prev, ...data }));
         if (!window.__rdLocations) window.__rdLocations = {};
@@ -296,7 +294,7 @@ const PageDashboard = () => {
     });
     // Polling backup every 5s
     const t = setInterval(() => {
-      FB.get("locations").then(data => {
+      FB.get(RD.path("locations")).then(data => {
         if (data && typeof data === "object") {
           setLiveLocations(prev => ({ ...prev, ...data }));
         }
@@ -657,8 +655,8 @@ const PageRoutes = () => {
   useEffect(() => {
     const load = async () => {
       const [histData, activeData] = await Promise.all([
-        FB.get("routeHistory"),
-        FB.get("routes"),
+        FB.get(RD.path("routeHistory")),
+        FB.get(RD.path("routes")),
       ]);
       if (activeData) { _memStore.routes = activeData; window.__rdRouteStore = activeData; }
       mergeAndSet(histData, activeData);
@@ -666,7 +664,7 @@ const PageRoutes = () => {
     load();
     // El listener del App notifica cuando hay cambios en routes (activas)
     window.__rdOnRoutesUpdated = (activeData) => {
-      FB.get("routeHistory").then(histData => mergeAndSet(histData, activeData));
+      FB.get(RD.path("routeHistory")).then(histData => mergeAndSet(histData, activeData));
     };
     const t = setInterval(load, 5000);
     return () => { clearInterval(t); delete window.__rdOnRoutesUpdated; };
@@ -1270,9 +1268,14 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
   const [fbSaved, setFbSaved]     = useState(false);
   const [depot, setDepot]         = useState({ lat: DEPOT.lat, lng: DEPOT.lng, label: DEPOT.label });
   const [depotSaved, setDepotSaved] = useState(false);
-  const [passwords, setPasswords]   = useState(() =>
-    USERS.filter(u => u.role === "driver").map(u => ({ id: u.id, name: u.name, email: u.email, newPwd: "", confirm: "", saved: false, error: "" }))
-  );
+  const [passwords, setPasswords]   = useState([]);
+  useEffect(() => {
+    if (role !== "admin" || !currentUser?.officeId) { setPasswords([]); return; }
+    FB.get(`oficinas/${currentUser.officeId}/users`).then(data => {
+      const list = Object.values(data || {}).filter(u => u && u.role === "driver");
+      setPasswords(list.map(u => ({ id:u.id, name:u.name, email:u.email, driverId:u.driverId, newPwd:"", confirm:"", saved:false, error:"" })));
+    });
+  }, [role, currentUser?.officeId, mensajeros.length]);
   const [notifSettings, setNotifSettings] = useState({
     onRouteAssigned: true,
     onDelivered: true,
@@ -1286,12 +1289,23 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
     { id:"mensajeros", label:"Mensajeros" },
     { id:"passwords",  label:"Contraseñas" },
     { id:"depot",      label:"Base / DEPOT" },
-    { id:"firebase",   label:"Firebase" },
-    { id:"notif",      label:"Notificaciones" },
-    { id:"account",    label:"Mi cuenta" },
+    { id:"account",    label:"Mi Cuenta" },
   ] : [
-    { id:"account", label:"Mi cuenta" },
+    { id:"account", label:"Mi Cuenta" },
   ];
+
+  useEffect(() => {
+    if (role !== "admin" || !currentUser?.officeId) return;
+    FB.get(`oficinas/${currentUser.officeId}/ubicacionBase`).then(base => {
+      if (base && typeof base === "object") {
+        const next = { lat: base.lat ?? DEPOT.lat, lng: base.lng ?? DEPOT.lng, label: base.direccion || base.label || DEPOT.label };
+        setDepot(next);
+        if (!isNaN(parseFloat(next.lat))) DEPOT.lat = parseFloat(next.lat);
+        if (!isNaN(parseFloat(next.lng))) DEPOT.lng = parseFloat(next.lng);
+        DEPOT.label = next.label;
+      }
+    });
+  }, [role, currentUser?.officeId]);
 
   const tabBtn = (t) => (
     <button key={t.id} onClick={() => setActiveTab(t.id)}
@@ -1343,7 +1357,7 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
 
         {/* ── TAB: MENSAJEROS ── */}
         {activeTab === "mensajeros" && role === "admin" && (
-          <MensajeroManager mensajeros={mensajeros} setMensajeros={setMensajeros}/>
+          <MensajeroManager mensajeros={mensajeros} setMensajeros={setMensajeros} currentUser={currentUser}/>
         )}
 
         {/* ── TAB: CONTRASEÑAS ── */}
@@ -1374,6 +1388,9 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
                     if (p.newPwd !== p.confirm) { setPasswords(prev => prev.map((x,j) => j===i ? {...x, error:"Las contraseñas no coinciden"} : x)); return; }
                     const u = USERS.find(u => u.id === p.id);
                     if (u) u.password = p.newPwd;
+                    const updatedUser = { ...(u || {}), id:p.id, name:p.name, email:p.email, role:"driver", driverId:p.driverId, officeId:currentUser.officeId, password:p.newPwd };
+                    FB.set(`oficinas/${currentUser.officeId}/users/${p.id}`, updatedUser);
+                    FB.set(`users/${p.id}`, updatedUser);
                     setPasswords(prev => prev.map((x,j) => j===i ? {...x, saved:true, newPwd:"", confirm:""} : x));
                     setTimeout(() => setPasswords(prev => prev.map((x,j) => j===i ? {...x, saved:false} : x)), 3000);
                   }}
@@ -1412,6 +1429,7 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
               const lat = parseFloat(depot.lat), lng = parseFloat(depot.lng);
               if (isNaN(lat)||isNaN(lng)) return;
               DEPOT.lat = lat; DEPOT.lng = lng; DEPOT.label = depot.label;
+              if (currentUser?.officeId) FB.set(`oficinas/${currentUser.officeId}/ubicacionBase`, { lat, lng, direccion: depot.label });
               setDepotSaved(true);
               setTimeout(() => setDepotSaved(false), 3000);
             }, depotSaved)}
@@ -2526,7 +2544,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         return next;
       });
 
-      if (completedRoute.routeId) FB.set(`routeHistory/${completedRoute.routeId}`, completedRoute);
+      if (completedRoute.routeId) FB.set(RD.path(`routeHistory/${completedRoute.routeId}`), completedRoute);
     };
 
     const clearActiveRouteLocal = (route) => {
@@ -2545,7 +2563,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       onUpdateRoute(myKey, null);
 
       try { localStorage.removeItem(LS_KEY); } catch(e) {}
-      FB.set(`routes/${myKey}`, null);
+      FB.set(RD.path(`routes/${myKey}`), null);
     };
 
     const activateRoute = (nr) => {
@@ -2624,10 +2642,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (Array.isArray(msgs)) setChatLog([...msgs]);
     };
 
-    FB.get(`routes/${myKey}`).then(activateRoute);
+    FB.get(RD.path(`routes/${myKey}`)).then(activateRoute);
     FB.get(`chats/${myKey}`).then(applyChat);
 
-    const unsubRoute = FB.listen(`routes/${myKey}`, activateRoute);
+    const unsubRoute = FB.listen(RD.path(`routes/${myKey}`), activateRoute);
     const unsubChat  = FB.listen(`chats/${myKey}`, applyChat);
 
     window.__rdSetRoute = (driverId, route) => {
@@ -2656,7 +2674,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
     const unsubDriverNotifs = FB.listen(`driverNotifs/${myKey}`, handleNotifs);
     const pollInterval = setInterval(() => {
-      FB.get(`routes/${myKey}`).then(activateRoute);
+      FB.get(RD.path(`routes/${myKey}`)).then(activateRoute);
       FB.get(`driverNotifs/${myKey}`).then(handleNotifs);
     }, 8000);
 
@@ -2923,7 +2941,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         return next;
       });
 
-      if (histEntry.routeId) FB.set(`routeHistory/${histEntry.routeId}`, histEntry);
+      if (histEntry.routeId) FB.set(RD.path(`routeHistory/${histEntry.routeId}`), histEntry);
 
       // Marcar esta ruta como vista/completada para que no reviva.
       const routeKey = histEntry.routeId || histEntry.sentAt;
@@ -2943,8 +2961,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       try { localStorage.removeItem(`rdRoute_${myKey}`); } catch(e) {}
 
       Promise.all([
-        FB.set(`routes/${myKey}`, null),
-        histEntry.routeId ? FB.set(`routeHistory/${histEntry.routeId}`, histEntry) : Promise.resolve(),
+        FB.set(RD.path(`routes/${myKey}`), null),
+        histEntry.routeId ? FB.set(RD.path(`routeHistory/${histEntry.routeId}`), histEntry) : Promise.resolve(),
       ]).finally(() => {
         writingRef.current = false;
       });
@@ -2953,8 +2971,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     }
 
     Promise.all([
-      FB.set(`routes/${myKey}`, updated),
-      updated.routeId ? FB.set(`routeHistory/${updated.routeId}`, updated) : Promise.resolve(),
+      FB.set(RD.path(`routes/${myKey}`), updated),
+      updated.routeId ? FB.set(RD.path(`routeHistory/${updated.routeId}`), updated) : Promise.resolve(),
     ]).finally(() => {
       writingRef.current = false;
     });
@@ -4137,7 +4155,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
 
 // --- ADMIN: MENSAJERO MANAGER -------------------------------------------------
-const MensajeroManager = ({ mensajeros, setMensajeros }) => {
+const MensajeroManager = ({ mensajeros, setMensajeros, currentUser }) => {
   const [newName,  setNewName]  = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -4160,7 +4178,9 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
     const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2);
     const newId    = "M-" + Date.now();
     const email    = newEmail.trim().toLowerCase() || `${name.split(" ")[0].toLowerCase()}@rapdrive.do`;
-    const newMens  = { id: newId, name, initials, phone: newPhone.trim(), email, active: true, color: "#3b82f6" };
+    const officeId = currentUser?.officeId;
+    if (!officeId) { setSaveMsg("No se encontró la oficina de este admin."); return; }
+    const newMens  = { id: newId, name, initials, phone: newPhone.trim(), email, active: true, color: "#3b82f6", officeId };
 
     setMensajeros(prev => {
       const updated = [...prev, newMens];
@@ -4176,16 +4196,18 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
       password: "driver123",
       role: "driver",
       avatar: initials,
-      office: "Principal",
+      officeId,
+      officeName: currentUser?.officeName || currentUser?.officeId || "Oficina",
       color: "#10b981",
       driverId: newId,  // mismo que mensajero.id — el admin usará este para enviar rutas
+      active: true,
     };
     USERS.push(newUser);
     // Persistir en Firebase — esperar escritura antes de mostrar éxito
     await Promise.all([
+      FB.set(`oficinas/${officeId}/users/${newUser.id}`, newUser),
+      FB.set(`oficinas/${officeId}/mensajeros/${newId}`, newMens),
       FB.set(`users/${newUser.id}`, newUser),
-      FB.set(`mens_users/${newId}`, newUser),
-      FB.set(`mensajeros/${newId}`, newMens),
     ]);
 
     setSaveMsg(`✓ ${name} agregado · Login: ${email} / driver123`);
@@ -4204,9 +4226,14 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
       LS.setMens(updated);
       return updated;
     });
-    // Update USERS array too
+    // Persistir edición dentro de la oficina actual
+    const officeId = currentUser?.officeId;
     const u = USERS.find(u => u.driverId === id);
     if (u) { u.name = editName.trim().toUpperCase(); if (editEmail.trim()) u.email = editEmail.trim().toLowerCase(); }
+    const edited = { id, name: editName.trim().toUpperCase(), phone: editPhone.trim(), email: editEmail.trim().toLowerCase(), initials: editName.trim().toUpperCase().split(" ").map(w=>w[0]).join("").slice(0,2), active: true, color:"#3b82f6", officeId };
+    if (officeId) FB.set(`oficinas/${officeId}/mensajeros/${id}`, edited);
+    if (officeId && u) FB.set(`oficinas/${officeId}/users/${u.id}`, u);
+    if (u) FB.set(`users/${u.id}`, u);
     setEditId(null);
   };
 
@@ -4217,11 +4244,19 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
       LS.setMens(updated);
       return updated;
     });
+    const officeId = currentUser?.officeId;
+    const u = USERS.find(u => u.driverId === id);
+    if (officeId) FB.set(`oficinas/${officeId}/mensajeros/${id}`, null);
+    if (officeId && u) FB.set(`oficinas/${officeId}/users/${u.id}`, null);
+    if (u) FB.set(`users/${u.id}`, null);
   };
 
   const toggle = (id) => setMensajeros(prev => {
     const updated = prev.map(m => m.id === id ? { ...m, active: !m.active } : m);
     LS.setMens(updated);
+    const officeId = currentUser?.officeId;
+    const changed = updated.find(m => m.id === id);
+    if (officeId && changed) FB.set(`oficinas/${officeId}/mensajeros/${id}`, changed);
     return updated;
   });
 
@@ -4397,7 +4432,11 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
       telefono:form.telefono.trim(),
       createdAt:now,
       createdBy:currentUser?.email||"super_admin",
-      ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 }
+      ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 },
+      mensajeros:{},
+      routes:{},
+      routeHistory:{},
+      locations:{}
     };
     const admin = {
       id:`OA-${id}-${Date.now()}`,
@@ -6452,7 +6491,7 @@ const ImportModal = ({ onClose, onImported }) => {
   const [geoStatus, setGeoStatus] = useState("");
   const [geoCount,  setGeoCount]  = useState(0); // geocodificadas en tiempo real
   const [fileName, setFileName] = useState("");
-  const [driverName, setDriverName] = useState(DEFAULT_MENSAJEROS[0].id);
+  const [driverName, setDriverName] = useState("");
   const [routeName, setRouteName]   = useState("Ruta importada");
   const fileRef = useRef(null);
 
@@ -7856,7 +7895,7 @@ const CircuitEngine = () => {
   const [mapping, setMapping]     = useState({});
   const [stops, setStops]         = useState([]);
   const [routeName, setRouteName] = useState("Ruta nueva");
-  const [driverName, setDriverName] = useState(() => (window.__rdMensajeros || DEFAULT_MENSAJEROS).find(m=>m.active)?.id || DEFAULT_MENSAJEROS[0].id);
+  const [driverName, setDriverName] = useState(() => (window.__rdMensajeros || DEFAULT_MENSAJEROS).find(m=>m.active)?.id || "");
   const [geoProgress, setGeoProgress] = useState(0);
   const [geoStatus, setGeoStatus] = useState("");
   const [dragOver, setDragOver]   = useState(false);
@@ -7883,7 +7922,7 @@ const CircuitEngine = () => {
     setStops(demoStops);
     setRouteName("RUTA DEMO · " + new Date().toLocaleDateString("es-DO",{day:"2-digit",month:"short"}));
     const allMens = window.__rdMensajeros || DEFAULT_MENSAJEROS;
-    setDriverName(allMens.find(m=>m.active)?.id || DEFAULT_MENSAJEROS[0].id);
+    setDriverName(allMens.find(m=>m.active)?.id || "");
     setPhase("route");
   };
   useEffect(() => {
@@ -8614,7 +8653,7 @@ const CircuitEngine = () => {
                       window.__rdRouteStore[driverId] = route;
                       LS.setRoute(driverId, route);
                       // Guardar también en historial de rutas (keyed by routeId, no por driverId)
-                      FB.set(`routeHistory/${route.routeId}`, { ...route, sentAt: route.sentAt });
+                      FB.set(RD.path(`routeHistory/${route.routeId}`), { ...route, sentAt: route.sentAt });
                       if (typeof window.__rdSetRoute === "function") window.__rdSetRoute(driverId, route);
 
                       // ── Notificación Firebase al mensajero ──
@@ -8890,22 +8929,19 @@ export default function RapDrive() {
   const [logoutConfirm, setLogoutConfirm] = useState(false);
 
   // -- Mensajeros state (admin-managed) --
-  const [mensajeros, setMensajeros] = useState(() => {
-    // Usar lo que ya cargó el init global de Firebase, o DEFAULT
-    const fromMem = _memStore.mens;
-    return fromMem && fromMem.length > 0 ? fromMem : DEFAULT_MENSAJEROS;
-  });
+  const [mensajeros, setMensajeros] = useState([]);
 
   // Sincronizar mensajeros desde Firebase al montar (por si llegaron después del init)
   useEffect(() => {
-    FB.get("mens").then(data => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        setMensajeros(data);
-        _memStore.mens = data;
-        window.__rdMensajeros = data;
-      }
+    if (typeof window !== "undefined") window.__rdOfficeId = currentUser?.officeId || null;
+    if (!currentUser?.officeId) { setMensajeros([]); _memStore.mens = []; window.__rdMensajeros = []; return; }
+    FB.get(`oficinas/${currentUser.officeId}/mensajeros`).then(data => {
+      const arr = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data).filter(Boolean) : []);
+      setMensajeros(arr);
+      _memStore.mens = arr;
+      window.__rdMensajeros = arr;
     });
-  }, []);
+  }, [currentUser?.officeId]);
 
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
@@ -8919,7 +8955,18 @@ export default function RapDrive() {
     if (typeof window !== "undefined") { window.__rdRouteStore = window.__rdRouteStore || {}; window.__rdRouteStore[driverId] = route; LS.setRoute(driverId, route); }
   };
 
-  const handleLogin  = (user) => { try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {} setCurrentUser(user); };
+  const handleLogin  = async (user) => {
+    if (user?.role !== "super_admin") {
+      if (!user?.officeId) { alert("Este usuario no tiene oficina asignada. Contacta al super admin."); return; }
+      const office = await FB.get(`oficinas/${user.officeId}`);
+      if (!office || office.activa === false) { alert("Esta oficina está deshabilitada. Contacta al super admin."); return; }
+      user.officeName = office.nombre || user.officeName || user.officeId;
+      user.officeBase = office.ubicacionBase || null;
+    }
+    if (typeof window !== "undefined") window.__rdOfficeId = user?.officeId || null;
+    try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
+    setCurrentUser(user);
+  };
   const handleLogout = () => { setLogoutConfirm(false); try { sessionStorage.removeItem("rdSession"); } catch(e) {} setCurrentUser(null); };
 
   const [nav,setNav]=useState("dashboard");
@@ -8957,7 +9004,7 @@ export default function RapDrive() {
     // Inicializar snapshot de una ruta sin disparar eventos
     const initSnapshot = (driverId, route) => {
       const stopsMap = {};
-      (route.stops||[]).forEach(s => { stopsMap[s.id] = s.driverStatus; });
+      (route.stops||[]).forEach(s => { stopsMap[s.id] = s.navStatus || "pending"; });
       lastRouteSnapRef.current[driverId] = {
         sentAt: route.sentAt,
         stops: stopsMap,
@@ -8990,7 +9037,7 @@ export default function RapDrive() {
         let anyChange = false;
         route.stops.forEach(stop => {
           const prevStatus = snap.stops[stop.id];
-          const newStatus  = stop.driverStatus;
+          const newStatus  = stop.navStatus || "pending";
           snap.stops[stop.id] = newStatus; // actualizar snapshot
           if (!prevStatus || prevStatus === newStatus) return;
           anyChange = true;
@@ -9030,7 +9077,7 @@ export default function RapDrive() {
     };
 
     // 1) Carga inicial desde Firebase: inicializar snapshot sin disparar notificaciones
-    FB.get("routes").then(data => {
+    FB.get(RD.path("routes")).then(data => {
       if (data && typeof data === "object") {
         _memStore.routes = data;
         window.__rdRouteStore = data;
@@ -9042,7 +9089,7 @@ export default function RapDrive() {
     });
 
     // 2) Listener SSE de rutas
-    const unsubRoutes = FB.listen("routes", processChanges);
+    const unsubRoutes = FB.listen(RD.path("routes"), processChanges);
 
     // 3) Listener SSE de adminNotifs — mensajero escribe aquí cuando entrega/falla
     let lastNotifIds = new Set();
@@ -9066,7 +9113,7 @@ export default function RapDrive() {
     const unsubNotifs = FB.listen("adminNotifs", processAdminNotifs);
 
     // 4) Polling cada 5s como respaldo
-    const poll = setInterval(() => FB.get("routes").then(d => { if(d) processChanges(d); }), 5000);
+    const poll = setInterval(() => FB.get(RD.path("routes")).then(d => { if(d) processChanges(d); }), 5000);
 
     return () => { unsubRoutes(); unsubNotifs(); clearInterval(poll); };
   }, [pushEvent]);
