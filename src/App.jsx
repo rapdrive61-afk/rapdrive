@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V9 MOTOR FINAL: diseño del motor y animación de geocodificación refinados.
+// V12 PROD POLISH: modal app, GPS realtime, borrar historial y branding mensajería.
 
 const DELIVERIES = [];
 
@@ -85,6 +85,12 @@ const FB = {
         body: JSON.stringify(data),
       });
     } catch(e) { console.warn("FB.set error", e); }
+  },
+  // Borra un nodo en Firebase sin tocar los demás
+  remove: async (path) => {
+    try {
+      await fetch(`/.json`, { method: "DELETE" });
+    } catch(e) { console.warn("FB.remove error", e); }
   },
   // Lee un nodo de Firebase
   get: async (path) => {
@@ -347,14 +353,14 @@ const PageDashboard = () => {
         Object.assign(window.__rdLocations, data);
       }
     });
-    // Polling backup every 5s
+    // Polling backup cada 3s para monitoreo operativo más vivo
     const t = setInterval(() => {
       FB.get(RD.path("locations")).then(data => {
         if (data && typeof data === "object") {
           setLiveLocations(prev => ({ ...prev, ...data }));
         }
       });
-    }, 5000);
+    }, 3000);
     return () => { unsub(); clearInterval(t); };
   }, []);
 
@@ -2597,6 +2603,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const mapRef   = useRef(null);
   const gMapRef  = useRef(null);
   const markersRef = useRef([]);
+  const routeFitKeyRef = useRef(null); // evita re-centrar mapa mientras el mensajero hace zoom
   const chatEndRef = useRef(null);
   const lastSentAt = useRef(myRoute?.sentAt || null);
   // IDs ya vistos — nunca se reinyectan desde Firebase
@@ -2641,8 +2648,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,       // acepta cache de hasta 5s
-        timeout: 15000,          // timeout de 15s
+        maximumAge: 1000,       // GPS más fresco para admin en tiempo real
+        timeout: 10000,          // timeout más corto para reaccionar rápido
       }
     );
   };
@@ -2671,6 +2678,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       }
     };
   }, []); // eslint-disable-line
+
+  // Heartbeat GPS: mantiene visible al mensajero aunque esté detenido.
+  useEffect(() => {
+    if (!myLocation || locationStatus !== "active") return;
+    const hb = setInterval(() => {
+      LS.setLocation(myKey, { ...myLocation, ts: Date.now(), online: true, routeName: myRoute?.routeName || null });
+    }, 10000);
+    return () => clearInterval(hb);
+  }, [myLocation, locationStatus, myKey, myRoute?.routeName]);
 
   // Actualizar el marker del mensajero en el mapa cuando cambia su posición
   useEffect(() => {
@@ -2769,9 +2785,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       saveSeenIds();
 
       lastSentAt.current = null;
+      routeFitKeyRef.current = null;
       setStops([]);
       setSelStop(null);
-      setTab("home");
+      setTab("route");
 
       if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
       delete _memStore.routes[myKey];
@@ -2811,13 +2828,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       }
 
       // SIN COLA: cualquier ruta nueva que llegue reemplaza directamente la ruta activa.
+      const previousSentAt = lastSentAt.current;
       lastSentAt.current = route.sentAt || routeKey;
+      if (previousSentAt !== lastSentAt.current) routeFitKeyRef.current = null;
       if (!window.__rdRouteStore) window.__rdRouteStore = {};
       window.__rdRouteStore[myKey] = route;
       _memStore.routes[myKey] = route;
       onUpdateRoute(myKey, route);
       setStops(route.stops);
-      setTab("home");
+      setTab("route");
       try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
     };
 
@@ -3088,7 +3107,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       bounds.extend({ lat: stop.lat, lng: stop.lng });
     });
 
-    gMapRef.current.fitBounds(bounds, { top:24, right:24, bottom:24, left:24 });
+    const fitKey = `${lastSentAt.current || ""}|${validStops.length}|${validStops.map(s => `${s.lat},${s.lng}`).join("|")}`;
+    if (routeFitKeyRef.current !== fitKey) {
+      gMapRef.current.fitBounds(bounds, { top:24, right:24, bottom:24, left:24 });
+      routeFitKeyRef.current = fitKey;
+    }
   }, [stops, mapReady]);
 
   // -- Centrar en parada seleccionada --------------------------------------------
@@ -3159,7 +3182,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       setStops([]);
       setSelStop(null);
       setShowCompletedBanner(true);
-      setTab("home");
+      setTab("route");
 
       if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
       delete _memStore.routes[myKey];
@@ -3417,7 +3440,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
       {/* ══ MAP SECTION — solo en tab mapa ══ */}
       <div style={{ position:"relative", flex:1, overflow:"hidden", background:"#060c14", display: tab === "mapa" ? "flex" : "none", flexDirection:"column" }}>
-        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"none" }}/>
+        <div ref={mapRef} style={{ position:"absolute", inset:0, touchAction:"auto" }}/>
 
         {/* map controls bottom-right */}
         <div style={{ position:"absolute",bottom:22,right:12,display:"flex",flexDirection:"column",gap:7 }}>
@@ -8204,6 +8227,8 @@ const CircuitEngine = () => {
   const [mapsReady, setMapsReady] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [addrEditStop, setAddrEditStop] = useState(null); // stop being edited in modal
+  const [routeSentModal, setRouteSentModal] = useState(null);
+  const [sendingRoute, setSendingRoute] = useState(false);
 
   const fileRef = useRef(null);
 
@@ -8888,6 +8913,25 @@ const CircuitEngine = () => {
           </div>
         )}
 
+        {routeSentModal && (
+          <div style={{position:"fixed",inset:0,zIndex:99999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(2,6,13,.72)",backdropFilter:"blur(10px)",padding:20}}>
+            <div style={{width:"min(470px,92vw)",background:"linear-gradient(145deg,#0b1422,#07101b)",border:"1px solid rgba(59,130,246,.28)",borderRadius:24,boxShadow:"0 30px 120px rgba(0,0,0,.65)",overflow:"hidden",color:"#eaf2ff"}}>
+              <div style={{height:6,background:"linear-gradient(90deg,#22c55e,#3b82f6)"}} />
+              <div style={{padding:26,textAlign:"center"}}>
+                <div style={{width:78,height:78,borderRadius:22,margin:"0 auto 16px",display:"grid",placeItems:"center",background:"linear-gradient(135deg,rgba(34,197,94,.18),rgba(59,130,246,.20))",border:"1px solid rgba(96,165,250,.32)",boxShadow:"0 0 45px rgba(59,130,246,.22)"}}>
+                  <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/><path d="M3 18h4l3-8h7l3 8h1" stroke="#60a5fa"/><circle cx="8" cy="19" r="1.5" stroke="#60a5fa"/><circle cx="18" cy="19" r="1.5" stroke="#60a5fa"/></svg>
+                </div>
+                <div style={{fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:1000,letterSpacing:"-.5px"}}>Ruta enviada correctamente</div>
+                <div style={{marginTop:8,fontSize:13,color:"#93a4bd",lineHeight:1.55}}>La ruta ya está activa en el panel del mensajero.</div>
+                <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,textAlign:"left"}}>
+                  {[["Mensajero",routeSentModal.driver],["Ruta",routeSentModal.routeName],["Paradas",routeSentModal.stops],["Distancia",`${routeSentModal.km} km`]].map(([k,v])=><div key={k} style={{background:"rgba(255,255,255,.035)",border:"1px solid rgba(255,255,255,.07)",borderRadius:14,padding:"12px 14px"}}><div style={{fontSize:10,color:"#536783",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>{k}</div><div style={{marginTop:5,fontSize:14,fontWeight:900,color:"#f8fafc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div></div>)}
+                </div>
+                <button onClick={()=>setRouteSentModal(null)} style={{marginTop:22,width:"100%",border:0,borderRadius:15,padding:"14px 18px",background:"linear-gradient(135deg,#2563eb,#4f46e5)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 18px 45px rgba(37,99,235,.28)"}}>Entendido</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ════ REVIEW + ROUTE ════ */}
         {(phase === "review" || phase === "route") && (
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -8929,6 +8973,9 @@ const CircuitEngine = () => {
                   {phase === "route" && (
                   <button
                     onClick={async () => {
+                      if (sendingRoute) return;
+                      setSendingRoute(true);
+                      try {
                       const confirmed = stops.filter(s => s.stopNum != null);
                       const allMens = window.__rdMensajeros || DEFAULT_MENSAJEROS;
                       const norm = (s) => (s||"").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -8981,7 +9028,8 @@ const CircuitEngine = () => {
                         read: false, isNew: true,
                       });
 
-                      alert(`✅ Ruta enviada directamente a ${mensajero?.name || driverId} · ${confirmed.length} paradas · ${km} km`);
+                      setRouteSentModal({ driver: mensajero?.name || driverId, routeName, stops: confirmed.length, km, routeId: route.routeId, sentAt: new Date().toISOString() });
+                      } finally { setSendingRoute(false); }
                     }}
                     style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "white", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 150, boxShadow:"0 4px 20px #3b82f650", letterSpacing:"0.3px", position:"relative", overflow:"hidden" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -9229,10 +9277,12 @@ const routeStatsV5 = (routesObj) => { const arr=Object.values(routesObj||{}).fil
 const AdminRoutesV5 = ({ routes }) => {
   const [history,setHistory]=useState([]), [active,setActive]=useState(routes||{}), [selected,setSelected]=useState(null), [query,setQuery]=useState('');
   const mapRef=useRef(null), gMapRef=useRef(null), markersRef=useRef([]);
-  useEffect(()=>{ const load=async()=>{ const [h,a]=await Promise.all([FB.get(RD.path('routeHistory')),FB.get(RD.path('routes'))]); const activeData=a||{}; setActive(activeData); const all={}; Object.values(h||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]=r}); Object.values(activeData||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]={...r,isActive:true}}); setHistory(Object.values(all).sort((x,y)=>new Date(y.sentAt||0)-new Date(x.sentAt||0))); }; load(); const t=setInterval(load,6000); return()=>clearInterval(t); },[]);
+  const loadRoutesV5 = useCallback(async()=>{ const [h,a]=await Promise.all([FB.get(RD.path("routeHistory")),FB.get(RD.path("routes"))]); const activeData=a||{}; setActive(activeData); const all={}; Object.values(h||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]=r}); Object.values(activeData||{}).filter(Boolean).forEach(r=>{all[r.routeId||`${r.driverId}_${r.sentAt}`]={...r,isActive:true}}); setHistory(Object.values(all).sort((x,y)=>new Date(y.sentAt||0)-new Date(x.sentAt||0))); },[]);
+  const deleteHistoryRoute = async (r) => { if(!r || r.isActive) return; const ok=window.confirm(`Eliminar del historial: ${r.routeName||"Ruta sin nombre"}?`); if(!ok) return; const key=r.routeId||`${r.driverId}_${r.sentAt}`; await FB.remove(RD.path(`routeHistory/${key}`)); if(selected===r) setSelected(null); await loadRoutesV5(); };
+  useEffect(()=>{ loadRoutesV5(); const t=setInterval(loadRoutesV5,6000); return()=>clearInterval(t); },[loadRoutesV5]);
   useEffect(()=>{ if(!selected) return; loadGoogleMaps().then(()=>{ if(!mapRef.current) return; if(!gMapRef.current){ gMapRef.current=new window.google.maps.Map(mapRef.current,{center:{lat:DEPOT.lat,lng:DEPOT.lng},zoom:12,disableDefaultUI:true,zoomControl:true,zoomControlOptions:{position:window.google.maps.ControlPosition.RIGHT_BOTTOM},styles:[{elementType:'geometry',stylers:[{color:'#07101b'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#14243a'}]},{featureType:'road.highway',elementType:'geometry',stylers:[{color:'#1b3658'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#03070d'}]},{featureType:'poi',stylers:[{visibility:'off'}]},{elementType:'labels.text.fill',stylers:[{color:'#5d708d'}]},{elementType:'labels.text.stroke',stylers:[{color:'#07101b'}]}]}); } markersRef.current.forEach(m=>{try{m.setMap(null)}catch(e){}}); markersRef.current=[]; const stops=(selected.stops||[]).filter(s=>s.lat&&s.lng).sort((a,b)=>(a.stopNum||0)-(b.stopNum||0)); const bounds=new window.google.maps.LatLngBounds(); const depotMarker=new window.google.maps.Marker({map:gMapRef.current,position:{lat:DEPOT.lat,lng:DEPOT.lng},title:'Base / DEPOT',icon:{url:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect x="7" y="7" width="32" height="32" rx="12" fill="#2563eb" stroke="white" stroke-width="2"/><path d="M15 29V18l8-5 8 5v11" fill="none" stroke="white" stroke-width="2"/><path d="M20 29v-7h6v7" fill="none" stroke="white" stroke-width="2"/></svg>`),scaledSize:new window.google.maps.Size(46,46),anchor:new window.google.maps.Point(23,23)}}); markersRef.current.push(depotMarker); bounds.extend({lat:DEPOT.lat,lng:DEPOT.lng}); if(stops.length>1){const line=new window.google.maps.Polyline({map:gMapRef.current,path:[{lat:DEPOT.lat,lng:DEPOT.lng},...stops.map(s=>({lat:s.lat,lng:s.lng})),{lat:DEPOT.lat,lng:DEPOT.lng}],strokeColor:'#3b82f6',strokeOpacity:.8,strokeWeight:3}); markersRef.current.push(line);} stops.forEach(stop=>{ const done=stop.navStatus==='visited'; const color=done?'#22c55e':'#3b82f6'; const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="44" height="50" viewBox="0 0 44 50"><defs><filter id="s"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="${color}" flood-opacity=".35"/></filter></defs><g filter="url(#s)"><path d="M22 47s15-13 15-26A15 15 0 0 0 7 21c0 13 15 26 15 26z" fill="${color}"/><circle cx="22" cy="21" r="11" fill="#07101b" opacity=".28"/><text x="22" y="25" text-anchor="middle" font-size="11" font-weight="900" fill="white" font-family="Arial">${stop.stopNum||''}</text></g></svg>`; const marker=new window.google.maps.Marker({map:gMapRef.current,position:{lat:stop.lat,lng:stop.lng},title:`#${stop.stopNum} ${stop.client||''}`,icon:{url:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(44,50),anchor:new window.google.maps.Point(22,47)}}); markersRef.current.push(marker); bounds.extend({lat:stop.lat,lng:stop.lng}); }); if(stops.length) gMapRef.current.fitBounds(bounds,{top:60,right:60,bottom:60,left:60}); }); },[selected]);
   const stats=routeStatsV5(active); const filtered=history.filter(r=>!query||`${r.routeName||''} ${r.driverName||''} ${(r.stops||[]).map(s=>`${s.client} ${s.tracking} ${s.displayAddr||s.rawAddr}`).join(' ')}`.toLowerCase().includes(query.toLowerCase()));
-  return <div style={{flex:1,display:'flex',flexDirection:'column',background:v5.bg,color:v5.text,overflow:'hidden'}}><div style={{padding:24,borderBottom:`1px solid ${v5.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><div><div style={{color:v5.blue,fontSize:11,fontWeight:1000,letterSpacing:'2px',textTransform:'uppercase'}}>Operación logística</div><h1 style={{margin:'6px 0 0',fontSize:28,fontWeight:1000,letterSpacing:'-.8px'}}>Rutas</h1></div><div style={{display:'flex',alignItems:'center',gap:8,background:v5.panel,border:`1px solid ${v5.line}`,borderRadius:14,padding:'0 14px',minWidth:340}}><V5Icon type="search" size={16} color={v5.muted}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar ruta, mensajero, cliente o tracking..." style={{background:'transparent',border:0,outline:0,color:v5.text,fontSize:13,width:'100%'}}/></div></div><div style={{padding:22,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14}}><V5Card title="Rutas activas" value={stats.active} sub="En campo ahora" color={v5.blue} icon={<V5Icon type="route"/>}/><V5Card title="Paradas" value={stats.stops} sub="Asignadas hoy" color={v5.violet} icon={<V5Icon type="pin"/>}/><V5Card title="Visitadas" value={stats.visited} sub="Progreso interno" color={v5.green} icon={<V5Icon type="chart"/>}/><V5Card title="Pendientes" value={stats.pending} sub="Por visitar" color={v5.amber} icon={<V5Icon type="route"/>}/></div><div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'420px 1fr',gap:0,borderTop:`1px solid ${v5.line}`}}><div style={{borderRight:`1px solid ${v5.line}`,overflow:'auto'}}>{filtered.length===0?<div style={{padding:42,textAlign:'center',color:v5.muted}}>No hay rutas para mostrar</div>:filtered.map((r,i)=>{const st=routeStatsV5({x:r});const sel=selected===r;return <button key={(r.routeId||r.sentAt||i)+i} onClick={()=>setSelected(r)} style={{width:'100%',textAlign:'left',padding:18,border:0,borderBottom:`1px solid ${v5.line}`,background:sel?'#0d1f35':'transparent',cursor:'pointer',color:v5.text}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><div style={{fontSize:15,fontWeight:1000}}>{r.routeName||'Ruta sin nombre'}</div><span style={{fontSize:10,fontWeight:1000,padding:'5px 9px',borderRadius:999,background:r.isActive?'rgba(34,197,94,.12)':'rgba(148,163,184,.08)',color:r.isActive?v5.green:v5.muted}}>{r.isActive?'ACTIVA':'HISTORIAL'}</span></div><div style={{marginTop:7,color:v5.soft,fontSize:12}}>{r.driverName||'Sin mensajero'} · {(r.stops||[]).length} paradas</div><div style={{marginTop:12,height:7,background:'#06101d',borderRadius:999,overflow:'hidden'}}><div style={{height:'100%',width:`${st.stops?Math.round(st.visited/st.stops*100):0}%`,background:`linear-gradient(90deg,${v5.blue},${v5.green})`}}/></div><div style={{display:'flex',gap:12,marginTop:10,color:v5.muted,fontSize:11,fontWeight:800}}><span>{st.visited} visitadas</span><span>{st.pending} pendientes</span></div></button>})}</div><div style={{position:'relative',minHeight:0}}>{selected?<><div ref={mapRef} style={{position:'absolute',inset:0}}/><div style={{position:'absolute',top:18,left:18,background:'rgba(5,10,18,.86)',border:`1px solid ${v5.line}`,borderRadius:16,padding:14,backdropFilter:'blur(14px)'}}><div style={{fontWeight:1000,fontSize:15}}>{selected.routeName||'Ruta'}</div><div style={{color:v5.soft,fontSize:12,marginTop:4}}>{selected.driverName||'Mensajero'} · {(selected.stops||[]).length} paradas</div></div></>:<div style={{height:'100%',display:'grid',placeItems:'center',color:v5.muted}}>Selecciona una ruta para ver mapa y pines premium</div>}</div></div></div>;
+  return <div style={{flex:1,display:'flex',flexDirection:'column',background:v5.bg,color:v5.text,overflow:'hidden'}}><div style={{padding:24,borderBottom:`1px solid ${v5.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><div><div style={{color:v5.blue,fontSize:11,fontWeight:1000,letterSpacing:'2px',textTransform:'uppercase'}}>Operación logística</div><h1 style={{margin:'6px 0 0',fontSize:28,fontWeight:1000,letterSpacing:'-.8px'}}>Rutas</h1></div><div style={{display:'flex',alignItems:'center',gap:8,background:v5.panel,border:`1px solid ${v5.line}`,borderRadius:14,padding:'0 14px',minWidth:340}}><V5Icon type="search" size={16} color={v5.muted}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar ruta, mensajero, cliente o tracking..." style={{background:'transparent',border:0,outline:0,color:v5.text,fontSize:13,width:'100%'}}/></div></div><div style={{padding:22,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14}}><V5Card title="Rutas activas" value={stats.active} sub="En campo ahora" color={v5.blue} icon={<V5Icon type="route"/>}/><V5Card title="Paradas" value={stats.stops} sub="Asignadas hoy" color={v5.violet} icon={<V5Icon type="pin"/>}/><V5Card title="Visitadas" value={stats.visited} sub="Progreso interno" color={v5.green} icon={<V5Icon type="chart"/>}/><V5Card title="Pendientes" value={stats.pending} sub="Por visitar" color={v5.amber} icon={<V5Icon type="route"/>}/></div><div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'420px 1fr',gap:0,borderTop:`1px solid ${v5.line}`}}><div style={{borderRight:`1px solid ${v5.line}`,overflow:'auto'}}>{filtered.length===0?<div style={{padding:42,textAlign:'center',color:v5.muted}}>No hay rutas para mostrar</div>:filtered.map((r,i)=>{const st=routeStatsV5({x:r});const sel=selected===r;return <button key={(r.routeId||r.sentAt||i)+i} onClick={()=>setSelected(r)} style={{width:'100%',textAlign:'left',padding:18,border:0,borderBottom:`1px solid ${v5.line}`,background:sel?'#0d1f35':'transparent',cursor:'pointer',color:v5.text}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><div style={{fontSize:15,fontWeight:1000}}>{r.routeName||'Ruta sin nombre'}</div><div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:10,fontWeight:1000,padding:'5px 9px',borderRadius:999,background:r.isActive?'rgba(34,197,94,.12)':'rgba(148,163,184,.08)',color:r.isActive?v5.green:v5.muted}}>{r.isActive?'ACTIVA':'HISTORIAL'}</span>{!r.isActive&&<span onClick={(e)=>{e.stopPropagation();deleteHistoryRoute(r);}} title='Eliminar historial' style={{width:28,height:28,borderRadius:9,display:'grid',placeItems:'center',background:'rgba(239,68,68,.09)',border:'1px solid rgba(239,68,68,.22)',color:v5.red,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18'/><path d='M8 6V4h8v2'/><path d='M19 6l-1 14H6L5 6'/><path d='M10 11v5M14 11v5'/></svg></span>}</div></div><div style={{marginTop:7,color:v5.soft,fontSize:12}}>{r.driverName||'Sin mensajero'} · {(r.stops||[]).length} paradas</div><div style={{marginTop:12,height:7,background:'#06101d',borderRadius:999,overflow:'hidden'}}><div style={{height:'100%',width:`${st.stops?Math.round(st.visited/st.stops*100):0}%`,background:`linear-gradient(90deg,${v5.blue},${v5.green})`}}/></div><div style={{display:'flex',gap:12,marginTop:10,color:v5.muted,fontSize:11,fontWeight:800}}><span>{st.visited} visitadas</span><span>{st.pending} pendientes</span></div></button>})}</div><div style={{position:'relative',minHeight:0}}>{selected?<><div ref={mapRef} style={{position:'absolute',inset:0}}/><div style={{position:'absolute',top:18,left:18,background:'rgba(5,10,18,.86)',border:`1px solid ${v5.line}`,borderRadius:16,padding:14,backdropFilter:'blur(14px)'}}><div style={{fontWeight:1000,fontSize:15}}>{selected.routeName||'Ruta'}</div><div style={{color:v5.soft,fontSize:12,marginTop:4}}>{selected.driverName||'Mensajero'} · {(selected.stops||[]).length} paradas</div></div></>:<div style={{height:'100%',display:'grid',placeItems:'center',color:v5.muted}}>Selecciona una ruta para ver mapa y pines premium</div>}</div></div></div>;
 };
 const AdminMotorV5 = () => {
   return (
