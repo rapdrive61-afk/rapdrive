@@ -1344,9 +1344,11 @@ const PageDriversPro = ({ mensajeros, setMensajeros, currentUser, routes }) => {
   const remove=(id,name)=>{if(!window.confirm(`¿Eliminar ${name}?`))return; setMensajeros(prev=>{const updated=prev.filter(m=>m.id!==id); LS.setMens(updated); return updated;}); const u=USERS.find(u=>u.driverId===id); if(officeId)FB.set(`oficinas/${officeId}/mensajeros/${id}`,null); if(officeId&&u)FB.set(`oficinas/${officeId}/users/${u.id}`,null); if(u)FB.set(`users/${u.id}`,null);};
   return (
     <div style={{flex:1,overflow:"auto",padding:"24px",background:"radial-gradient(circle at top left,rgba(37,99,235,.10),transparent 32%),#060b10"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:22}}>
-        <div><div style={{fontSize:11,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"2px",textTransform:"uppercase"}}>Operación / Personal</div><h1 style={{fontSize:28,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-.8px",margin:"6px 0 4px"}}>Drivers</h1><div style={{color:"#64748b",fontSize:13}}>Mensajeros de esta oficina, accesos y estado operativo.</div></div>
-        <button onClick={()=>setAdding(true)} style={{padding:"12px 16px",borderRadius:14,border:"1px solid rgba(59,130,246,.35)",background:"linear-gradient(135deg,#2563eb,#4f46e5)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 16px 36px rgba(37,99,235,.25)"}}>+ Nuevo driver</button>
+      <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:16,marginBottom:14}}>
+        <button onClick={()=>setAdding(true)} style={{display:"inline-flex",alignItems:"center",gap:9,padding:"12px 16px",borderRadius:14,border:"1px solid rgba(59,130,246,.38)",background:"linear-gradient(135deg,#2563eb,#4f46e5)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 16px 36px rgba(37,99,235,.25)"}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Nuevo driver
+        </button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:18}}>
         {[["Total",stats.total,"#60a5fa"],["Activos",stats.active,"#22c55e"],["Pausados",stats.paused,"#f97316"],["En ruta",stats.onRoute,"#a78bfa"]].map(([l,v,c])=>(<div key={l} style={{border:"1px solid rgba(148,163,184,.10)",background:"linear-gradient(145deg,#0b1220,#070d16)",borderRadius:18,padding:16}}><div style={{width:9,height:9,borderRadius:"50%",background:c,boxShadow:`0 0 18px ${c}`,marginBottom:16}}/><div style={{fontSize:26,color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:900}}>{v}</div><div style={{fontSize:11,color:"#64748b",fontWeight:800,textTransform:"uppercase",letterSpacing:".8px"}}>{l}</div></div>))}
@@ -5171,7 +5173,9 @@ const parseAddress = (raw) => {
 };
 
 const geocodeWithGoogle = async (rawAddress) => {
-  const cacheKey = rawAddress.trim().toLowerCase();
+  const originalAddress = String(rawAddress || "").trim();
+  rawAddress = aiNormalizeAddress(originalAddress);
+  const cacheKey = (originalAddress || rawAddress).trim().toLowerCase();
 
   // ── CAPA 0A: Cache aprendido (correcciones manuales del admin, persistidas en Firebase)
   if (_learnedCache.has(cacheKey)) {
@@ -5843,6 +5847,66 @@ const expandRDAddress = (s) => {
   return r;
 };
 
+
+// --- FASE IA MOTOR: normalización predictiva y alias locales ------------------
+const RD_AI_ALIAS_RULES = [
+  [/\balcarizo?s?\b/gi, "Los Alcarrizos"],
+  [/\blos\s+alca\b/gi, "Los Alcarrizos"],
+  [/\bkm\s*9\b/gi, "Kilómetro 9 Autopista Duarte"],
+  [/\bkilometro\s*9\b/gi, "Kilómetro 9 Autopista Duarte"],
+  [/\bkm\s*12\b/gi, "Kilómetro 12 Autopista Duarte"],
+  [/\bmanogua\s*yabo\b/gi, "Manoguayabo"],
+  [/\bmanoguayavo\b/gi, "Manoguayabo"],
+  [/\blas\s+palma\b/gi, "Las Palmas de Herrera"],
+  [/\bpalmas\s+herrera\b/gi, "Las Palmas de Herrera"],
+  [/\bbuenos\s+aire\s+herrera\b/gi, "Buenos Aires de Herrera"],
+  [/\bb\.\s*a\.\s*herrera\b/gi, "Buenos Aires de Herrera"],
+  [/\bcarmen\s+renata\s*1\b/gi, "Residencial Carmen Renata I"],
+  [/\bcarmen\s+renata\s*i\b/gi, "Residencial Carmen Renata I"],
+  [/\bcarmen\s+renata\s*2\b/gi, "Residencial Carmen Renata II"],
+  [/\bduarte\s+vieja\b/gi, "Autopista Duarte Vieja"],
+  [/\b27\s+feb\b/gi, "27 de Febrero"],
+  [/\bprol\s+27\b/gi, "Prolongación 27 de Febrero"],
+  [/\bprol\s+inde?pendencia\b/gi, "Prolongación Independencia"],
+  [/\bisabel\s+aguilar\b/gi, "Isabel Aguiar"],
+  [/\biv[aá]n\s+guzm[aá]n\b/gi, "Iván Guzmán Klang"],
+  [/\bvinicio\s+calbenti\b/gi, "Hospital Vinicio Calventi"],
+  [/\bmarcelino\s+velez\b/gi, "Hospital Marcelino Vélez Santana"],
+  [/\bplaza\s+duarte\b/gi, "Plaza Duarte Herrera"],
+  [/\bprice\s*smart\b/gi, "PriceSmart Herrera"],
+  [/\boccidental\s+mall\b/gi, "Occidental Mall"],
+  [/\bcarrefour\b/gi, "Carrefour Autopista Duarte"],
+  [/\bmegacentro\b/gi, "MegaCentro Santo Domingo Este"],
+];
+
+const aiNormalizeAddress = (raw) => {
+  let t = String(raw || "").trim();
+  if (!t) return t;
+  t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  t = t.replace(/[;|]+/g, ", ").replace(/\s{2,}/g, " ");
+  for (const [re, repl] of RD_AI_ALIAS_RULES) t = t.replace(re, repl);
+  // Si no trae ciudad, sesga al Gran Santo Domingo; si trae SDO/Los Alcarrizos, prioriza Oeste.
+  const low = t.toLowerCase();
+  if (!/santo domingo|distrito nacional|rep[uú]blica dominicana|los alcarrizos|pedro brand|pantoja/i.test(t)) {
+    if (/herrera|bayona|engombe|manoguayabo|caobas|palmas|carmen renata|isabel aguiar|hato nuevo|caballona|duarte/i.test(t)) {
+      t += ", Santo Domingo Oeste";
+    } else {
+      t += ", Santo Domingo";
+    }
+  }
+  return expandRDAddress(t);
+};
+
+const aiTokens = (txt) => String(txt||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter(w=>w.length>2);
+const aiCandidateBoost = (formatted, original) => {
+  const a = new Set(aiTokens(formatted));
+  const b = aiTokens(original);
+  if (!b.length) return 0;
+  let hit = 0;
+  b.forEach(w => { if (a.has(w)) hit += 1; });
+  return Math.min(12, Math.round((hit / b.length) * 12));
+};
+
 // Score Google result quality
 const scoreGoogleResult = (result, original) => {
   const types = result.types || [];
@@ -6360,6 +6424,7 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
         position: { lat: stop.lat, lng: stop.lng },
         icon: { url: "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(pinSvg), scaledSize: new window.google.maps.Size(44, 50), anchor: new window.google.maps.Point(22, 47) },
         zIndex: isSelected ? 100 : 10,
+        optimized: true,
         title: isCluster ? `${colocated.length} paquetes aquí · Clic para ciclar` : stop.displayAddr,
       });
       marker.addListener("click", () => {
@@ -8683,8 +8748,8 @@ const CircuitEngine = () => {
               </div>
 
               {/* Title */}
-              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Geolocalizando con Google Maps</div>
-              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>Procesando calles · sectores · referencias · Plus Codes</div>
+              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Corrigiendo direcciones con IA + Google Maps</div>
+              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>Normalizando alias, sectores, referencias y Plus Codes</div>
 
               {/* Address flying by */}
               <div style={{ height:22, overflow:"hidden", marginBottom:18 }}>
@@ -8851,8 +8916,8 @@ const CircuitEngine = () => {
                       <div key={stop.id}
                         onClick={() => setSelectedId(stop.id === selectedId ? null : stop.id)}
                         className="rh"
-                        style={{ borderBottom:"1px solid #0a0d14", background: isSelected ? "#0b1a2e" : statusBg(stop.status), cursor:"pointer", transition:"background .1s", animation:`slideR .2s ${Math.min(i,20)*20}ms ease both`, borderLeft: isSelected ? "3px solid #3b82f6" : `3px solid ${stop.status==="error"?"#ef444433":"transparent"}` }}>
-                        <div style={{ padding:"12px 16px", display:"flex", gap:12, alignItems:"flex-start" }}>
+                        style={{ margin:"8px 10px", border:"1px solid rgba(59,130,246,.14)", borderRadius:14, background: isSelected ? "linear-gradient(145deg,#0b1a2e,#07101b)" : statusBg(stop.status), cursor:"pointer", transition:"transform .12s, border-color .12s, background .12s", animation:`slideR .2s ${Math.min(i,20)*20}ms ease both`, borderLeft: isSelected ? "3px solid #3b82f6" : `3px solid ${stop.status==="error"?"#ef4444":"rgba(59,130,246,.18)"}`, boxShadow:isSelected?"0 14px 34px rgba(0,0,0,.28)":"none" }}>
+                        <div style={{ padding:"12px 14px", display:"flex", gap:12, alignItems:"flex-start" }}>
                           {/* Stop number bubble */}
                           <div style={{ width:32, height:32, borderRadius:9, background:stop.status==="error"?"rgba(239,68,68,0.12)":isSelected?"#3b82f6":"#0d1a28", border:`1.5px solid ${stop.status==="error"?"rgba(239,68,68,0.35)":isSelected?"#3b82f6":"#1a2a3a"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11.5, color:stop.status==="error"?"#ef4444":isSelected?"white":"#3b82f6", fontFamily:"'Inter',sans-serif", fontWeight:700, flexShrink:0, letterSpacing:"-0.3px" }}>
                             {stop.status==="pending"
@@ -8883,6 +8948,11 @@ const CircuitEngine = () => {
                                 {stop.phone}
                               </div>
                             )}
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+                              <span style={{fontSize:9.5,color:"#93c5fd",background:"rgba(59,130,246,.09)",border:"1px solid rgba(59,130,246,.18)",borderRadius:999,padding:"3px 7px"}}>IA {stop.confidence||0}%</span>
+                              {stop.sector && <span style={{fontSize:9.5,color:"#86efac",background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.16)",borderRadius:999,padding:"3px 7px"}}>{stop.sector}</span>}
+                              {stop.source && <span style={{fontSize:9.5,color:"#c4b5fd",background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.16)",borderRadius:999,padding:"3px 7px"}}>{stop.source}</span>}
+                            </div>
                             {stop.issue && (
                               <div style={{ fontSize:10, color:stop.status==="error"?"#f87171":"#f59e0b", marginTop:3, display:"flex", alignItems:"center", gap:4 }}>
                                 <span>⚠</span>
