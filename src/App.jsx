@@ -4,14 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 const DELIVERIES = [];
 
-const DRIVERS = [
-  { id:"M-01", name:"Juan Mojica",          avatar:"JM", phone:"8091000001", zone:"DN Norte",   status:"active",  vehicle:"Moto",      deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:true  },
-  { id:"M-02", name:"Juan Elias Rodriguez", avatar:"JE", phone:"8091000002", zone:"DN Sur",     status:"active",  vehicle:"Moto",      deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:true  },
-  { id:"M-03", name:"Omalis Reyes",         avatar:"OR", phone:"8091000003", zone:"DN Este",    status:"active",  vehicle:"Carro",     deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:true  },
-  { id:"M-04", name:"Carlos Alfredo",       avatar:"CA", phone:"8091000004", zone:"DN Oeste",   status:"active",  vehicle:"Moto",      deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:true  },
-  { id:"M-05", name:"Eriberto Reynoso",     avatar:"ER", phone:"8091000005", zone:"Santiago",   status:"offline", vehicle:"Furgoneta", deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:false },
-  { id:"M-06", name:"Douglas Santiago",     avatar:"DS", phone:"8091000006", zone:"DN Central", status:"active",  vehicle:"Moto",      deliveries:0, success:0, rating:0, activeRoute:null, today:0, online:true  },
-];
+const DRIVERS = [];
 
 const CLIENTS = [];
 
@@ -22,7 +15,7 @@ const ANALYTICS_DATA = {
   monthly:   [320, 410, 395, 480, 520, 490, 560, 610, 580, 640, 700, 128],
   cancelled: [8, 5, 10, 7, 4, 6, 3],
   avgTime:   [42, 38, 44, 36, 39, 35, 33],
-  zones:     [{zone:"Centro",pct:28,color:"#3b82f6"},{zone:"Salamanca",pct:22,color:"#10b981"},{zone:"Retiro",pct:18,color:"#f59e0b"},{zone:"Lavapiés",pct:14,color:"#8b5cf6"},{zone:"Malasaña",pct:10,color:"#ef4444"},{zone:"Otros",pct:8,color:"#374151"}],
+  zones:     [],
   drivers:   [],
 };
 
@@ -37,13 +30,13 @@ const DEFAULT_MENSAJEROS = [
 ];
 
 const USERS = [
-  { id:"U-01", name:"Admin Rap Drive",         email:"admin@rapdrive.do",     password:"Rapcargo2026@", role:"admin",  avatar:"AD", zone:"Todas",      color:"#3b82f6" },
-  { id:"U-02", name:"JUAN MOJICA",             email:"jmojica@rapdrive.do",   password:"driver123",     role:"driver", avatar:"JM", zone:"DN Norte",   color:"#10b981", driverId:"M-01" },
-  { id:"U-03", name:"JUAN ELIAS RODRIGUEZ",    email:"jelias@rapdrive.do",    password:"driver123",     role:"driver", avatar:"JE", zone:"DN Sur",     color:"#10b981", driverId:"M-02" },
-  { id:"U-04", name:"OMALIS REYES",            email:"oreyes@rapdrive.do",    password:"driver123",     role:"driver", avatar:"OR", zone:"DN Este",    color:"#10b981", driverId:"M-03" },
-  { id:"U-05", name:"CARLOS ALFREDO",          email:"calfredo@rapdrive.do",  password:"driver123",     role:"driver", avatar:"CA", zone:"DN Oeste",   color:"#10b981", driverId:"M-04" },
-  { id:"U-06", name:"DOUGLAS SANTIAGO",        email:"dsantiago@rapdrive.do", password:"driver123",     role:"driver", avatar:"DS", zone:"DN Central", color:"#10b981", driverId:"M-06" },
-  { id:"U-07", name:"ERIBERTO REYNOSO",        email:"ereynoso@rapdrive.do",  password:"driver123",     role:"driver", avatar:"ER", zone:"Santiago",   color:"#10b981", driverId:"M-05" },
+  { id:"U-01", name:"Admin Rap Drive",         email:"admin@rapdrive.do",     password:"Rapcargo2026@", role:"admin",  avatar:"AD",      color:"#3b82f6" },
+  { id:"U-02", name:"JUAN MOJICA",             email:"jmojica@rapdrive.do",   password:"driver123",     role:"driver", avatar:"JM",   color:"#10b981", driverId:"M-01" },
+  { id:"U-03", name:"JUAN ELIAS RODRIGUEZ",    email:"jelias@rapdrive.do",    password:"driver123",     role:"driver", avatar:"JE",     color:"#10b981", driverId:"M-02" },
+  { id:"U-04", name:"OMALIS REYES",            email:"oreyes@rapdrive.do",    password:"driver123",     role:"driver", avatar:"OR",    color:"#10b981", driverId:"M-03" },
+  { id:"U-05", name:"CARLOS ALFREDO",          email:"calfredo@rapdrive.do",  password:"driver123",     role:"driver", avatar:"CA",   color:"#10b981", driverId:"M-04" },
+  { id:"U-06", name:"DOUGLAS SANTIAGO",        email:"dsantiago@rapdrive.do", password:"driver123",     role:"driver", avatar:"DS", color:"#10b981", driverId:"M-06" },
+  { id:"U-07", name:"ERIBERTO REYNOSO",        email:"ereynoso@rapdrive.do",  password:"driver123",     role:"driver", avatar:"ER",   color:"#10b981", driverId:"M-05" },
 ];
 
 const ROLE_CONFIG = {
@@ -94,7 +87,7 @@ const FB = {
 };
 
 // LS: memoria local + Firebase como puente cross-browser
-const _memStore = { routes: {}, chats: {}, mens: null, pendingRoutes: {} };
+const _memStore = { routes: {}, chats: {}, mens: null };
 const LS = {
   getRoutes: () => ({ ..._memStore.routes }),
   setRoute:  (id, r) => {
@@ -108,10 +101,7 @@ const LS = {
   },
   getMens:   () => _memStore.mens ? [..._memStore.mens] : DEFAULT_MENSAJEROS,
   setMens:   (m) => { _memStore.mens = m; FB.set("mens", m); },
-  // Cola eliminada: estas funciones quedan como no-op por compatibilidad.
-  getPending:    ()  => [],
-  setPending:    () => {},
-  getAllPending:  () => ({}),
+  // Sin cola: una sola ruta activa por mensajero.
   // Ubicaciones en tiempo real de mensajeros
   setLocation: (driverId, loc) => {
     if (!window.__rdLocations) window.__rdLocations = {};
@@ -125,8 +115,6 @@ if (typeof window !== "undefined") {
   window.__rdRouteStore    = LS.getRoutes();
   window.__rdChatStore     = LS.getChats();
   window.__rdMensajeros    = LS.getMens();
-  // Cola eliminada: no reconstruir ni leer rdQueue_*.
-  window.__rdPendingRoutes = {};
 
 
   // ── CARGA INICIAL DESDE FIREBASE ─────────────────────────────────────────
@@ -136,9 +124,6 @@ if (typeof window !== "undefined") {
   FB.get("chats").then(data => {
     if (data) { _memStore.chats = data; window.__rdChatStore = data; }
   });
-  // NO sobreescribir pendingRoutes desde Firebase globalmente —
-  // cada mensajero gestiona su cola desde localStorage (fuente de verdad local).
-  // Firebase solo se usa para que el admin ENVÍE rutas nuevas.
   // Cargar mensajeros y usuarios desde Firebase (persisten mensajeros nuevos creados por admin)
   FB.get("mens").then(data => {
     if (data && Array.isArray(data)) { _memStore.mens = data; window.__rdMensajeros = data; }
@@ -174,8 +159,7 @@ if (typeof window !== "undefined") {
 
 const STATUS = {
   on_route:  {label:"En ruta",   color:"#3b82f6", bg:"rgba(59,130,246,0.12)"},
-  delivered: {label:"Entregado", color:"#10b981", bg:"rgba(16,185,129,0.12)"},
-  cancelled: {label:"Cancelado", color:"#ef4444", bg:"rgba(239,68,68,0.12)" },
+  visited:   {label:"Visitado",   color:"#3b82f6", bg:"rgba(59,130,246,0.12)"},
   pending:   {label:"Pendiente", color:"#f59e0b", bg:"rgba(245,158,11,0.12)"},
   active:    {label:"Activo",    color:"#10b981", bg:"rgba(16,185,129,0.12)"},
   inactive:  {label:"Inactivo",  color:"#6b7280", bg:"rgba(107,114,128,0.12)"},
@@ -736,9 +720,8 @@ const PageRoutes = () => {
 
       // Drop markers per stop
       stops.forEach(stop => {
-        const isDone    = stop.driverStatus === "delivered";
-        const isProb    = stop.driverStatus === "problema";
-        const color     = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
+        const isDone    = stop.navStatus === "visited";
+        const color     = isDone ? "#3b82f6" : "#f59e0b";
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="38" viewBox="0 0 32 38">
           <defs>
             <filter id="sh" x="-40%" y="-20%" width="180%" height="180%">
@@ -787,10 +770,9 @@ const PageRoutes = () => {
 
   const routeStats = (r) => {
     const stops = r.stops || [];
-    const delivered = stops.filter(s => s.driverStatus === "delivered").length;
-    const problems  = stops.filter(s => s.driverStatus === "problema").length;
-    const pending   = stops.filter(s => s.driverStatus === "pending" || s.driverStatus === "en_ruta").length;
-    return { total: stops.length, delivered, problems, pending };
+    const visited = stops.filter(s => s.driverStatus === "visited").length;
+    const pending   = stops.filter(s => s.navStatus !== "visited").length;
+    return { total: stops.length, visited, pending };
   };
 
   return (
@@ -871,12 +853,12 @@ const PageRoutes = () => {
                 <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                   <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(16,185,129,0.12)", color:"#10b981", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(16,185,129,0.15)" }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                    {stats.delivered} entregados
+                    {stats.visited} visitados
                   </div>
-                  {stats.problems > 0 && (
+                  {false && (
                     <div style={{ fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, padding:"4px 10px", borderRadius:7, background:"rgba(239,68,68,0.12)", color:"#ef4444", display:"flex", alignItems:"center", gap:5, border:"1px solid rgba(239,68,68,0.15)" }}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-                      {stats.problems} problema{stats.problems !== 1 ? "s" : ""}
+                      {stats.problems} nota{stats.problems !== 1 ? "s" : ""}
                     </div>
                   )}
                   {stats.pending > 0 && (
@@ -907,7 +889,7 @@ const PageRoutes = () => {
               <div style={{ fontSize:11, color:"#4b5563" }}>{selectedRoute.driverName} · {fmtDate(selectedRoute.sentAt)}</div>
               {(() => { const s = routeStats(selectedRoute); return (
                 <div style={{ display:"flex", gap:10, marginTop:7 }}>
-                  {[["✓",s.delivered,"#10b981"],["⚠",s.problems,"#ef4444"],["○",s.pending,"#f59e0b"],["📍",s.total,"#3b82f6"]].map(([ic,val,c])=>val>0||ic==="📍"?(
+                  {[["✓",s.visited,"#10b981"],["○",s.pending,"#f59e0b"],["📍",s.total,"#3b82f6"]].map(([ic,val,c])=>val>0||ic==="📍"?(
                     <div key={ic} style={{ fontSize:10, color:c, fontFamily:"'Syne',sans-serif", fontWeight:700 }}>{ic} {val}</div>
                   ):null)}
                   {selectedRoute.km && <div style={{ fontSize:10, color:"#2d4a60" }}>· {selectedRoute.km} km</div>}
@@ -949,15 +931,14 @@ const PageRoutes = () => {
                 </div>
               );
               return visibleStops.map((stop, i) => {
-                const isDone = stop.driverStatus === "delivered";
-                const isProb = stop.driverStatus === "problema";
-                const c = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
+                const isDone = stop.navStatus === "visited";
+                const c = isDone ? "#3b82f6" : "#f59e0b";
                 return (
                   <div key={stop.id||i} style={{ display:"flex", gap:12, padding:"10px 16px", borderBottom:"1px solid #080e16", alignItems:"flex-start" }}>
                     <div style={{ width:26, height:26, borderRadius:7, background:`${c}18`, border:`1.5px solid ${c}40`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:700, color:c, flexShrink:0, marginTop:1, position:"relative" }}>
                       {stop.stopNum || i+1}
                       {isDone && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#10b981", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>✓</div>}
-                      {isProb && <div style={{ position:"absolute", top:-4, right:-4, width:10, height:10, borderRadius:"50%", background:"#ef4444", border:"1.5px solid #060e1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:6, color:"white", fontWeight:900 }}>!</div>}
+                      
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       {/* Cliente primero, dirección debajo */}
@@ -969,8 +950,8 @@ const PageRoutes = () => {
                         {stop.displayAddr || stop.rawAddr || "Sin dirección"}
                       </div>
                       {stop.tracking && <div style={{ fontSize:10, color:"#2d4a60", marginTop:2 }}>#{stop.tracking}</div>}
-                      {stop.deliveredAt && <div style={{ fontSize:10, color:"#10b981", marginTop:2 }}>Entregado {stop.deliveredAt}</div>}
-                      {stop.issue && stop.driverStatus === "problema" && <div style={{ fontSize:10, color:"#ef4444", marginTop:2 }}>⚠ {stop.issue}</div>}
+                      {stop.visitedAt && <div style={{ fontSize:10, color:"#10b981", marginTop:2 }}>Visitado {stop.visitedAt}</div>}
+                      
                     </div>
                   </div>
                 );
@@ -996,9 +977,9 @@ const PageDrivers = ({ drivers, setDrivers }) => {
   const [selDriver,setSelDriver]=useState(null);
   const [search,setSearch]=useState("");
   const [showAddDriver,setShowAddDriver]=useState(false);
-  const [drvForm,setDrvForm]=useState({name:"",phone:"",vehicle:"Moto",zone:""});
+  const [drvForm,setDrvForm]=useState({name:"",phone:"",vehicle:"Moto"});
   const driver=drivers.find(d=>d.id===selDriver);
-  const filtered=drivers.filter(d=>!search||[d.name,d.zone,d.vehicle].some(s=>s&&s.toLowerCase().includes(search.toLowerCase())));
+  const filtered=drivers.filter(d=>!search||[d.name,d.office,d.vehicle].some(s=>s&&s.toLowerCase().includes(search.toLowerCase())));
   const driverRoute=driver?ROUTES.find(r=>r.id===driver.activeRoute):null;
   const inp2={background:"#0a1019",border:"1px solid #1e2d3d",borderRadius:8,padding:"9px 12px",color:"#e2e8f0",fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none",width:"100%"};
   const addDriver=()=>{
@@ -1006,7 +987,7 @@ const PageDrivers = ({ drivers, setDrivers }) => {
     const av=drvForm.name.trim().split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
     const newId="M"+Date.now();
     setDrivers(p=>[...p,{id:newId,avatar:av,...drvForm,name:drvForm.name.trim(),status:"active",deliveries:0,success:0,rating:0,activeRoute:null,today:0,online:true}]);
-    setDrvForm({name:"",phone:"",vehicle:"Moto",zone:""});
+    setDrvForm({name:"",phone:"",vehicle:"Moto"});
     setShowAddDriver(false);
   };
   return (
@@ -1019,9 +1000,9 @@ const PageDrivers = ({ drivers, setDrivers }) => {
           <KPI label="Descanso" value={drivers.filter(d=>d.status==="break").length} sub="pausa activa"    color="#f59e0b" spark={[1,2,1,1,2,1,1,2,1,1]}  delay="120ms"/>
           <KPI label="Offline"  value={drivers.filter(d=>!d.online).length}          sub="no disponibles"  color="#ef4444" spark={[2,2,3,2,2,2,2,2,2,2]}  delay="180ms"/>
         </div>
-        <div style={{flex:1,overflow:"auto",padding:"14px 22px 18px"}}><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:12}}>{filtered.map((d,i)=>{const s=STATUS[d.status]||STATUS.offline;const isSel=selDriver===d.id;return(<div key={d.id} className="si" onClick={()=>setSelDriver(isSel?null:d.id)} style={{background:isSel?"#091527":"linear-gradient(135deg,#0d1420,#0a1019)",border:`1px solid ${isSel?"#1e3550":"#131f30"}`,borderRadius:14,padding:"16px",cursor:"pointer",transition:"all .15s",animation:`fadeUp .4s ${i*40}ms ease both`,position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,right:0,width:60,height:60,borderRadius:"0 14px 0 60px",background:`${s.color}06`}}/><div style={{position:"absolute",top:12,right:12}}><div style={{width:8,height:8,borderRadius:"50%",background:d.online?"#10b981":"#374151",boxShadow:d.online?"0 0 6px #10b981":"none"}}/></div><div style={{display:"flex",alignItems:"center",gap:11,marginBottom:12}}><Avatar i={d.avatar} size={42} color={s.color}/><div><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.3px"}}>{d.name}</div><div style={{fontSize:10,color:"#2d4a60",marginTop:2}}>{d.zone} · {d.vehicle.split("·")[0].trim()}</div></div></div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><Badge status={d.status}/><span style={{fontSize:11,color:"#f59e0b",fontFamily:"'Syne',sans-serif",fontWeight:700}}>★ {d.rating}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>{[["HOY",d.today,"entregas","#3b82f6"],["TOTAL",d.deliveries,"hist.","#64748b"],["TASA",d.success+"%","éxito","#10b981"]].map(([l,v,s2,c])=><div key={l} style={{background:"#060b10",borderRadius:8,padding:"7px 8px",border:"1px solid #0d1420"}}><div style={{fontSize:8.5,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:c}}>{v}</div><div style={{fontSize:9,color:"#2d4a60"}}>{s2}</div></div>)}</div>{d.activeRoute&&<div style={{marginTop:10,padding:"6px 10px",background:"#060b10",border:"1px solid #0d1420",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:9.5,color:"#2d4a60"}}>Ruta activa</span><span style={{fontSize:9.5,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{d.activeRoute}</span></div>}</div>);})}</div></div>
+        <div style={{flex:1,overflow:"auto",padding:"14px 22px 18px"}}><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:12}}>{filtered.map((d,i)=>{const s=STATUS[d.status]||STATUS.offline;const isSel=selDriver===d.id;return(<div key={d.id} className="si" onClick={()=>setSelDriver(isSel?null:d.id)} style={{background:isSel?"#091527":"linear-gradient(135deg,#0d1420,#0a1019)",border:`1px solid ${isSel?"#1e3550":"#131f30"}`,borderRadius:14,padding:"16px",cursor:"pointer",transition:"all .15s",animation:`fadeUp .4s ${i*40}ms ease both`,position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,right:0,width:60,height:60,borderRadius:"0 14px 0 60px",background:`${s.color}06`}}/><div style={{position:"absolute",top:12,right:12}}><div style={{width:8,height:8,borderRadius:"50%",background:d.online?"#10b981":"#374151",boxShadow:d.online?"0 0 6px #10b981":"none"}}/></div><div style={{display:"flex",alignItems:"center",gap:11,marginBottom:12}}><Avatar i={d.avatar} size={42} color={s.color}/><div><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.3px"}}>{d.name}</div><div style={{fontSize:10,color:"#2d4a60",marginTop:2}}>{d.office} · {d.vehicle.split("·")[0].trim()}</div></div></div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><Badge status={d.status}/><span style={{fontSize:11,color:"#f59e0b",fontFamily:"'Syne',sans-serif",fontWeight:700}}>★ {d.rating}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>{[["HOY",d.today,"rutas","#3b82f6"],["TOTAL",d.deliveries,"hist.","#64748b"],["TASA",d.success+"%","éxito","#10b981"]].map(([l,v,s2,c])=><div key={l} style={{background:"#060b10",borderRadius:8,padding:"7px 8px",border:"1px solid #0d1420"}}><div style={{fontSize:8.5,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:c}}>{v}</div><div style={{fontSize:9,color:"#2d4a60"}}>{s2}</div></div>)}</div>{d.activeRoute&&<div style={{marginTop:10,padding:"6px 10px",background:"#060b10",border:"1px solid #0d1420",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:9.5,color:"#2d4a60"}}>Ruta activa</span><span style={{fontSize:9.5,color:"#3b82f6",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{d.activeRoute}</span></div>}</div>);})}</div></div>
       </div>
-      {driver&&<aside style={{width:275,borderLeft:"1px solid #0d1420",display:"flex",flexDirection:"column",background:"#060b10",flexShrink:0,overflow:"hidden",animation:"slideIn .2s ease"}}><div style={{padding:"16px 16px 12px",borderBottom:"1px solid #0d1420"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><span style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px"}}>PERFIL CONDUCTOR</span><button onClick={()=>setSelDriver(null)} style={{width:24,height:24,borderRadius:6,border:"1px solid #131f30",background:"transparent",color:"#374151",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✕</button></div><div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:14}}><Avatar i={driver.avatar} size={56} color={STATUS[driver.status]?.color||"#3b82f6"}/><div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",marginTop:10}}>{driver.name}</div><div style={{fontSize:11,color:"#2d4a60",marginTop:2}}>{driver.vehicle}</div><div style={{marginTop:8}}><Badge status={driver.status}/></div></div><div style={{background:"#0a1019",border:"1px solid #0d1420",borderRadius:12,padding:"12px 14px",marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}><span style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px"}}>RENDIMIENTO</span><span style={{fontSize:11,color:"#f59e0b",fontFamily:"'Syne',sans-serif",fontWeight:700}}>★ {driver.rating}</span></div>{[["Tasa de éxito",driver.success,"#10b981"],["Entregas hoy",Math.round(driver.today/18*100),"#3b82f6"],["Puntualidad",driver.success-3,"#f59e0b"]].map(([l,v,c])=><div key={l} style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,color:"#4b5563"}}>{l}</span><span style={{fontSize:10,color:c,fontFamily:"'Syne',sans-serif",fontWeight:700}}>{v}%</span></div><div style={{height:3,background:"#131f30",borderRadius:3}}><div style={{height:3,background:`linear-gradient(90deg,${c},${c}55)`,borderRadius:3,width:`${v}%`,transition:"width 1s"}}/></div></div>)}</div><div style={{display:"flex",gap:7,marginBottom:10}}>{[["📞","Llamar"],["💬","Mensaje"],["📍","Ubicar"]].map(([ic,l])=><button key={l} className="ab" style={{flex:1,padding:"8px 0",borderRadius:9,border:"1px solid #131f30",background:"transparent",color:"#4b5563",fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .1s"}}>{ic} {l}</button>)}</div></div><div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>{driverRoute?(<><div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",marginBottom:10}}>RUTA ACTIVA · {driverRoute.id}</div><div style={{background:"#0a1019",border:`1px solid ${driverRoute.color}33`,borderRadius:12,padding:"12px 14px",marginBottom:10}}><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",marginBottom:6}}>{driverRoute.name}</div><div style={{height:4,background:"#131f30",borderRadius:4,marginBottom:6}}><div style={{height:4,background:`linear-gradient(90deg,${driverRoute.color},${driverRoute.color}55)`,borderRadius:4,width:`${driverRoute.progress}%`}}/></div><div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11,color:driverRoute.color,fontFamily:"'Syne',sans-serif",fontWeight:700}}>{driverRoute.progress}% · {driverRoute.done}/{driverRoute.stops}</span><span style={{fontSize:11,color:"#2d4a60"}}>ETA {driverRoute.eta}</span></div></div><div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",marginBottom:8}}>PRÓXIMAS PARADAS</div>{driverRoute.stops_list.filter(s=>s.status!=="delivered").slice(0,4).map((stop,i)=><div key={stop.n} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 0",borderBottom:"1px solid #0a1019"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#0a1019",border:`1.5px solid ${stop.status==="on_route"?"#3b82f6":"#1e2d3d"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,flexShrink:0}}>{stop.n}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,color:stop.status==="on_route"?"#e2e8f0":"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{stop.address}</div><div style={{fontSize:10,color:"#2d4a60",marginTop:1}}>{stop.client} · {stop.time}</div></div>{stop.status==="on_route"&&<Badge status="on_route"/>}</div>)}</>):(<div style={{padding:"30px 0",textAlign:"center",color:"#2d4a60",fontSize:13}}>Sin ruta activa</div>)}</div></aside>}
+      {driver&&<aside style={{width:275,borderLeft:"1px solid #0d1420",display:"flex",flexDirection:"column",background:"#060b10",flexShrink:0,overflow:"hidden",animation:"slideIn .2s ease"}}><div style={{padding:"16px 16px 12px",borderBottom:"1px solid #0d1420"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><span style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px"}}>PERFIL CONDUCTOR</span><button onClick={()=>setSelDriver(null)} style={{width:24,height:24,borderRadius:6,border:"1px solid #131f30",background:"transparent",color:"#374151",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✕</button></div><div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:14}}><Avatar i={driver.avatar} size={56} color={STATUS[driver.status]?.color||"#3b82f6"}/><div style={{fontSize:16,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",marginTop:10}}>{driver.name}</div><div style={{fontSize:11,color:"#2d4a60",marginTop:2}}>{driver.vehicle}</div><div style={{marginTop:8}}><Badge status={driver.status}/></div></div><div style={{background:"#0a1019",border:"1px solid #0d1420",borderRadius:12,padding:"12px 14px",marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}><span style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px"}}>RENDIMIENTO</span><span style={{fontSize:11,color:"#f59e0b",fontFamily:"'Syne',sans-serif",fontWeight:700}}>★ {driver.rating}</span></div>{[["Tasa de éxito",driver.success,"#10b981"],["Rutas hoy",Math.round(driver.today/18*100),"#3b82f6"],["Puntualidad",driver.success-3,"#f59e0b"]].map(([l,v,c])=><div key={l} style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,color:"#4b5563"}}>{l}</span><span style={{fontSize:10,color:c,fontFamily:"'Syne',sans-serif",fontWeight:700}}>{v}%</span></div><div style={{height:3,background:"#131f30",borderRadius:3}}><div style={{height:3,background:`linear-gradient(90deg,${c},${c}55)`,borderRadius:3,width:`${v}%`,transition:"width 1s"}}/></div></div>)}</div><div style={{display:"flex",gap:7,marginBottom:10}}>{[["📞","Llamar"],["💬","Mensaje"],["📍","Ubicar"]].map(([ic,l])=><button key={l} className="ab" style={{flex:1,padding:"8px 0",borderRadius:9,border:"1px solid #131f30",background:"transparent",color:"#4b5563",fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .1s"}}>{ic} {l}</button>)}</div></div><div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>{driverRoute?(<><div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",marginBottom:10}}>RUTA ACTIVA · {driverRoute.id}</div><div style={{background:"#0a1019",border:`1px solid ${driverRoute.color}33`,borderRadius:12,padding:"12px 14px",marginBottom:10}}><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",marginBottom:6}}>{driverRoute.name}</div><div style={{height:4,background:"#131f30",borderRadius:4,marginBottom:6}}><div style={{height:4,background:`linear-gradient(90deg,${driverRoute.color},${driverRoute.color}55)`,borderRadius:4,width:`${driverRoute.progress}%`}}/></div><div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11,color:driverRoute.color,fontFamily:"'Syne',sans-serif",fontWeight:700}}>{driverRoute.progress}% · {driverRoute.done}/{driverRoute.stops}</span><span style={{fontSize:11,color:"#2d4a60"}}>ETA {driverRoute.eta}</span></div></div><div style={{fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",marginBottom:8}}>PRÓXIMAS PARADAS</div>{driverRoute.stops_list.filter(s=>s.status!=="visited").slice(0,4).map((stop,i)=><div key={stop.n} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 0",borderBottom:"1px solid #0a1019"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#0a1019",border:`1.5px solid ${stop.status==="on_route"?"#3b82f6":"#1e2d3d"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,flexShrink:0}}>{stop.n}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,color:stop.status==="on_route"?"#e2e8f0":"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{stop.address}</div><div style={{fontSize:10,color:"#2d4a60",marginTop:1}}>{stop.client} · {stop.time}</div></div>{stop.status==="on_route"&&<Badge status="on_route"/>}</div>)}</>):(<div style={{padding:"30px 0",textAlign:"center",color:"#2d4a60",fontSize:13}}>Sin ruta activa</div>)}</div></aside>}
     {/* Modal agregar conductor */}
     {showAddDriver&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e=>{if(e.target===e.currentTarget)setShowAddDriver(false);}}>
       <div style={{width:400,background:"linear-gradient(145deg,#0d1420,#080e16)",border:"1px solid #1e2d3d",borderRadius:18,padding:"24px",boxShadow:"0 40px 80px rgba(0,0,0,0.9)"}}>
@@ -1035,7 +1016,7 @@ const PageDrivers = ({ drivers, setDrivers }) => {
           <select value={drvForm.vehicle} onChange={e=>setDrvForm(p=>({...p,vehicle:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
             <option>Moto</option><option>Carro</option><option>Furgoneta</option><option>Bicicleta</option>
           </select>
-          <input value={drvForm.zone} onChange={e=>setDrvForm(p=>({...p,zone:e.target.value}))} placeholder="Zona (ej: DN Norte, Santiago)" style={inp2}/>
+          <input value={drvForm.office} onChange={e=>setDrvForm(p=>({...p,office:e.target.value}))} placeholder="Oficina / Base" style={inp2}/>
           <button onClick={addDriver} disabled={!drvForm.name.trim()} style={{padding:"11px",borderRadius:10,border:"none",background:drvForm.name.trim()?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"#131f30",color:drvForm.name.trim()?"white":"#374151",fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:drvForm.name.trim()?"pointer":"not-allowed",marginTop:4,boxShadow:drvForm.name.trim()?"0 4px 16px #3b82f630":"none"}}>
             + Agregar mensajero
           </button>
@@ -1052,15 +1033,15 @@ const PageClients = ({ clients, setClients }) => {
   const [selClient, setSelClient] = useState(null);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({name:"",phone:"",zone:"",notes:""});
+  const [form, setForm] = useState({name:"",phone:"",notes:""});
   const client = clients.find(c=>c.id===selClient);
-  const filtered = clients.filter(c=>!search||[c.name,c.phone,c.zone].some(s=>s&&s.toLowerCase().includes(search.toLowerCase())));
+  const filtered = clients.filter(c=>!search||[c.name,c.phone,c.office].some(s=>s&&s.toLowerCase().includes(search.toLowerCase())));
   const inp = {background:"#0a1019",border:"1px solid #1e2d3d",borderRadius:8,padding:"9px 12px",color:"#e2e8f0",fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none",width:"100%"};
   const addClient = () => {
     if (!form.name.trim()) return;
     const initials = form.name.trim().split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
     setClients(p=>[...p,{id:"CL-"+Date.now(),avatar:initials,...form,name:form.name.trim(),status:"active",deliveries:0,lastDelivery:"—",spend:"$0",rating:0}]);
-    setForm({name:"",phone:"",zone:"",notes:""});
+    setForm({name:"",phone:"",notes:""});
     setShowAdd(false);
   };
   return (
@@ -1086,11 +1067,11 @@ const PageClients = ({ clients, setClients }) => {
         ) : (
           <div style={{flex:1,overflow:"auto",borderRadius:13,margin:"14px 22px",border:"1px solid #0d1420"}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:"1px solid #0d1420",background:"#060b10"}}>{["Cliente","Teléfono","Zona","Entregas","Notas",""].map(h=><th key={h} style={{padding:"9px 13px",textAlign:"left",fontSize:9.5,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.3px"}}>{h}</th>)}</tr></thead>
+              <thead><tr style={{borderBottom:"1px solid #0d1420",background:"#060b10"}}>{["Cliente","Teléfono","Oficina","Rutas","Notas",""].map(h=><th key={h} style={{padding:"9px 13px",textAlign:"left",fontSize:9.5,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.3px"}}>{h}</th>)}</tr></thead>
               <tbody>{filtered.map((cl,i)=>{const isSel=selClient===cl.id;return(<tr key={cl.id} className="tr" onClick={()=>setSelClient(isSel?null:cl.id)} style={{borderBottom:"1px solid #080e16",background:isSel?"#091527":"transparent",transition:"background .1s",cursor:"pointer"}}>
                 <td style={{padding:"10px 13px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Avatar i={cl.avatar} size={28} color="#3b82f6"/><span style={{fontSize:13,color:"#e2e8f0",fontWeight:600}}>{cl.name}</span></div></td>
                 <td style={{padding:"10px 13px"}}><a href={"tel:"+cl.phone} onClick={e=>e.stopPropagation()} style={{fontSize:12,color:"#3b82f6",textDecoration:"none"}}>{cl.phone}</a></td>
-                <td style={{padding:"10px 13px"}}><span style={{fontSize:11,color:"#4b5563"}}>{cl.zone||"—"}</span></td>
+                <td style={{padding:"10px 13px"}}><span style={{fontSize:11,color:"#4b5563"}}>{cl.office||"—"}</span></td>
                 <td style={{padding:"10px 13px"}}><span style={{fontSize:12,color:"#4b5563"}}>{cl.deliveries}</span></td>
                 <td style={{padding:"10px 13px"}}><span style={{fontSize:11,color:"#374151",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{cl.notes||"—"}</span></td>
                 <td style={{padding:"10px 13px"}}><div style={{display:"flex",gap:5}}>
@@ -1112,7 +1093,7 @@ const PageClients = ({ clients, setClients }) => {
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Nombre completo *" style={inp}/>
             <input value={form.phone} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="Teléfono (ej: 8091234567)" style={inp}/>
-            <input value={form.zone} onChange={e=>setForm(p=>({...p,zone:e.target.value}))} placeholder="Zona / Sector" style={inp}/>
+            <input value={form.office} onChange={e=>setForm(p=>({...p,office:e.target.value}))} placeholder="Oficina / Base" style={inp}/>
             <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Notas o referencia de entrega" style={inp}/>
             <button onClick={addClient} disabled={!form.name.trim()} style={{padding:"11px",borderRadius:10,border:"none",background:form.name.trim()?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"#131f30",color:form.name.trim()?"white":"#374151",fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:form.name.trim()?"pointer":"not-allowed",marginTop:4,boxShadow:form.name.trim()?"0 4px 16px #3b82f630":"none"}}>
               + Agregar cliente
@@ -1184,8 +1165,8 @@ const PageAnalytics = () => {
   const months=["E","F","M","A","M","J","J","A","S","O","N","D"];
   const labels=period==="weekly"?weekDays:months;
   // Pre-compute cumulative offsets to avoid mutation during render
-  const zoneOffsets = ANALYTICS_DATA.zones.reduce((acc, z, i) => {
-    acc.push(i === 0 ? 0 : acc[i-1] + ANALYTICS_DATA.zones[i-1].pct);
+  const zoneOffsets = ANALYTICS_DATA.offices.reduce((acc, z, i) => {
+    acc.push(i === 0 ? 0 : acc[i-1] + ANALYTICS_DATA.offices[i-1].pct);
     return acc;
   }, []);
 
@@ -1203,7 +1184,7 @@ const PageAnalytics = () => {
 
       {/* KPIs */}
       <div style={{display:"flex",gap:12,marginBottom:16}}>
-        <KPI label="Total entregas"  value={data.reduce((a,b)=>a+b,0)}  sub="+18% vs periodo ant." color="#3b82f6" spark={data.slice(-6)} delay="0ms"/>
+        <KPI label="Total rutas"  value={data.reduce((a,b)=>a+b,0)}  sub="+18% vs periodo ant." color="#3b82f6" spark={data.slice(-6)} delay="0ms"/>
         <KPI label="Tasa éxito"      value="91.4%"                        sub="↑ 2.1% esta semana"   color="#10b981" spark={[88,89,90,91,91,92]}       delay="60ms"/>
         <KPI label="Tiempo medio"    value="37 min"                       sub="↓ 5 min optimizado"   color="#f59e0b" spark={ANALYTICS_DATA.avgTime}    delay="120ms"/>
         <KPI label="Cancelaciones"   value={ANALYTICS_DATA.cancelled.reduce((a,b)=>a+b,0)}  sub="↓ 30% vs anterior" color="#ef4444" spark={ANALYTICS_DATA.cancelled} delay="180ms"/>
@@ -1215,11 +1196,11 @@ const PageAnalytics = () => {
         <div style={{background:"linear-gradient(135deg,#0d1420,#0a1019)",border:"1px solid #131f30",borderRadius:16,padding:"18px 20px",animation:"fadeUp .5s ease both"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
             <div>
-              <div style={{fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase"}}>Entregas por {period==="weekly"?"día":"mes"}</div>
+              <div style={{fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase"}}>Rutas por {period==="weekly"?"día":"mes"}</div>
               <div style={{fontSize:24,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9",marginTop:4}}>{data[data.length-1]} <span style={{fontSize:13,color:"#3b82f6"}}>hoy</span></div>
             </div>
           </div>
-          <LineChart data={data} color="#3b82f6" height={110} label="Entregas:"/>
+          <LineChart data={data} color="#3b82f6" height={110} label="Rutas:"/>
           <div style={{display:"flex",justifyContent:"space-between",marginTop:6,paddingLeft:16,paddingRight:4}}>
             {labels.map((l,i)=><span key={i} style={{fontSize:8.5,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:600}}>{l}</span>)}
           </div>
@@ -1227,20 +1208,20 @@ const PageAnalytics = () => {
 
         {/* Donut - zones */}
         <div style={{background:"linear-gradient(135deg,#0d1420,#0a1019)",border:"1px solid #131f30",borderRadius:16,padding:"18px 20px",animation:"fadeUp .5s .1s ease both"}}>
-          <div style={{fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:14}}>Entregas por zona</div>
+          <div style={{fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:14}}>Rutas por zona</div>
           <div style={{display:"flex",gap:16,alignItems:"center"}}>
             <svg width="80" height="80" viewBox="0 0 80 80" style={{flexShrink:0}}>
               <circle cx="40" cy="40" r="36" fill="none" stroke="#131f30" strokeWidth="10"/>
-              {ANALYTICS_DATA.zones.map((z,i)=>(
+              {ANALYTICS_DATA.offices.map((z,i)=>(
                 <DonutSlice key={i} pct={z.pct} offset={zoneOffsets[i]} color={z.color}/>
               ))}
-              <text x="40" y="44" textAnchor="middle" fontSize="11" fontFamily="'Syne',sans-serif" fontWeight="800" fill="#f1f5f9">{ANALYTICS_DATA.zones[0].pct}%</text>
+              <text x="40" y="44" textAnchor="middle" fontSize="11" fontFamily="'Syne',sans-serif" fontWeight="800" fill="#f1f5f9">{ANALYTICS_DATA.offices[0].pct}%</text>
             </svg>
             <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
-              {ANALYTICS_DATA.zones.map(z=>(
-                <div key={z.zone} style={{display:"flex",alignItems:"center",gap:6}}>
+              {ANALYTICS_DATA.offices.map(z=>(
+                <div key={z.office} style={{display:"flex",alignItems:"center",gap:6}}>
                   <div style={{width:6,height:6,borderRadius:"50%",background:z.color,flexShrink:0}}/>
-                  <span style={{fontSize:10,color:"#64748b",flex:1}}>{z.zone}</span>
+                  <span style={{fontSize:10,color:"#64748b",flex:1}}>{z.office}</span>
                   <span style={{fontSize:10,color:z.color,fontFamily:"'Syne',sans-serif",fontWeight:700}}>{z.pct}%</span>
                 </div>
               ))}
@@ -1475,8 +1456,8 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
             <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
               {[
                 { key:"onRouteAssigned", label:"Ruta asignada a mensajero",     desc:"Al enviar una ruta nueva" },
-                { key:"onDelivered",     label:"Entrega completada",             desc:"Cuando un mensajero marca entregado" },
-                { key:"onProblem",       label:"Problema reportado",             desc:"Cuando hay incidencia en una parada" },
+                { key:"onDelivered",     label:"Entrega completada",             desc:"Cuando un mensajero marca visitado" },
+                { key:"onProblem",       label:"Nota registrada",             desc:"Cuando hay incidencia en una parada" },
                 { key:"onDriverOnline",  label:"Mensajero se conecta",           desc:"Al iniciar turno" },
                 { key:"soundEnabled",    label:"Sonido de notificaciones",       desc:"Reproducir tono al recibir alertas" },
               ].map(item => (
@@ -1534,7 +1515,7 @@ const LIVE_EVENTS_SEED = [];
 // Los eventos se generan en tiempo real desde acciones reales:
 // - Ruta enviada al mensajero
 // - Entrega marcada como completada (desde DriverPanel vía Firebase)
-// - Problema reportado por mensajero
+// - Nota registrada por mensajero
 
 // --- NOTIFICATION TOAST -------------------------------------------------------
 
@@ -1624,7 +1605,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
   const [step, setStep] = useState(1);
   const [newDeliveryId] = useState(() => `RD-${Math.floor(1100 + Math.random() * 900)}`);
   const [form, setForm] = useState({
-    client:"", address:"", zone:"Centro", priority:"normal",
+    client:"", address:"", priority:"normal",
     driver:"", notes:"", weight:"", size:"pequeño",
     phone:"", email:"", scheduled:"ahora",
   });
@@ -1707,7 +1688,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   <label style={labelStyle}>ZONA</label>
-                  <select value={form.zone} onChange={e=>set("zone",e.target.value)} style={selectStyle}>
+                  <select value={form.office} onChange={e=>set("zone",e.target.value)} style={selectStyle}>
                     {["Mirador Norte","Mirador Sur","Naco","Piantini","Evaristo Morales","Gazcue","Bella Vista","30 de Mayo","Ciudad Colonial","Los Prados","Arroyo Hondo","Los Cacicazgos","Los Millones","Alma Rosa","Cristo Rey"].map(z=><option key={z}>{z}</option>)}
                   </select>
                 </div>
@@ -1744,7 +1725,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
                 <label style={labelStyle}>ASIGNAR CONDUCTOR</label>
                 <select value={form.driver} onChange={e=>set("driver",e.target.value)} style={selectStyle}>
                   <option value="">— Auto-asignar (recomendado) —</option>
-                  {DRIVERS.filter(d=>d.online).map(d=><option key={d.id} value={d.name}>{d.name} · {d.zone} · {d.today} entregas hoy</option>)}
+                  {DRIVERS.filter(d=>d.online).map(d=><option key={d.id} value={d.name}>{d.name} · {d.office} · {d.today} rutas hoy</option>)}
                 </select>
               </div>
               <div>
@@ -1771,7 +1752,7 @@ const ModalNewDelivery = ({onClose, onCreated}) => {
                   ["Cliente",    form.client||"—"],
                   ["Teléfono",   form.phone||"—"],
                   ["Dirección",  form.address||"—"],
-                  ["Zona",       form.zone],
+                  ["Oficina",       form.office],
                   ["Prioridad",  form.priority.toUpperCase()],
                   ["Paquete",    `${form.size} ${form.weight?`· ${form.weight}kg`:""}`],
                   ["Conductor",  form.driver||"Auto-asignar"],
@@ -1872,14 +1853,14 @@ const GlobalSearch = ({ onClose, onNavigate }) => {
 
   const results = q.trim().length < 1 ? [] : [
     ...DELIVERIES.filter(d =>
-      [d.id, d.client, d.driver, d.address, d.zone].some(s => s.toLowerCase().includes(q.toLowerCase()))
+      [d.id, d.client, d.driver, d.address, d.office].some(s => s.toLowerCase().includes(q.toLowerCase()))
     ).map(d => ({ type: "delivery", icon: "📦", label: d.id, sub: `${d.client} · ${d.address}`, status: d.status, data: d })),
     ...DRIVERS.filter(d =>
-      [d.name, d.zone, d.vehicle].some(s => s.toLowerCase().includes(q.toLowerCase()))
-    ).map(d => ({ type: "driver", icon: "🚗", label: d.name, sub: `${d.zone} · ${d.vehicle.split("·")[0].trim()}`, status: d.status, data: d })),
+      [d.name, d.office, d.vehicle].some(s => s.toLowerCase().includes(q.toLowerCase()))
+    ).map(d => ({ type: "driver", icon: "🚗", label: d.name, sub: `${d.office} · ${d.vehicle.split("·")[0].trim()}`, status: d.status, data: d })),
     ...CLIENTS.filter(c =>
-      [c.name, c.zone, c.email].some(s => s.toLowerCase().includes(q.toLowerCase()))
-    ).map(c => ({ type: "client", icon: "👤", label: c.name, sub: `${c.zone} · ${c.email}`, status: c.status, data: c })),
+      [c.name, c.office, c.email].some(s => s.toLowerCase().includes(q.toLowerCase()))
+    ).map(c => ({ type: "client", icon: "👤", label: c.name, sub: `${c.office} · ${c.email}`, status: c.status, data: c })),
     ...ROUTES.filter(r =>
       [r.id, r.name, r.driver].some(s => s.toLowerCase().includes(q.toLowerCase()))
     ).map(r => ({ type: "route", icon: "◈", label: r.name, sub: `${r.driver} · ${r.stops} paradas · ${r.progress}%`, status: r.status, data: r })),
@@ -1922,7 +1903,7 @@ const GlobalSearch = ({ onClose, onNavigate }) => {
             ref={inputRef}
             value={q} onChange={e => { setQ(e.target.value); setSel(0); }}
             onKeyDown={handleKey}
-            placeholder="Buscar entregas, conductores, clientes, rutas..."
+            placeholder="Buscar rutas, conductores, clientes, rutas..."
             style={{ flex:1,border:"none",background:"transparent",outline:"none",color:"#f1f5f9",fontSize:15,fontFamily:"'Inter',sans-serif",caretColor:"#3b82f6" }}
           />
           {q && <button onClick={()=>setQ("")} style={{ border:"none",background:"none",color:"#374151",cursor:"pointer",fontSize:13,padding:"2px 4px" }}>✕</button>}
@@ -2008,13 +1989,13 @@ const DELIVERY_TIMELINE = {
     { time:"11:08", label:"Asignado a conductor",  detail:"Andrés Gil · Moto",                 done:true,  icon:"◎" },
     { time:"11:15", label:"Recogida en almacén",   detail:"Almacén Centro · confirmado",       done:true,  icon:"⬆" },
     { time:"11:22", label:"En ruta",               detail:"Salida hacia Av. Partido, 12",      done:true,  icon:"→" },
-    { time:"11:45", label:"Entregado",             detail:"Ana Torres firmó recepción",        done:true,  icon:"✓" },
+    { time:"11:45", label:"Visitado",             detail:"Ana Torres firmó recepción",        done:true,  icon:"✓" },
   ],
   "RD-1016": [
     { time:"12:00", label:"Pedido creado",         detail:"Sistema · prioridad normal",        done:true,  icon:"＋" },
     { time:"12:05", label:"Asignado a conductor",  detail:"Einar Kovač · Moto",                done:true,  icon:"◎" },
     { time:"12:20", label:"En ruta",               detail:"Salida hacia Pl. Central, 28",      done:true,  icon:"→" },
-    { time:"12:48", label:"Intento fallido",       detail:"Cliente no disponible",             done:true,  icon:"⚠",  warn:true },
+    { time:"12:48", label:"Intento no gestionado",       detail:"Cliente no disponible",             done:true,  icon:"⚠",  warn:true },
     { time:"13:02", label:"Cancelado",             detail:"Sin respuesta tras 2 intentos",     done:true,  icon:"✕",  error:true },
   ],
 };
@@ -2048,7 +2029,7 @@ const DeliveryDetail = ({ delivery, onClose }) => {
               </div>
               <span style={{ fontSize:9,color:p.color,fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px" }}>{p.label}</span>
             </div>
-            <div style={{ fontSize:12,color:"#4b5563" }}>{d.address} · {d.zone}</div>
+            <div style={{ fontSize:12,color:"#4b5563" }}>{d.address} · {d.office}</div>
           </div>
           <div style={{ display:"flex",gap:6 }}>
             <button style={{ padding:"7px 14px",borderRadius:9,border:"1px solid #1e3550",background:"#0a1828",color:"#60a5fa",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>Editar</button>
@@ -2175,8 +2156,8 @@ const DeliveryDetail = ({ delivery, onClose }) => {
         <div style={{ padding:"12px 22px",borderTop:"1px solid #0d1420",display:"flex",gap:8,flexShrink:0 }}>
           {d.status==="on_route" && [
             {l:"📞 Llamar conductor",  c:"#131f30", tc:"#4b5563", fn:()=>{ const dr=DRIVERS.find(x=>x.name===d.driver); if(dr?.phone) window.open("tel:"+dr.phone.replace(/\s/g,"")); }},
-            {l:"⚠ Reportar problema",  c:"rgba(245,158,11,0.1)", tc:"#f59e0b", bc:"rgba(245,158,11,0.2)", fn:()=>alert("Problema reportado para "+d.id)},
-            {l:"✓ Marcar entregado",   c:"rgba(16,185,129,0.1)", tc:"#10b981",  bc:"rgba(16,185,129,0.2)", fn:()=>alert("Marcado como entregado: "+d.id)},
+            {l:"⚠ Agregar nota",  c:"rgba(245,158,11,0.1)", tc:"#f59e0b", bc:"rgba(245,158,11,0.2)", fn:()=>alert("Nota registrada para "+d.id)},
+            {l:"✓ Marcar visitado",   c:"rgba(16,185,129,0.1)", tc:"#10b981",  bc:"rgba(16,185,129,0.2)", fn:()=>alert("Marcado como visitado: "+d.id)},
           ].map(b => (
             <button key={b.l} onClick={b.fn} className="ab" style={{ flex:1,padding:"9px 0",borderRadius:10,border:`1px solid ${b.bc||b.c}`,background:b.c,color:b.tc,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer",transition:"all .1s" }}>{b.l}</button>
           ))}
@@ -2288,10 +2269,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const [tab,        setTab]        = useState("route"); // "route" | "chat" | "pending" | "history"
   const [chatMsg,    setChatMsg]    = useState("");
   const [chatLog,    setChatLog]    = useState(() => (window.__rdChatStore||{})[myKey]||[]);
-  const [showProb,   setShowProb]   = useState(null);
-  const [probNote,   setProbNote]   = useState("");
-  // ── Flujo de evidencia con cámara ──────────────────────────────────────────
-  const [evidenceFlow, setEvidenceFlow] = useState(null); // { stopId, mode:"delivered"|"failed", probNote? }
   const [time,       setTime]       = useState(new Date());
   const [logoutConf, setLogoutConf] = useState(false);
   const [search,     setSearch]     = useState("");
@@ -2322,7 +2299,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   const sheetRef      = useRef(null);
   const [sheetH,      setSheetH]      = useState(null); // null = use snap
   const [menuOpen,   setMenuOpen]   = useState(false);
-  const [filterMode, setFilterMode] = useState("all");
   const [mapPinPopup, setMapPinPopup] = useState(null); // stop shown in map popup
 
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
@@ -2368,8 +2344,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Cola eliminada: una sola ruta activa por mensajero.
-  const pendingRoutes = [];
-  const setPendingRoutes = () => {};
   // Historial de rutas completadas (guardado localmente)
   const [routeHistory, setRouteHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`rdHistory_${myKey}`) || "[]"); } catch{ return []; }
@@ -2583,7 +2557,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       if (seenRouteIds.current.has(routeKey) || (route.sentAt && seenRouteIds.current.has(route.sentAt))) return;
 
       const allDone = route.stops.length > 0 && route.stops.every(
-        s => s.driverStatus === "delivered" || s.driverStatus === "problema"
+        s => s.navStatus === "visited"
       );
 
       if (allDone) {
@@ -2620,7 +2594,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         }));
         const savedRoute = { ...saved, stops: savedStops };
         const savedAllDone = savedStops.length > 0 && savedStops.every(
-          s => s.driverStatus === "delivered" || s.driverStatus === "problema"
+          s => s.navStatus === "visited"
         );
         if (savedAllDone) {
           addToHistoryOnce(savedRoute);
@@ -2755,7 +2729,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const validStops = stops.filter(s => s.lat && s.lng);
     if (!validStops.length) return;
     const bounds = new window.google.maps.LatLngBounds();
-    const currentStop = stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending");
+    const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.driverStatus==="pending");
 
     // ── Draw glow polyline first (so markers render on top) ──
     const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
@@ -2788,8 +2762,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
     // ── Premium teardrop markers ──
     validStops.forEach(stop => {
-      const isDone = stop.driverStatus === "delivered";
-      const isProb = stop.driverStatus === "problema";
+      const isDone = stop.navStatus === "visited";
+      const isProb = stop.driverStatus === "note";
       const isNow  = stop === currentStop;
       const label  = String(stop.stopNum || "?");
       const fs     = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
@@ -2891,18 +2865,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   }, [selStop]);
 
   // -- Helpers -------------------------------------------------------------------
-  const delivered   = stops.filter(s=>s.driverStatus==="delivered");
-  const problems    = stops.filter(s=>s.driverStatus==="problema");
-  const pending     = stops.filter(s=>s.driverStatus==="pending"||s.driverStatus==="en_ruta");
-  const currentStop = stops.find(s=>s.driverStatus==="en_ruta") || stops.find(s=>s.driverStatus==="pending");
-  const pct         = stops.length>0 ? Math.round((delivered.length/stops.length)*100) : 0;
+  const visited   = stops.filter(s=>s.navStatus==="visited");
+  const problems    = stops.filter(s=>s.driverStatus==="note");
+  const pending     = stops.filter(s=>s.navStatus!=="visited");
+  const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.driverStatus==="pending");
+  const pct         = stops.length>0 ? Math.round((visited.length/stops.length)*100) : 0;
 
   const filteredStops = stops.filter(s => {
-    if (filterMode !== "all") {
-      if (filterMode === "pending" && s.driverStatus !== "pending" && s.driverStatus !== "en_ruta") return false;
-      if (filterMode === "delivered" && s.driverStatus !== "delivered") return false;
-      if (filterMode === "problema" && s.driverStatus !== "problema") return false;
-    }
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (s.client||"").toLowerCase().includes(q) ||
@@ -2916,7 +2885,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const updated = { ...base, stops:updatedStops, lastUpdate:Date.now() };
 
     const allDone = updatedStops.length > 0 && updatedStops.every(
-      s => s.driverStatus === "delivered" || s.driverStatus === "problema"
+      s => s.navStatus === "visited"
     );
 
     // 1) Actualizar memoria local INMEDIATAMENTE.
@@ -2988,157 +2957,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     setChatLog(nl);
   };
 
-  // ── Guardar evidencia en Firebase + enviar al backend para sync con SilpoPack ──
-  const saveEvidenceAndSync = async (stopId, mode, photoDataUrl, note) => {
-    const stop = stops.find(s => s.id === stopId);
-    if (!stop) return;
 
-    const ts          = Date.now();
-    const timeStr     = new Date().toLocaleTimeString("es-ES", { hour:"2-digit", minute:"2-digit" });
-    const isDelivered = mode === "delivered";
-    const photoKey    = `evidence/${myKey}/${ts}_${stopId}`;
-    const evidencePhotoUrl = `firebase:${photoKey}`;
-    const evKey       = `deliveryEvents/${ts}_${stopId}`;
-
-    // 1) Marcar en pantalla INMEDIATO, sin esperar GPS/backend.
-    if (isDelivered) {
-      let foundNext = false;
-      const updated = stops.map(s => {
-        if (s.id === stopId) return {
-          ...s,
-          driverStatus:"delivered",
-          deliveredAt:timeStr,
-          evidencePhotoUrl,
-          evidencePreview: photoDataUrl,
-          syncStatus:"pending",
-        };
-        if (!foundNext && s.driverStatus === "pending") {
-          foundNext = true;
-          return { ...s, driverStatus:"en_ruta" };
-        }
-        return s;
-      });
-      setStops(updated);
-      pushUpdate(updated);
-      addChatMsg(`✓ Entregado: ${stop.client || "Parada #"+stop.stopNum}`);
-      const notifId = "n"+ts+stopId;
-      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delivered", icon:"✓", color:"#10b981",
-        title:`Entregado: ${stop.client||"Parada #"+stop.stopNum}`,
-        body:`${myKey} · #${stop.stopNum} · ${stop.displayAddr||stop.rawAddr||""}`,
-        time:timeStr, read:false, isNew:true, createdAt:ts });
-    } else {
-      const updated = stops.map(s => s.id===stopId
-        ? {
-            ...s,
-            driverStatus:"problema",
-            issue:note||"Sin detalles",
-            issueAt:timeStr,
-            evidencePhotoUrl,
-            evidencePreview: photoDataUrl,
-            syncStatus:"pending",
-          }
-        : s);
-      setStops(updated);
-      pushUpdate(updated);
-      addChatMsg(`⚠ Problema parada #${stop.stopNum}: ${note||"Sin detalles"}`);
-      const notifId = "n"+ts+stopId;
-      FB.set(`adminNotifs/${notifId}`, { id:notifId, type:"delayed", icon:"⚠", color:"#f59e0b",
-        title:`Problema: ${stop.client||"Parada #"+stop.stopNum}`,
-        body:`${myKey} · ${note||"Sin detalles"} · #${stop.stopNum}`,
-        time:timeStr, read:false, isNew:true, createdAt:ts });
-    }
-
-    // Cerrar modal rápido para que el mensajero siga trabajando.
-    setEvidenceFlow(null);
-    setShowProb(null);
-    setProbNote("");
-    setSelStop(null);
-
-    // 2) Sincronizar evidencia + SilpoPack en segundo plano.
-    (async () => {
-      try {
-        await FB.set(photoKey, { photo: photoDataUrl, ts, stopId, routeId: myRoute?.routeId || null });
-
-        let gpsLocation = null;
-        try {
-          gpsLocation = await new Promise((res) =>
-            navigator.geolocation.getCurrentPosition(
-              p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
-              () => res(null),
-              { timeout: 2500, enableHighAccuracy: true, maximumAge: 10000 }
-            )
-          );
-        } catch {}
-
-        const syncPayload = {
-          packageCode:    stop.tracking || stop.id,
-          status:         isDelivered ? "delivered" : "failed",
-          evidencePhotoUrl,
-          courierId:      myKey,
-          courierName:    users.find(u => u.email === myKey)?.name || myKey,
-          deliveredAt:    isDelivered ? new Date(ts).toISOString() : null,
-          failedAt:       !isDelivered ? new Date(ts).toISOString() : null,
-          failNote:       !isDelivered ? (note || "Sin detalles") : null,
-          gpsLocation,
-          syncStatus:     "pending",
-          createdAt:      ts,
-          stopId,
-          routeId:        myRoute?.routeId || null,
-        };
-
-        await FB.set(evKey, syncPayload);
-
-        const trySyncBackend = async (attempt = 1) => {
-          try {
-            const resp = await fetch(`${BACKEND_URL}/sync`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...syncPayload, firebaseKey: evKey }),
-              signal: AbortSignal.timeout(15000),
-            });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            FB.set(`${evKey}/syncStatus`, "synced");
-            FB.set(`${evKey}/syncedAt`, new Date().toISOString());
-          } catch (e) {
-            if (attempt < 3) {
-              setTimeout(() => trySyncBackend(attempt + 1), attempt * 5000);
-            } else {
-              FB.set(`${evKey}/syncStatus`, "failed");
-              FB.set(`${evKey}/errorMessage`, e.message || String(e));
-            }
-          }
-        };
-
-        trySyncBackend();
-      } catch (e) {
-        FB.set(evKey, {
-          packageCode: stop.tracking || stop.id,
-          status: isDelivered ? "delivered" : "failed",
-          evidencePhotoUrl,
-          syncStatus:"failed",
-          errorMessage: e.message || String(e),
-          createdAt: ts,
-          stopId,
-        });
-      }
-    })();
-  };
-
-  // markDelivered ahora abre la cámara primero
-  const markDelivered = (stopId) => {
-    setEvidenceFlow({ stopId, mode: "delivered" });
-  };
-
-  // markProblem ahora abre la cámara primero
-  const markProblem = (stopId) => {
-    setEvidenceFlow({ stopId, mode: "failed", probNote: probNote || "Sin detalles" });
-  };
 
   const sendChat = () => { if (!chatMsg.trim()) return; addChatMsg(chatMsg.trim()); setChatMsg(""); };
 
   // -- Auto-dismiss "Ruta completada" banner + sugerir siguiente pendiente ------
   useEffect(() => {
-    const allDone = stops.length > 0 && stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
+    const allDone = stops.length > 0 && stops.every(s => s.navStatus === "visited");
     if (allDone) {
       setShowCompletedBanner(true);
       clearTimeout(completedBannerTimer.current);
@@ -3150,9 +2975,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     return () => clearTimeout(completedBannerTimer.current);
   }, [stops]);
 
-  // -- Colores por status del driver ---------------------------------------------
-  const dsColor = (ds) => ds==="delivered"?"#10b981":ds==="problema"?"#ef4444":ds==="en_ruta"?"#3b82f6":"#f59e0b";
-  const dsLabel = (ds) => ds==="delivered"?"Entregado":ds==="problema"?"Problema":ds==="en_ruta"?"En ruta":"Pendiente";
 
   // -- Estimated finish time ----------------------------------------------------
   const estFinish = () => {
@@ -3346,8 +3168,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         {/* ── MAP PIN POPUP ── aparece cuando se toca un pin */}
         {mapPinPopup && (() => {
           const s = mapPinPopup;
-          const isDone = s.driverStatus === "delivered";
-          const isProb = s.driverStatus === "problema";
+          const isDone = s.driverStatus === "visited";
+          const isProb = s.driverStatus === "note";
           const ac = isDone ? "#10b981" : isProb ? "#ef4444" : "#3b82f6";
           return (
             /* ── Info card: top-left, no obstruction, read-only ── */
@@ -3397,10 +3219,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       <div style={{ fontSize:13, fontWeight:700, color:"#f1f5f9", letterSpacing:"-0.2px", lineHeight:1.25, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                         {s.client || `Parada ${s.stopNum}`}
                       </div>
-                      {/* Estado si entregado/problema */}
+                      {/* Estado si visitado/note */}
                       {(isDone || isProb) && (
                         <div style={{ fontSize:10, color:ac, fontWeight:600, marginTop:2 }}>
-                          {isDone ? `✓ Entregado${s.deliveredAt ? " · " + s.deliveredAt : ""}` : `⚠ Problema`}
+                          {isDone ? `✓ Visitado${s.visitedAt ? " · " + s.visitedAt : ""}` : `⚠ Nota`}
                         </div>
                       )}
                     </div>
@@ -3484,7 +3306,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             <button onClick={()=>setShowCompletedBanner(false)} style={{ position:"absolute",top:8,right:10,background:"none",border:"none",color:"rgba(255,255,255,0.3)",fontSize:16,cursor:"pointer",lineHeight:1,padding:4 }}>✕</button>
             <div style={{ fontSize:30,marginBottom:6 }}>🎉</div>
             <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white" }}>¡Ruta completada!</div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:3 }}>{delivered.length} entregas · {problems.length > 0 ? `${problems.length} con problemas` : "todo entregado"}</div>
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.4)",marginTop:3 }}>{visited.length} rutas · {problems.length > 0 ? `${problems.length} con notas` : "ruta visitada"}</div>
             <div style={{ marginTop:10,height:2,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden" }}>
               <div style={{ height:2,background:"white",borderRadius:2,width:"100%",animation:"countdown 6s linear forwards" }}/>
             </div>
@@ -3535,8 +3357,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 {stops.length > 0 && (
                   <div style={{ display:"flex", gap:2, marginBottom:12, height:6 }}>
                     {stops.filter(s=>s.stopNum!=null).sort((a,b)=>(a.stopNum||0)-(b.stopNum||0)).map((s,i) => {
-                      const col = s.driverStatus==="delivered"?"#10b981":s.driverStatus==="problema"?"#ef4444":s.driverStatus==="en_ruta"?"#3b82f6":"rgba(255,255,255,0.1)";
-                      const glow= s.driverStatus==="delivered"?"0 0 6px rgba(16,185,129,0.6)":s.driverStatus==="en_ruta"?"0 0 6px rgba(59,130,246,0.8)":"none";
+                      const col = s.navStatus==="visited"?"#10b981":s.driverStatus==="note"?"#ef4444":s.navStatus==="active"?"#3b82f6":"rgba(255,255,255,0.1)";
+                      const glow= s.navStatus==="visited"?"0 0 6px rgba(16,185,129,0.6)":s.navStatus==="active"?"0 0 6px rgba(59,130,246,0.8)":"none";
                       return <div key={s.id} style={{ flex:1, height:"100%", borderRadius:3, background:col, boxShadow:glow, transition:"background .3s" }}/>;
                     })}
                   </div>
@@ -3545,7 +3367,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 {/* ── Stats row ── */}
                 <div style={{ display:"flex", gap:0 }}>
                   {[
-                    { val: delivered.length, label:"ENTREGADOS", color:"#10b981" },
+                    { val: visited.length, label:"VISITADAS", color:"#10b981" },
                     { val: pending.length,   label:"PENDIENTES", color:"#3b82f6" },
                     { val: problems.length,  label:"PROBLEMAS",  color:problems.length>0?"#f59e0b":"rgba(255,255,255,0.2)" },
                     { val: routeKm>0 ? routeKm : stops.length, label: routeKm>0 ? "KM TOTALES" : "PARADAS", color:"rgba(255,255,255,0.5)" },
@@ -3613,19 +3435,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                       <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Waze</span>
                     </a>
-
-                    {/* Entregado */}
-                    <button className="rd-btn" onClick={()=>markDelivered(currentStop.id)}
-                      style={{ flex:2, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px", borderRadius:12, border:"none", background:"linear-gradient(135deg,#059669,#10b981)", cursor:"pointer", boxShadow:"0 4px 16px rgba(16,185,129,0.35)", transition:"all .12s" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
-                      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Entregado</span>
-                    </button>
-
-                    {/* Problema */}
-                    <button className="rd-btn" onClick={()=>setShowProb(currentStop.id)}
-                      style={{ width:44, height:44, borderRadius:12, border:"1px solid rgba(245,158,11,0.3)", background:"rgba(245,158,11,0.1)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .12s" }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    </button>
                   </div>
                 </div>
               </div>
@@ -3640,16 +3449,6 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
                 </span>
                 <div style={{ display:"flex", gap:5 }}>
-                  {[
-                    {id:"all",   label:"Todas"},
-                    {id:"pending",label:"Pendientes"},
-                    {id:"problema",label:"Problemas"},
-                  ].map(chip=>(
-                    <button key={chip.id} onClick={()=>setFilterMode(chip.id)} className="rd-btn"
-                      style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${filterMode===chip.id?"#2563eb":"rgba(255,255,255,0.1)"}`, background:filterMode===chip.id?"rgba(37,99,235,0.25)":"transparent", color:filterMode===chip.id?"#93c5fd":"rgba(255,255,255,0.4)", fontSize:10, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
-                      {chip.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -3693,9 +3492,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
             {/* ── Stop list — premium redesign ── */}
             {filteredStops.map((stop,i) => {
-              const isDone = stop.driverStatus==="delivered";
-              const isProb = stop.driverStatus==="problema";
-              const isEnR  = stop.driverStatus==="en_ruta";
+              const isDone = stop.navStatus==="visited";
+              const isProb = stop.driverStatus==="note";
+              const isEnR  = stop.navStatus==="active";
               const isCur  = stop===currentStop;
               const isExp  = selStop?.id===stop.id;
 
@@ -3782,16 +3581,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         {stop.displayAddr||stop.rawAddr||"Sin dirección"}
                       </div>
                       {/* Hora entrega */}
-                      {isDone && stop.deliveredAt && (
+                      {isDone && stop.visitedAt && (
                         <div style={{ fontSize:10, color:"#10b981", marginTop:4, fontFamily:"'DM Mono',monospace", display:"flex", alignItems:"center", gap:4 }}>
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                          {stop.deliveredAt}
-                        </div>
-                      )}
-                      {stop.evidencePreview && (
-                        <div style={{ marginTop:7, display:"flex", alignItems:"center", gap:7 }}>
-                          <img src={stop.evidencePreview} alt="Evidencia" style={{ width:46, height:46, objectFit:"cover", borderRadius:9, border:"1px solid rgba(255,255,255,0.12)" }}/>
-                          <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontFamily:"'DM Sans',sans-serif" }}>Prueba guardada</span>
+                          {stop.visitedAt}
                         </div>
                       )}
                     </div>
@@ -3958,8 +3751,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 {/* Stats */}
                 {(() => {
                   const stops = histSelRoute.stops||[];
-                  const del = stops.filter(s=>s.driverStatus==="delivered").length;
-                  const prob = stops.filter(s=>s.driverStatus==="problema").length;
+                  const del = stops.filter(s=>s.navStatus==="visited").length;
+                  const prob = stops.filter(s=>s.driverStatus==="note").length;
                   return (
                     <div style={{ display:"flex", gap:7 }}>
                       <div style={{ fontSize:11, fontWeight:700, color:"#10b981", fontFamily:"'DM Sans',sans-serif" }}>✓ {del}</div>
@@ -3970,10 +3763,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               </div>
               <div style={{ flex:1, overflow:"auto" }}>
                 {(histSelRoute.stops||[]).sort((a,b)=>(a.stopNum||99)-(b.stopNum||99)).map((stop, i, arr) => {
-                  const isDone = stop.driverStatus === "delivered";
-                  const isProb = stop.driverStatus === "problema";
+                  const isDone = stop.navStatus === "visited";
+                  const isProb = stop.driverStatus === "note";
                   const statusColor = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
-                  const statusLabel = isDone ? "Entregado" : isProb ? "Problema" : "Pendiente";
+                  const statusLabel = isDone ? "Visitado" : isProb ? "Nota" : "Pendiente";
                   const statusIcon  = isDone ? "✓" : isProb ? "✕" : "○";
                   return (
                     <div key={i} style={{ margin:"10px 14px", borderRadius:14, background:"#0a1420", border:`1px solid ${statusColor}22`, overflow:"hidden" }}>
@@ -3984,7 +3777,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                             {statusIcon}
                           </div>
                           <span style={{ fontSize:11, fontWeight:700, color:statusColor, fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.3px" }}>{statusLabel}</span>
-                          {stop.deliveredAt && <span style={{ fontSize:10, color:`${statusColor}80`, fontFamily:"'DM Mono',monospace" }}>· {stop.deliveredAt}</span>}
+                          {stop.visitedAt && <span style={{ fontSize:10, color:`${statusColor}80`, fontFamily:"'DM Mono',monospace" }}>· {stop.visitedAt}</span>}
                         </div>
                         <span style={{ fontSize:10, color:"rgba(255,255,255,0.2)", fontFamily:"'DM Mono',monospace", fontWeight:600 }}>#{stop.stopNum||i+1}</span>
                       </div>
@@ -4029,7 +3822,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                           </div>
                         )}
 
-                        {/* Problema reportado */}
+                        {/* Nota registrada */}
                         {isProb && stop.issue && (
                           <div style={{ marginTop:8, padding:"7px 10px", background:"rgba(239,68,68,0.06)", borderRadius:8, border:"1px solid rgba(239,68,68,0.15)" }}>
                             <span style={{ fontSize:11, color:"rgba(239,68,68,0.7)", fontFamily:"'DM Sans',sans-serif" }}>⚠ {stop.issue}</span>
@@ -4052,8 +3845,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 </div>
               ) : routeHistory.map((r, i) => {
                 const stops = r.stops||[];
-                const del  = stops.filter(s=>s.driverStatus==="delivered").length;
-                const prob = stops.filter(s=>s.driverStatus==="problema").length;
+                const del  = stops.filter(s=>s.navStatus==="visited").length;
+                const prob = stops.filter(s=>s.driverStatus==="note").length;
                 const pct  = stops.length ? Math.round(del/stops.length*100) : 0;
                 const dateStr = r.completedAt ? new Date(r.completedAt).toLocaleDateString("es-DO",{weekday:"long",day:"2-digit",month:"short"}) : "—";
                 const timeStr = r.completedAt ? new Date(r.completedAt).toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"}) : "";
@@ -4078,7 +3871,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                       <div style={{ display:"flex", gap:0 }}>
                         <div style={{ flex:1, textAlign:"center", borderRight:"1px solid rgba(255,255,255,0.06)", paddingRight:8 }}>
                           <div style={{ fontSize:20, fontWeight:800, color:"#10b981", fontFamily:"'DM Sans',sans-serif", lineHeight:1 }}>{del}</div>
-                          <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:3, fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.5px" }}>ENTREGADOS</div>
+                          <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:3, fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.5px" }}>VISITADAS</div>
                         </div>
                         {prob > 0 && (
                           <div style={{ flex:1, textAlign:"center", borderRight:"1px solid rgba(255,255,255,0.06)", padding:"0 8px" }}>
@@ -4168,8 +3961,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   <div style={{ margin:"0 16px 16px", display:"flex", gap:8 }}>
                     {[
                       { val:pending.length,   label:"Pendientes", color:"#f59e0b", bg:"rgba(245,158,11,0.1)",  border:"rgba(245,158,11,0.2)"  },
-                      { val:delivered.length, label:"Entregadas",  color:"#10b981", bg:"rgba(16,185,129,0.1)", border:"rgba(16,185,129,0.2)"  },
-                      { val:problems.length,  label:"Problemas",   color:"#ef4444", bg:"rgba(239,68,68,0.1)",  border:"rgba(239,68,68,0.2)"   },
+                      { val:visited.length, label:"Visitadas",  color:"#10b981", bg:"rgba(16,185,129,0.1)", border:"rgba(16,185,129,0.2)"  },
+                      { val:problems.length,  label:"Notas",   color:"#ef4444", bg:"rgba(239,68,68,0.1)",  border:"rgba(239,68,68,0.2)"   },
                     ].map(({val,label,color,bg,border}) => (
                       <div key={label} style={{ flex:1, background:bg, border:`1px solid ${border}`, borderRadius:14, padding:"10px 6px", textAlign:"center" }}>
                         <div style={{ fontSize:22, fontWeight:900, color, lineHeight:1, fontFamily:"'DM Mono',monospace" }}>{val}</div>
@@ -4191,14 +3984,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                     { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>,
                       label:"Ver mapa", sub:"Ruta en tiempo real", badge:0, badgeColor:"#3b82f6",
                       active:tab==="mapa", action:()=>{setTab("mapa");setMenuOpen(false);} },
-                    { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="20 6 9 17 4 12"/></svg>,
-                      label:"Completadas", sub:`${delivered.length} entregadas`, badge:0, badgeColor:"#10b981",
-                      active:false, action:()=>{setFilterMode("delivered");setTab("route");setMenuOpen(false);} },
-                    { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-                      label:"Problemas", sub:`${problems.length} reportados`, badge:problems.length, badgeColor:"#ef4444",
-                      active:false, action:()=>{setFilterMode("problema");setTab("route");setMenuOpen(false);} },
                     { icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-                      label:"Mi historial", sub:"Entregas anteriores", badge:0, badgeColor:"#8b5cf6",
+                      label:"Mi historial", sub:"Rutas anteriores", badge:0, badgeColor:"#8b5cf6",
                       active:tab==="history", action:()=>{setTab("history");setMenuOpen(false);} },
                   ].map((item,i) => (
                     <button key={i} onClick={item.action} className="rd-menu-item"
@@ -4269,58 +4056,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         ))}
       </div>
 
-      {/* -- Reportar problema modal -- */}
-      {/* ── Cámara de evidencia obligatoria ─────────────────────────────── */}
-      {evidenceFlow && (() => {
-        const flowStop = stops.find(s => s.id === evidenceFlow.stopId);
-        if (!flowStop) return null;
-        return (
-          <EvidenceCameraModal
-            stop={flowStop}
-            mode={evidenceFlow.mode}
-            onConfirm={(photoDataUrl) => {
-              saveEvidenceAndSync(evidenceFlow.stopId, evidenceFlow.mode, photoDataUrl, evidenceFlow.probNote);
-            }}
-            onCancel={() => { setEvidenceFlow(null); }}
-          />
-        );
-      })()}
-
-      {showProb && (() => {
-        const probStop = stops.find(s=>s.id===showProb);
-        const REASONS = ["Nadie en casa","Dirección incorrecta","Cliente canceló","Negocio cerrado","Acceso no disponible","Paquete dañado","Otro"];
-        return (
-          <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(8px)",zIndex:9000,display:"flex",alignItems:"flex-end",justifyContent:"center" }}
-            onClick={e=>{if(e.target===e.currentTarget){setShowProb(null);setProbNote("");}}}>
-            <div style={{ width:"100%",maxWidth:520,background:"#080f18",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"20px 20px 0 0",padding:"20px 18px 36px",animation:"slideUp .25s cubic-bezier(.4,0,.2,1)" }}>
-              <div style={{ width:32,height:3,background:"rgba(255,255,255,0.1)",borderRadius:2,margin:"0 auto 16px" }}/>
-              <div style={{ fontSize:15,fontWeight:700,color:"#f1f5f9",marginBottom:3 }}>
-                Marcar como fallido · #{probStop?.stopNum}
-              </div>
-              <div style={{ fontSize:12,color:"rgba(255,255,255,0.35)",marginBottom:14 }}>
-                {probStop?.client} · {probStop?.displayAddr||probStop?.rawAddr}
-              </div>
-              {/* Quick reasons */}
-              <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginBottom:14 }}>
-                {REASONS.map(r => (
-                  <button key={r} onClick={()=>setProbNote(r)}
-                    style={{ padding:"7px 13px",borderRadius:20,border:`1px solid ${probNote===r?"rgba(239,68,68,0.5)":"#1a2d40"}`,background:probNote===r?"rgba(239,68,68,0.12)":"rgba(255,255,255,0.03)",color:probNote===r?"#f87171":"rgba(255,255,255,0.45)",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s" }}>
-                    {r}
-                  </button>
-                ))}
-              </div>
-              <textarea value={probNote==="Nadie en casa"||probNote==="Dirección incorrecta"||probNote==="Cliente canceló"||probNote==="Negocio cerrado"||probNote==="Acceso no disponible"||probNote==="Paquete dañado" ? "" : probNote}
-                onChange={e=>setProbNote(e.target.value)}
-                placeholder="Otro motivo o detalle adicional..."
-                style={{ width:"100%",background:"#0a1420",border:"1px solid #1a2d40",borderRadius:12,padding:"11px 13px",color:"#f1f5f9",fontSize:13,outline:"none",caretColor:"#3b82f6",resize:"none",height:70,marginBottom:14,boxSizing:"border-box" }}/>
-              <div style={{ display:"flex",gap:8 }}>
-                <button onClick={()=>{setShowProb(null);setProbNote("");}} style={{ flex:1,padding:"13px",borderRadius:12,border:"1px solid #1a2d40",background:"transparent",color:"rgba(255,255,255,0.4)",fontSize:13,fontWeight:600,cursor:"pointer" }}>Cancelar</button>
-                <button onClick={()=>{ if(!probNote.trim()){alert("Selecciona o escribe un motivo");return;} markProblem(showProb);}} style={{ flex:2,padding:"13px",borderRadius:12,border:"none",background:"rgba(239,68,68,0.85)",color:"white",fontSize:13,fontWeight:700,cursor:"pointer" }}>Confirmar fallido</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* -- Agregar nota modal -- */}
 
       {/* -- Logout confirm -- */}
       {logoutConf && (
@@ -4386,7 +4122,7 @@ const MensajeroManager = ({ mensajeros, setMensajeros }) => {
       password: "driver123",
       role: "driver",
       avatar: initials,
-      zone: "DN",
+      office: "Principal",
       color: "#10b981",
       driverId: newId,  // mismo que mensajero.id — el admin usará este para enviar rutas
     };
@@ -4654,7 +4390,7 @@ const LoginScreen = ({ onLogin }) => {
             </div>
           </div>
           <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
-          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Entregas</div>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Rutas</div>
         </div>
 
         {/* Card */}
@@ -5825,7 +5561,7 @@ const optimizeWithRoutesAPI = async (validStops) => {
       }));
       ordered.push(...reordered);
     } catch {
-      // Chunk fallido → mantener orden Haversine para ese chunk
+      // Chunk no gestionado → mantener orden Haversine para ese chunk
       chunk.forEach((s, j) => ordered.push({ ...s, stopNum: ordered.length + j + 1 }));
     }
   }
@@ -6163,227 +5899,6 @@ const RouteMap = ({ stops, selectedId, onSelectStop, phase }) => {
 // Light mode, UX clara: muestra qué dirección tiene, acepta texto/coords/pluscode
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EvidenceCameraModal — Cámara obligatoria para evidencia de entrega/fallo
-// ⚠ NO MODIFICAR SIN REVISIÓN — es parte del flujo legal de evidencia
-// ─────────────────────────────────────────────────────────────────────────────
-const EvidenceCameraModal = ({ stop, mode, onConfirm, onCancel }) => {
-  const videoRef    = useRef(null);
-  const canvasRef   = useRef(null);
-  const streamRef   = useRef(null);
-  const fileInputRef = useRef(null);
-  const [phase,     setPhase]     = useState("choice");   // choice | preview | captured | saving
-  const [photoData, setPhotoData] = useState(null);       // base64 dataURL
-  const [camErr,    setCamErr]    = useState(null);
-  const [flash,     setFlash]     = useState(false);
-  const isDelivered = mode === "delivered";
-  const accentColor = isDelivered ? "#10b981" : "#ef4444";
-  const label       = isDelivered ? "Entregado" : "Fallido";
-
-  const stopCamera = () => {
-    streamRef.current?.getTracks?.().forEach(t => t.stop());
-    streamRef.current = null;
-  };
-
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
-
-  const startCamera = async () => {
-    setCamErr(null);
-    setPhase("preview");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play?.();
-        }
-      }, 80);
-    } catch (e) {
-      setCamErr(e.name === "NotAllowedError"
-        ? "Permiso de cámara denegado. Puedes subir una foto desde la galería."
-        : "No se pudo acceder a la cámara. Puedes subir una foto desde la galería.");
-      setPhase("choice");
-    }
-  };
-
-  const takePhoto = () => {
-    const video  = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width  = video.videoWidth  || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.78);
-    setPhotoData(dataUrl);
-    setPhase("captured");
-    setFlash(true);
-    setTimeout(() => setFlash(false), 180);
-    stopCamera();
-  };
-
-  const chooseGallery = () => {
-    stopCamera();
-    fileInputRef.current?.click();
-  };
-
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setPhotoData(ev.target.result);
-      setPhase("captured");
-      setCamErr(null);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const retake = () => {
-    setPhotoData(null);
-    setPhase("choice");
-    setCamErr(null);
-    stopCamera();
-  };
-
-  const confirm = () => {
-    if (!photoData) return;
-    setPhase("saving");
-    onConfirm(photoData);
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:10000, background:"#000", display:"flex", flexDirection:"column" }}>
-      <style>{`
-        @keyframes camFlash { from{opacity:1} to{opacity:0} }
-        @keyframes camPop { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
-      `}</style>
-
-      {flash && <div style={{ position:"absolute", inset:0, background:"white", zIndex:10001, animation:"camFlash .18s ease forwards", pointerEvents:"none" }}/>}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFile}
-        style={{ display:"none" }}
-      />
-
-      <div style={{ padding:"16px 20px 12px", display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.88)", flexShrink:0 }}>
-        <div style={{ width:36, height:36, borderRadius:10, background:`${accentColor}22`, border:`1.5px solid ${accentColor}55`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          {isDelivered
-            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:14, fontWeight:800, color:"white", fontFamily:"'Syne',sans-serif" }}>
-            Evidencia — {label}
-          </div>
-          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)", marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {stop.client} · #{stop.tracking || stop.stopNum}
-          </div>
-        </div>
-        <button onClick={() => { stopCamera(); onCancel(); }} style={{ width:30, height:30, borderRadius:8, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-      </div>
-
-      <div style={{ flex:1, position:"relative", overflow:"hidden", background:"#111" }}>
-        {phase === "choice" && (
-          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:26, textAlign:"center" }}>
-            <div style={{ fontSize:46, marginBottom:12 }}>📸</div>
-            <div style={{ fontSize:18, fontFamily:"'Syne',sans-serif", fontWeight:800, color:"white", marginBottom:6 }}>
-              Agregar prueba de {label.toLowerCase()}
-            </div>
-            <div style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.45, maxWidth:320, marginBottom:20 }}>
-              Elige cámara o galería. Al confirmar, el paquete se marca y se envía al robot de SilpoPack.
-            </div>
-            {camErr && <div style={{ fontSize:12, color:"#f87171", marginBottom:14, maxWidth:320 }}>{camErr}</div>}
-            <div style={{ display:"flex", gap:10, width:"100%", maxWidth:360 }}>
-              <button onClick={startCamera}
-                style={{ flex:1, padding:"15px 10px", borderRadius:14, border:`1px solid ${accentColor}55`, background:`${accentColor}18`, color:"white", fontSize:13, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
-                📷 Cámara
-              </button>
-              <button onClick={chooseGallery}
-                style={{ flex:1, padding:"15px 10px", borderRadius:14, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", fontSize:13, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
-                🖼️ Galería
-              </button>
-            </div>
-          </div>
-        )}
-
-        {phase === "preview" && (
-          <>
-            <video ref={videoRef} autoPlay playsInline muted style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
-            {[["top:12px;left:12px;border-top-left-radius:6px"],
-              ["top:12px;right:12px;border-top-right-radius:6px"],
-              ["bottom:12px;right:12px;border-bottom-right-radius:6px"],
-              ["bottom:12px;left:12px;border-bottom-left-radius:6px"],
-            ].map(([pos], i) => (
-              <div key={i} style={{ position:"absolute", width:28, height:28, borderTop:`2.5px solid ${accentColor}`, borderLeft:`2.5px solid ${accentColor}`, opacity:0.8, ...Object.fromEntries(pos.split(";").map(p => { const [k,v]=p.split(":"); return [k.trim().replace(/-([a-z])/g,(_,c)=>c.toUpperCase()),v?.trim()]; }).filter(([k])=>k)) }}/>
-            ))}
-            <div style={{ position:"absolute", bottom:86, left:0, right:0, textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.55)", fontFamily:"'Syne',sans-serif" }}>
-              Encuadra el paquete, puerta o firma visual
-            </div>
-          </>
-        )}
-
-        {phase === "captured" && photoData && (
-          <>
-            <img src={photoData} alt="evidencia" style={{ width:"100%", height:"100%", objectFit:"contain", animation:"camPop .18s ease" }}/>
-            <div style={{ position:"absolute", top:12, left:12, background:`${accentColor}dd`, color:"white", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, fontFamily:"'Syne',sans-serif" }}>
-              ✓ Foto lista
-            </div>
-          </>
-        )}
-
-        <canvas ref={canvasRef} style={{ display:"none" }}/>
-      </div>
-
-      <div style={{ padding:"18px 22px 26px", background:"rgba(0,0,0,0.92)", flexShrink:0 }}>
-        {phase === "preview" && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16 }}>
-            <button onClick={() => { stopCamera(); setPhase("choice"); }}
-              style={{ width:52, height:52, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", cursor:"pointer", fontSize:20 }}>
-              ‹
-            </button>
-            <button onClick={takePhoto}
-              style={{ width:72, height:72, borderRadius:"50%", border:`4px solid ${accentColor}`, background:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 0 6px ${accentColor}33` }}>
-              <div style={{ width:52, height:52, borderRadius:"50%", background:accentColor }}/>
-            </button>
-            <button onClick={chooseGallery}
-              style={{ width:52, height:52, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)", color:"white", cursor:"pointer", fontSize:18 }}>
-              🖼️
-            </button>
-          </div>
-        )}
-
-        {phase === "captured" && (
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={retake}
-              style={{ flex:1, padding:"14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.75)", fontSize:13, fontWeight:700, fontFamily:"'Syne',sans-serif", cursor:"pointer" }}>
-              Cambiar
-            </button>
-            <button onClick={confirm}
-              style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`, color:"white", fontSize:13, fontWeight:800, fontFamily:"'Syne',sans-serif", cursor:"pointer", boxShadow:`0 4px 20px ${accentColor}55` }}>
-              Confirmar — {label}
-            </button>
-          </div>
-        )}
-
-        {phase === "saving" && (
-          <div style={{ textAlign:"center", color:"rgba(255,255,255,0.6)", fontSize:13 }}>
-            <div style={{ width:24, height:24, border:"2px solid rgba(255,255,255,0.2)", borderTopColor:"white", borderRadius:"50%", animation:"spin .8s linear infinite", margin:"0 auto 8px" }}/>
-            Guardando y enviando a SilpoPack…
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const inputRef = useRef(null);
@@ -6604,7 +6119,7 @@ const ImportModal = ({ onClose, onImported }) => {
 
   const REQUIRED_FIELDS = ["address"];
   const OPTIONAL_FIELDS = ["client","phone","notes","sector","address2","priority"];
-  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", sector:"Sector/Zona", address2:"Dirección 2 / Referencia", priority:"Prioridad" };
+  const FIELD_LABELS = { address:"Dirección *", client:"Cliente", phone:"Teléfono", notes:"Notas", sector:"Sector/Base", address2:"Dirección 2 / Referencia", priority:"Prioridad" };
 
   const autoDetectLegacy = (hdrs) => {
     const m = {};
@@ -6803,7 +6318,7 @@ const ImportModal = ({ onClose, onImported }) => {
         <div style={{padding:"18px 22px 14px",borderBottom:"1px solid #0d1420",flexShrink:0}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9"}}>Importar entregas</div>
+              <div style={{fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9"}}>Importar rutas</div>
               <div style={{fontSize:11,color:"#2d4a60",marginTop:2}}>Excel · CSV · Geocodificación automática · Optimización</div>
             </div>
             <button onClick={onClose} style={{width:28,height:28,borderRadius:8,border:"1px solid #131f30",background:"transparent",color:"#374151",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -7686,10 +7201,6 @@ const AddressIntelligencePanel = ({ onClose }) => {
 // --- PHASE 9: CIRCUIT ENGINE (EMBEDDED) -------------------------------------
 
 // --- CONFIG -------------------------------------------------------------------
-// URL del backend de sincronización con SilpoPack
-// En producción cambiar por la URL real del servidor Node.js
-const BACKEND_URL = "https://silpo-sync-backend-production.up.railway.app";
-
 const GMAPS_KEY = "AIzaSyCH51LeKVUD92nJ3EJwKlN7QDgz1Gad5A4";
 // DEPOT defined globally above (18.523359816124955, -69.98369283305884)
 
@@ -9111,7 +8622,7 @@ export default function RapDrive() {
       lastRouteSnapRef.current[driverId] = {
         sentAt: route.sentAt,
         stops: stopsMap,
-        routeCompletedNotified: (route.stops||[]).every(s => s.driverStatus === "delivered" || s.driverStatus === "problema"),
+        routeCompletedNotified: (route.stops||[]).every(s => s.navStatus === "visited"),
       };
     };
 
@@ -9146,14 +8657,14 @@ export default function RapDrive() {
           anyChange = true;
           const clientLabel = stop.client || `Parada #${stop.stopNum}`;
           const trackLabel  = stop.tracking ? ` · ${stop.tracking}` : "";
-          if (newStatus === "delivered") {
-            pushEvent({ id:"e"+Date.now()+stop.id, type:"delivered", icon:"✓", color:"#10b981",
-              title:`Entregado: ${clientLabel}${trackLabel}`,
+          if (newStatus === "visited") {
+            pushEvent({ id:"e"+Date.now()+stop.id, type:"visited", icon:"✓", color:"#10b981",
+              title:`Visitado: ${clientLabel}${trackLabel}`,
               body:`${driverLabel} · #${stop.stopNum} · ${stop.displayAddr||stop.rawAddr||""}`,
               time: now, read: false, isNew: true });
-          } else if (newStatus === "problema") {
+          } else if (newStatus === "note") {
             pushEvent({ id:"e"+Date.now()+stop.id, type:"delayed", icon:"⚠", color:"#f59e0b",
-              title:`Problema: ${clientLabel}${trackLabel}`,
+              title:`Nota: ${clientLabel}${trackLabel}`,
               body:`${driverLabel} · ${stop.issue||"Sin detalles"} · #${stop.stopNum}`,
               time: now, read: false, isNew: true });
           } else if (newStatus === "en_ruta") {
@@ -9165,14 +8676,14 @@ export default function RapDrive() {
         });
         // Ruta completada
         if (anyChange && !snap.routeCompletedNotified) {
-          const allDone = route.stops.every(s => s.driverStatus === "delivered" || s.driverStatus === "problema");
+          const allDone = route.stops.every(s => s.navStatus === "visited");
           if (allDone) {
             snap.routeCompletedNotified = true;
-            const del  = route.stops.filter(s => s.driverStatus === "delivered").length;
-            const prob = route.stops.filter(s => s.driverStatus === "problema").length;
-            pushEvent({ id:"e"+Date.now()+"done"+driverId, type:"delivered", icon:"🏁", color:"#10b981",
+            const del  = route.stops.filter(s => s.driverStatus === "visited").length;
+            const prob = route.stops.filter(s => s.driverStatus === "note").length;
+            pushEvent({ id:"e"+Date.now()+"done"+driverId, type:"visited", icon:"🏁", color:"#10b981",
               title:`Ruta completada: ${driverLabel}`,
-              body:`${del} entregados · ${prob} problemas · ${route.stops.length} paradas totales`,
+              body:`${del} visitados · ${prob} notas · ${route.stops.length} paradas totales`,
               time: now, read: false, isNew: true });
           }
         }
