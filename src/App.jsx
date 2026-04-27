@@ -770,7 +770,7 @@ const PageRoutes = () => {
 
   const routeStats = (r) => {
     const stops = r.stops || [];
-    const visited = stops.filter(s => s.driverStatus === "visited").length;
+    const visited = stops.filter(s => s.navStatus === "visited").length;
     const pending   = stops.filter(s => s.navStatus !== "visited").length;
     return { total: stops.length, visited, pending };
   };
@@ -1456,7 +1456,7 @@ const PageSettings = ({ mensajeros, setMensajeros, currentUser, role, rc }) => {
             <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
               {[
                 { key:"onRouteAssigned", label:"Ruta asignada a mensajero",     desc:"Al enviar una ruta nueva" },
-                { key:"onDelivered",     label:"Entrega completada",             desc:"Cuando un mensajero marca visitado" },
+                { key:"onDelivered",     label:"Parada visitada",             desc:"Cuando un mensajero marca visitado" },
                 { key:"onProblem",       label:"Nota registrada",             desc:"Cuando hay incidencia en una parada" },
                 { key:"onDriverOnline",  label:"Mensajero se conecta",           desc:"Al iniciar turno" },
                 { key:"soundEnabled",    label:"Sonido de notificaciones",       desc:"Reproducir tono al recibir alertas" },
@@ -2264,7 +2264,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
   const [stops, setStops] = useState(() => {
     const r = _initRoute();
-    return (r?.stops||[]).map(s=>({...s, driverStatus: s.driverStatus||"pending"}));
+    return (r?.stops||[]).map((s,i)=>({...s, navStatus: s.navStatus || (i===0 ? "active" : "pending")}));
   });
   const [tab,        setTab]        = useState("route"); // "route" | "chat" | "pending" | "history"
   const [chatMsg,    setChatMsg]    = useState("");
@@ -2346,7 +2346,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
   // Cola eliminada: una sola ruta activa por mensajero.
   // Historial de rutas completadas (guardado localmente)
   const [routeHistory, setRouteHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`rdHistory_${myKey}`) || "[]"); } catch{ return []; }
+    // Limpieza producción: elimina historiales viejos del mensajero una sola vez.
+    try {
+      const cleanKey = `rdHistoryCleanedNavOnly_${myKey}`;
+      if (!localStorage.getItem(cleanKey)) {
+        localStorage.removeItem(`rdHistory_${myKey}`);
+        localStorage.setItem(cleanKey, "1");
+        return [];
+      }
+      return JSON.parse(localStorage.getItem(`rdHistory_${myKey}`) || "[]");
+    } catch{ return []; }
   });
   const [histSelRoute, setHistSelRoute] = useState(null);
   const completedBannerTimer = useRef(null);
@@ -2546,7 +2555,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         stops: normalizedStops.map((s, i) => ({
           ...s,
           stopNum: s.stopNum || i + 1,
-          driverStatus: s.driverStatus || (i === 0 ? "en_ruta" : "pending"),
+          navStatus: s.navStatus || (i === 0 ? "active" : "pending"),
         })),
       };
 
@@ -2590,7 +2599,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         const savedStops = saved.stops.map((s, i) => ({
           ...s,
           stopNum: s.stopNum || i + 1,
-          driverStatus: s.driverStatus || (i === 0 ? "en_ruta" : "pending"),
+          navStatus: s.navStatus || (i === 0 ? "active" : "pending"),
         }));
         const savedRoute = { ...saved, stops: savedStops };
         const savedAllDone = savedStops.length > 0 && savedStops.every(
@@ -2729,7 +2738,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const validStops = stops.filter(s => s.lat && s.lng);
     if (!validStops.length) return;
     const bounds = new window.google.maps.LatLngBounds();
-    const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.driverStatus==="pending");
+    const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.navStatus!=="visited");
 
     // ── Draw glow polyline first (so markers render on top) ──
     const ordered = validStops.filter(s=>s.stopNum).sort((a,b)=>a.stopNum-b.stopNum);
@@ -2763,7 +2772,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     // ── Premium teardrop markers ──
     validStops.forEach(stop => {
       const isDone = stop.navStatus === "visited";
-      const isProb = stop.driverStatus === "note";
+      const isProb = false;
       const isNow  = stop === currentStop;
       const label  = String(stop.stopNum || "?");
       const fs     = label.length > 2 ? 8 : label.length > 1 ? 10 : 12;
@@ -2866,9 +2875,9 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
   // -- Helpers -------------------------------------------------------------------
   const visited   = stops.filter(s=>s.navStatus==="visited");
-  const problems    = stops.filter(s=>s.driverStatus==="note");
+  const problems    = stops.filter(s=>false);
   const pending     = stops.filter(s=>s.navStatus!=="visited");
-  const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.driverStatus==="pending");
+  const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.navStatus!=="visited");
   const pct         = stops.length>0 ? Math.round((visited.length/stops.length)*100) : 0;
 
   const filteredStops = stops.filter(s => {
@@ -2947,6 +2956,35 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     ]).finally(() => {
       writingRef.current = false;
     });
+  };
+
+  const markStopVisited = (stop) => {
+    if (!stop || stop.navStatus === "visited") return;
+    const now = new Date().toLocaleTimeString("es-DO", { hour:"2-digit", minute:"2-digit" });
+    const updatedStops = stops.map(s => {
+      const same = (s.id && stop.id && s.id === stop.id) || (s.stopNum && stop.stopNum && s.stopNum === stop.stopNum);
+      if (!same) return s;
+      return { ...s, navStatus:"visited", visitedAt: s.visitedAt || now };
+    }).map((s, i, arr) => {
+      if (s.navStatus === "visited") return s;
+      const firstPendingIndex = arr.findIndex(x => x.navStatus !== "visited");
+      return i === firstPendingIndex ? { ...s, navStatus:"active" } : { ...s, navStatus:s.navStatus || "pending" };
+    });
+    setStops(updatedStops);
+    const nextSelected = updatedStops.find(s => (s.id && stop.id && s.id === stop.id) || (s.stopNum && stop.stopNum && s.stopNum === stop.stopNum));
+    setSelStop(nextSelected || null);
+    setMapPinPopup(null);
+    pushUpdate(updatedStops);
+  };
+
+  const finalizeCurrentRoute = () => {
+    if (!myRoute || !stops.length) return;
+    const now = new Date().toLocaleTimeString("es-DO", { hour:"2-digit", minute:"2-digit" });
+    const updatedStops = stops.map(s => ({ ...s, navStatus:"visited", visitedAt: s.visitedAt || now }));
+    setStops(updatedStops);
+    setSelStop(null);
+    setMapPinPopup(null);
+    pushUpdate(updatedStops);
   };
 
   const addChatMsg = (text) => {
@@ -3168,8 +3206,8 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         {/* ── MAP PIN POPUP ── aparece cuando se toca un pin */}
         {mapPinPopup && (() => {
           const s = mapPinPopup;
-          const isDone = s.driverStatus === "visited";
-          const isProb = s.driverStatus === "note";
+          const isDone = s.navStatus === "visited";
+          const isProb = false;
           const ac = isDone ? "#10b981" : isProb ? "#ef4444" : "#3b82f6";
           return (
             /* ── Info card: top-left, no obstruction, read-only ── */
@@ -3357,7 +3395,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 {stops.length > 0 && (
                   <div style={{ display:"flex", gap:2, marginBottom:12, height:6 }}>
                     {stops.filter(s=>s.stopNum!=null).sort((a,b)=>(a.stopNum||0)-(b.stopNum||0)).map((s,i) => {
-                      const col = s.navStatus==="visited"?"#10b981":s.driverStatus==="note"?"#ef4444":s.navStatus==="active"?"#3b82f6":"rgba(255,255,255,0.1)";
+                      const col = s.navStatus==="visited"?"#10b981":false?"#ef4444":s.navStatus==="active"?"#3b82f6":"rgba(255,255,255,0.1)";
                       const glow= s.navStatus==="visited"?"0 0 6px rgba(16,185,129,0.6)":s.navStatus==="active"?"0 0 6px rgba(59,130,246,0.8)":"none";
                       return <div key={s.id} style={{ flex:1, height:"100%", borderRadius:3, background:col, boxShadow:glow, transition:"background .3s" }}/>;
                     })}
@@ -3369,7 +3407,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   {[
                     { val: visited.length, label:"VISITADAS", color:"#10b981" },
                     { val: pending.length,   label:"PENDIENTES", color:"#3b82f6" },
-                    { val: problems.length,  label:"PROBLEMAS",  color:problems.length>0?"#f59e0b":"rgba(255,255,255,0.2)" },
+                    { val: problems.length,  label:"NOTAS",  color:problems.length>0?"#f59e0b":"rgba(255,255,255,0.2)" },
                     { val: routeKm>0 ? routeKm : stops.length, label: routeKm>0 ? "KM TOTALES" : "PARADAS", color:"rgba(255,255,255,0.5)" },
                   ].map(({val,label,color},i,arr) => (
                     <div key={label} style={{ flex:1, textAlign:"center", borderRight: i<arr.length-1?"1px solid rgba(255,255,255,0.06)":undefined, paddingRight: i<arr.length-1?0:undefined }}>
@@ -3428,6 +3466,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
 
                   {/* ── Action buttons ── */}
                   <div style={{ display:"flex", gap:7 }}>
+                    <button onClick={(e)=>{ e.stopPropagation(); markStopVisited(currentStop); }}
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:11, background:"linear-gradient(135deg,#059669,#10b981)", border:"1px solid rgba(16,185,129,0.35)", color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 3px 12px rgba(16,185,129,0.25)", fontFamily:"'DM Sans',sans-serif" }}>
+                      ✓ Visitado
+                    </button>
                     {/* Waze */}
                     <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
                       target="_blank" rel="noreferrer"
@@ -3449,6 +3491,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                   {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
                 </span>
                 <div style={{ display:"flex", gap:5 }}>
+                  <button onClick={finalizeCurrentRoute}
+                    style={{ fontSize:10, fontWeight:800, color:"#10b981", background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                    Finalizar ruta
+                  </button>
                 </div>
               </div>
 
@@ -3493,15 +3539,15 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
             {/* ── Stop list — premium redesign ── */}
             {filteredStops.map((stop,i) => {
               const isDone = stop.navStatus==="visited";
-              const isProb = stop.driverStatus==="note";
+              const isProb = false;
               const isEnR  = stop.navStatus==="active";
               const isCur  = stop===currentStop;
               const isExp  = selStop?.id===stop.id;
 
               const dotColor = isDone?"#10b981":isProb?"#ef4444":isCur||isEnR?"#3b82f6":"#374151";
-              const statusLabel= isDone?"ENTREGADO":isProb?"PROBLEMA":isEnR?"EN CAMINO":"PENDIENTE";
-              const statusColor= isDone?"#10b981":isProb?"#ef4444":isEnR?"#60a5fa":"rgba(255,255,255,0.3)";
-              const statusBg   = isDone?"rgba(16,185,129,0.1)":isProb?"rgba(239,68,68,0.1)":isEnR?"rgba(59,130,246,0.1)":"transparent";
+              const statusLabel= isDone?"VISITADO":isEnR?"EN CAMINO":"PENDIENTE";
+              const statusColor= isDone?"#10b981":isEnR?"#60a5fa":"rgba(255,255,255,0.3)";
+              const statusBg   = isDone?"rgba(16,185,129,0.1)":isEnR?"rgba(59,130,246,0.1)":"transparent";
 
               // Distancia desde DEPOT (estimada por stopNum)
               const distKm = stop.stopNum ? (stop.stopNum * 0.6).toFixed(1) : null;
@@ -3644,7 +3690,13 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         </div>
 
                         {/* Action buttons */}
-                        <div style={{ display:"flex", gap:8 }}>
+                        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                          {!isDone && (
+                            <button onClick={e=>{ e.stopPropagation(); markStopVisited(stop); }}
+                              style={{ flex:"1 1 100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"12px 0", borderRadius:12, border:"1px solid rgba(16,185,129,0.28)", background:"linear-gradient(135deg,rgba(5,150,105,0.95),rgba(16,185,129,0.95))", color:"white", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(16,185,129,0.22)" }}>
+                              ✓ Marcar paquete como visitado
+                            </button>
+                          )}
                           {/* WhatsApp */}
                           {stop.phone && (
                             <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}}
@@ -3752,7 +3804,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                 {(() => {
                   const stops = histSelRoute.stops||[];
                   const del = stops.filter(s=>s.navStatus==="visited").length;
-                  const prob = stops.filter(s=>s.driverStatus==="note").length;
+                  const prob = stops.filter(s=>false).length;
                   return (
                     <div style={{ display:"flex", gap:7 }}>
                       <div style={{ fontSize:11, fontWeight:700, color:"#10b981", fontFamily:"'DM Sans',sans-serif" }}>✓ {del}</div>
@@ -3764,7 +3816,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               <div style={{ flex:1, overflow:"auto" }}>
                 {(histSelRoute.stops||[]).sort((a,b)=>(a.stopNum||99)-(b.stopNum||99)).map((stop, i, arr) => {
                   const isDone = stop.navStatus === "visited";
-                  const isProb = stop.driverStatus === "note";
+                  const isProb = false;
                   const statusColor = isDone ? "#10b981" : isProb ? "#ef4444" : "#f59e0b";
                   const statusLabel = isDone ? "Visitado" : isProb ? "Nota" : "Pendiente";
                   const statusIcon  = isDone ? "✓" : isProb ? "✕" : "○";
@@ -3846,7 +3898,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
               ) : routeHistory.map((r, i) => {
                 const stops = r.stops||[];
                 const del  = stops.filter(s=>s.navStatus==="visited").length;
-                const prob = stops.filter(s=>s.driverStatus==="note").length;
+                const prob = stops.filter(s=>false).length;
                 const pct  = stops.length ? Math.round(del/stops.length*100) : 0;
                 const dateStr = r.completedAt ? new Date(r.completedAt).toLocaleDateString("es-DO",{weekday:"long",day:"2-digit",month:"short"}) : "—";
                 const timeStr = r.completedAt ? new Date(r.completedAt).toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"}) : "";
@@ -3876,7 +3928,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
                         {prob > 0 && (
                           <div style={{ flex:1, textAlign:"center", borderRight:"1px solid rgba(255,255,255,0.06)", padding:"0 8px" }}>
                             <div style={{ fontSize:20, fontWeight:800, color:"#ef4444", fontFamily:"'DM Sans',sans-serif", lineHeight:1 }}>{prob}</div>
-                            <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:3, fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.5px" }}>PROBLEMAS</div>
+                            <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)", marginTop:3, fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.5px" }}>NOTAS</div>
                           </div>
                         )}
                         <div style={{ flex:1, textAlign:"center", paddingLeft:8 }}>
@@ -8679,8 +8731,8 @@ export default function RapDrive() {
           const allDone = route.stops.every(s => s.navStatus === "visited");
           if (allDone) {
             snap.routeCompletedNotified = true;
-            const del  = route.stops.filter(s => s.driverStatus === "visited").length;
-            const prob = route.stops.filter(s => s.driverStatus === "note").length;
+            const del  = route.stops.filter(s => s.navStatus === "visited").length;
+            const prob = route.stops.filter(s => false).length;
             pushEvent({ id:"e"+Date.now()+"done"+driverId, type:"visited", icon:"🏁", color:"#10b981",
               title:`Ruta completada: ${driverLabel}`,
               body:`${del} visitados · ${prob} notas · ${route.stops.length} paradas totales`,
