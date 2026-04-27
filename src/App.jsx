@@ -4341,6 +4341,9 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [form, setForm] = useState({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
 
   const load = useCallback(async () => {
@@ -4355,10 +4358,28 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
 
   const slugify = (txt) => (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
   const officeList = Object.entries(offices || {}).map(([id, o]) => ({ id, ...o })).sort((a,b) => (a.nombre||a.id).localeCompare(b.nombre||b.id));
-  const stats = { total: officeList.length, active: officeList.filter(o => o.activa !== false).length, disabled: officeList.filter(o => o.activa === false).length, admins: users.filter(u => u.role === "admin" && u.officeId).length };
-  const inp = { background:"#070d16", border:"1px solid #172238", borderRadius:12, padding:"12px 14px", color:"#e2e8f0", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", width:"100%", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)" };
-  const label = { fontSize:11, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:800, letterSpacing:"1.1px", marginBottom:7, textTransform:"uppercase" };
-  const card = { background:"linear-gradient(180deg,#0b1320,#070d16)", border:"1px solid #172238", borderRadius:22, boxShadow:"0 24px 70px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)" };
+  const filteredOffices = officeList.filter(o => {
+    const q = query.trim().toLowerCase();
+    const matchesQuery = !q || [o.nombre, o.id, o.responsable, o.telefono, o.ubicacionBase?.direccion].some(v => String(v || "").toLowerCase().includes(q));
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? o.activa !== false : o.activa === false);
+    return matchesQuery && matchesStatus;
+  });
+  const stats = {
+    total: officeList.length,
+    active: officeList.filter(o => o.activa !== false).length,
+    disabled: officeList.filter(o => o.activa === false).length,
+    admins: users.filter(u => u.role === "admin" && u.officeId).length,
+  };
+
+  const selectedOffice = selected ? offices[selected] : null;
+  const selectedAdmins = users.filter(u => u.officeId === selected && u.role === "admin");
+  const field = { width:"100%", height:44, border:"1px solid #dbe4f0", borderRadius:12, background:"#fff", color:"#0f172a", padding:"0 13px", fontSize:14, outline:"none", boxShadow:"0 1px 2px rgba(15,23,42,.03)" };
+  const label = { display:"block", fontSize:12, color:"#475569", fontWeight:700, marginBottom:7 };
+  const card = { background:"#fff", border:"1px solid #e2e8f0", borderRadius:20, boxShadow:"0 10px 30px rgba(15,23,42,.06)" };
+  const softButton = { border:"1px solid #dbe4f0", background:"#fff", color:"#334155", borderRadius:12, padding:"10px 13px", fontWeight:800, cursor:"pointer" };
+  const primaryButton = { border:"none", background:"linear-gradient(135deg,#2563eb,#1d4ed8)", color:"white", borderRadius:12, padding:"11px 16px", fontWeight:900, cursor:"pointer", boxShadow:"0 10px 24px rgba(37,99,235,.22)" };
+
+  const resetForm = () => setForm({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
 
   const saveOffice = async () => {
     const nombre = form.nombre.trim();
@@ -4367,43 +4388,202 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
     if (!form.adminEmail.trim() || !form.adminPassword.trim()) { setMsg("Crea el login del admin de esta oficina."); return; }
     setSaving(true); setMsg("");
     const now = new Date().toISOString();
-    const office = { id, nombre, codigo:id, activa:true, responsable:form.responsable.trim(), telefono:form.telefono.trim(), createdAt:now, createdBy:currentUser?.email||"super_admin", ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 } };
-    const admin = { id:`OA-${id}-${Date.now()}`, name:form.adminName.trim()||`Admin ${nombre}`, email:form.adminEmail.trim().toLowerCase(), password:form.adminPassword, role:"admin", avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(), color:"#3b82f6", officeId:id, officeName:nombre, active:true };
+    const office = {
+      id,
+      nombre,
+      codigo:id,
+      activa:true,
+      responsable:form.responsable.trim(),
+      telefono:form.telefono.trim(),
+      createdAt:now,
+      createdBy:currentUser?.email||"super_admin",
+      ubicacionBase:{ direccion:form.direccion.trim(), lat:Number(form.lat)||18.4861, lng:Number(form.lng)||-69.9312 }
+    };
+    const admin = {
+      id:`OA-${id}-${Date.now()}`,
+      name:form.adminName.trim()||`Admin ${nombre}`,
+      email:form.adminEmail.trim().toLowerCase(),
+      password:form.adminPassword,
+      role:"admin",
+      avatar:(form.adminName.trim()||nombre).split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+      color:"#2563eb",
+      officeId:id,
+      officeName:nombre,
+      active:true
+    };
     await Promise.all([FB.set(`oficinas/${id}`, office), FB.set(`oficinas/${id}/users/${admin.id}`, admin), FB.set(`users/${admin.id}`, admin)]);
     if (!USERS.find(u => u.id === admin.id)) USERS.push(admin);
-    setForm({ nombre:"", codigo:"", responsable:"", telefono:"", direccion:"", lat:"18.4861", lng:"-69.9312", adminName:"", adminEmail:"", adminPassword:"" });
+    resetForm();
+    setShowCreate(false);
     setMsg(`✓ Oficina ${nombre} creada con admin ${admin.email}`);
     await load(); setSelected(id); setSaving(false);
   };
+
   const toggleOffice = async (id, next) => { await FB.set(`oficinas/${id}/activa`, next); await load(); setMsg(next ? "✓ Oficina habilitada" : "⏸ Oficina deshabilitada"); };
   const deleteOffice = async (id) => { const o = offices[id]; if (!confirm(`¿Eliminar la oficina ${o?.nombre || id}?`)) return; await FB.set(`oficinas/${id}`, null); await load(); if (selected === id) setSelected(null); setMsg("Oficina eliminada"); };
-  const selectedOffice = selected ? offices[selected] : null;
-  const selectedAdmins = users.filter(u => u.officeId === selected && u.role === "admin");
 
   return (
-    <div style={{position:"fixed", inset:0, background:"#050912", color:"#f8fafc", fontFamily:"'Inter',sans-serif", overflow:"hidden"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap'); *{box-sizing:border-box} *::-webkit-scrollbar{width:5px}*::-webkit-scrollbar-thumb{background:#1e293b;border-radius:8px}`}</style>
-      <div style={{position:"absolute", inset:0, background:"radial-gradient(circle at 20% 10%,rgba(139,92,246,.18),transparent 30%),radial-gradient(circle at 90% 20%,rgba(59,130,246,.13),transparent 35%),linear-gradient(135deg,#050912,#07101e 55%,#050912)"}}/>
-      <div style={{position:"relative", zIndex:1, display:"flex", height:"100%"}}>
-        <aside style={{width:310, borderRight:"1px solid rgba(148,163,184,.12)", padding:24, background:"rgba(3,7,18,.62)", backdropFilter:"blur(18px)", overflow:"auto"}}>
-          <div style={{display:"flex", alignItems:"center", gap:13, marginBottom:28}}><div style={{width:48,height:48,borderRadius:16,background:"linear-gradient(135deg,#7c3aed,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:900,boxShadow:"0 18px 45px rgba(99,102,241,.35)"}}>SA</div><div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-.4px"}}>Super Admin</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>Control multi-oficina</div></div></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:22}}>{[["Oficinas",stats.total,"#60a5fa"],["Activas",stats.active,"#22c55e"],["Pausadas",stats.disabled,"#f97316"],["Admins",stats.admins,"#a78bfa"]].map(([t,v,c])=><div key={t} style={{...card,padding:14,borderRadius:16}}><div style={{fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:900,color:c}}>{v}</div><div style={{fontSize:10,color:"#64748b",fontWeight:800,letterSpacing:"1px",textTransform:"uppercase"}}>{t}</div></div>)}</div>
-          <div style={{fontSize:11,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.5px",margin:"8px 0 10px",textTransform:"uppercase"}}>Oficinas</div>
-          <div style={{display:"flex",flexDirection:"column",gap:9}}>{officeList.length===0&&<div style={{color:"#475569",fontSize:13,lineHeight:1.5,padding:14,border:"1px dashed #1e293b",borderRadius:16}}>Todavía no hay oficinas. Crea la primera desde el panel principal.</div>}{officeList.map(o=><button key={o.id} onClick={()=>setSelected(o.id)} style={{textAlign:"left",border:"1px solid "+(selected===o.id?"#334155":"#172238"),background:selected===o.id?"rgba(59,130,246,.10)":"rgba(15,23,42,.55)",borderRadius:16,padding:13,cursor:"pointer",color:"#e2e8f0"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}><div style={{fontSize:13,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.nombre}</div><span style={{fontSize:10,color:o.activa===false?"#fb923c":"#22c55e",fontWeight:900}}>{o.activa===false?"PAUSADA":"ACTIVA"}</span></div><div style={{fontSize:11,color:"#64748b",marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.ubicacionBase?.direccion || "Sin ubicación base"}</div></button>)}</div>
-          <button onClick={onLogout} style={{marginTop:24,width:"100%",padding:"12px 14px",borderRadius:14,border:"1px solid #1e293b",background:"rgba(15,23,42,.55)",color:"#94a3b8",fontWeight:800,cursor:"pointer"}}>Cerrar sesión</button>
+    <div style={{ position:"fixed", inset:0, background:"#f8fafc", color:"#0f172a", fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflow:"hidden" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box} *::-webkit-scrollbar{width:8px;height:8px} *::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px} input:focus,select:focus{border-color:#2563eb!important;box-shadow:0 0 0 4px rgba(37,99,235,.10)!important}`}</style>
+      <div style={{ display:"flex", height:"100%" }}>
+        <aside style={{ width:280, background:"#0f172a", color:"#fff", padding:22, display:"flex", flexDirection:"column", gap:20, flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:44, height:44, borderRadius:14, background:"linear-gradient(135deg,#2563eb,#60a5fa)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, letterSpacing:"-.5px" }}>RD</div>
+            <div>
+              <div style={{ fontSize:17, fontWeight:900, lineHeight:1 }}>Rap Drive</div>
+              <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>Super Admin</div>
+            </div>
+          </div>
+
+          <div style={{ display:"grid", gap:10 }}>
+            {[
+              ["Oficinas", stats.total, "#60a5fa"],
+              ["Activas", stats.active, "#34d399"],
+              ["Pausadas", stats.disabled, "#fb7185"],
+              ["Admins", stats.admins, "#a78bfa"],
+            ].map(([t,v,c]) => (
+              <div key={t} style={{ background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.08)", borderRadius:16, padding:"14px 15px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <span style={{ color:"#cbd5e1", fontSize:13, fontWeight:700 }}>{t}</span>
+                <span style={{ color:c, fontSize:22, fontWeight:900 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop:"auto", background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.08)", borderRadius:16, padding:14 }}>
+            <div style={{ fontSize:11, color:"#94a3b8", fontWeight:800, textTransform:"uppercase", letterSpacing:".7px" }}>Sesión</div>
+            <div style={{ fontSize:13, marginTop:6, fontWeight:800, wordBreak:"break-all" }}>{currentUser?.email}</div>
+          </div>
+          <button onClick={onLogout} style={{ ...softButton, background:"transparent", border:"1px solid rgba(255,255,255,.14)", color:"#e2e8f0" }}>Cerrar sesión</button>
         </aside>
-        <main style={{flex:1, padding:28, overflow:"auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:20,marginBottom:22}}><div><div style={{fontSize:11,color:"#818cf8",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"2px",textTransform:"uppercase"}}>Rap Drive Enterprise</div><h1 style={{fontSize:34,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-1.2px",margin:"6px 0 8px"}}>Gestión de oficinas</h1><p style={{fontSize:14,color:"#94a3b8",maxWidth:720,lineHeight:1.6}}>Crea oficinas, asigna el acceso del administrador responsable y pausa operaciones por incumplimiento de pago o contrato finalizado.</p></div><div style={{...card,padding:"13px 16px",borderRadius:16,minWidth:220}}><div style={{fontSize:11,color:"#64748b",fontWeight:800,textTransform:"uppercase",letterSpacing:"1px"}}>Sesión actual</div><div style={{fontSize:14,fontWeight:800,marginTop:5}}>{currentUser?.email}</div></div></div>
-          {msg&&<div style={{marginBottom:16,padding:"13px 15px",borderRadius:14,background:msg.startsWith("✓")?"rgba(34,197,94,.10)":"rgba(59,130,246,.10)",border:"1px solid rgba(148,163,184,.14)",color:msg.startsWith("✓")?"#86efac":"#93c5fd",fontWeight:700}}>{msg}</div>}
-          <div style={{display:"grid",gridTemplateColumns:"minmax(420px,560px) minmax(420px,1fr)",gap:18,alignItems:"start"}}>
-            <section style={{...card,padding:22}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}><div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900}}>Nueva oficina</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>Crea la oficina y su admin en un solo paso.</div></div><div style={{width:42,height:42,borderRadius:14,background:"rgba(99,102,241,.14)",display:"flex",alignItems:"center",justifyContent:"center"}}>🏢</div></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:12}}><div><div style={label}>Nombre oficina</div><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={inp}/></div><div><div style={label}>Código</div><input value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={inp}/></div></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 170px",gap:12,marginTop:12}}><div><div style={label}>Responsable / contacto</div><input value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={inp}/></div><div><div style={label}>Teléfono</div><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={inp}/></div></div>
-              <div style={{marginTop:12}}><div style={label}>Ubicación base</div><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base / punto de salida" style={inp}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}><div><div style={label}>Latitud</div><input value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={inp}/></div><div><div style={label}>Longitud</div><input value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={inp}/></div></div>
-              <div style={{height:1,background:"#172238",margin:"20px 0"}}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><div style={label}>Nombre admin</div><input value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={inp}/></div><div><div style={label}>Correo admin</div><input value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={inp}/></div></div><div style={{marginTop:12}}><div style={label}>Contraseña inicial</div><input value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={inp}/></div><button onClick={saveOffice} disabled={saving} style={{marginTop:18,width:"100%",padding:"14px 16px",borderRadius:14,border:"none",background:saving?"#334155":"linear-gradient(135deg,#7c3aed,#2563eb)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:".5px",cursor:saving?"default":"pointer",boxShadow:"0 18px 45px rgba(37,99,235,.28)"}}>{saving?"GUARDANDO...":"CREAR OFICINA Y ADMIN"}</button></section>
-            <section style={{...card,padding:22,minHeight:520}}>{!selectedOffice?(<div style={{height:470,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",textAlign:"center",color:"#64748b"}}><div style={{fontSize:48,marginBottom:12}}>👈</div><div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#cbd5e1"}}>Selecciona una oficina</div><div style={{fontSize:13,marginTop:6}}>Aquí verás sus accesos, estado y ubicación base.</div></div>):(<><div style={{display:"flex",justifyContent:"space-between",gap:18,alignItems:"flex-start",marginBottom:18}}><div><div style={{fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:900}}>{selectedOffice.nombre}</div><div style={{fontSize:12,color:"#64748b",marginTop:5}}>ID: {selected}</div></div><div style={{display:"flex",gap:8}}><button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{padding:"10px 13px",borderRadius:12,border:"1px solid #1e293b",background:selectedOffice.activa===false?"rgba(34,197,94,.12)":"rgba(249,115,22,.12)",color:selectedOffice.activa===false?"#86efac":"#fdba74",fontWeight:900,cursor:"pointer"}}>{selectedOffice.activa===false?"Habilitar":"Deshabilitar"}</button><button onClick={()=>deleteOffice(selected)} style={{padding:"10px 13px",borderRadius:12,border:"1px solid rgba(239,68,68,.25)",background:"rgba(239,68,68,.08)",color:"#fca5a5",fontWeight:900,cursor:"pointer"}}>Eliminar</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>ESTADO</div><div style={{fontSize:16,fontWeight:900,color:selectedOffice.activa===false?"#fb923c":"#22c55e",marginTop:4}}>{selectedOffice.activa===false?"Pausada":"Activa"}</div></div><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>ADMINS</div><div style={{fontSize:16,fontWeight:900,marginTop:4}}>{selectedAdmins.length}</div></div><div style={{background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:16,padding:14}}><div style={{fontSize:10,color:"#64748b",fontWeight:900,letterSpacing:"1px"}}>RESPONSABLE</div><div style={{fontSize:14,fontWeight:800,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedOffice.responsable||"—"}</div></div></div><div style={{background:"rgba(15,23,42,.42)",border:"1px solid #172238",borderRadius:18,padding:16,marginBottom:16}}><div style={label}>Ubicación base</div><div style={{fontSize:14,fontWeight:800}}>{selectedOffice.ubicacionBase?.direccion||"Sin dirección"}</div><div style={{fontSize:12,color:"#64748b",marginTop:5}}>Lat {selectedOffice.ubicacionBase?.lat||"—"} · Lng {selectedOffice.ubicacionBase?.lng||"—"}</div></div><div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:900,margin:"14px 0 10px"}}>Admins de oficina</div><div style={{display:"flex",flexDirection:"column",gap:9}}>{selectedAdmins.length===0&&<div style={{fontSize:13,color:"#64748b",padding:14,border:"1px dashed #1e293b",borderRadius:16}}>No hay admins asignados.</div>}{selectedAdmins.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"rgba(15,23,42,.5)",border:"1px solid #172238",borderRadius:15,padding:"12px 14px"}}><div><div style={{fontSize:14,fontWeight:900}}>{a.name}</div><div style={{fontSize:12,color:"#64748b",marginTop:3}}>{a.email}</div></div><span style={{fontSize:10,color:a.active===false?"#fb923c":"#22c55e",fontWeight:900}}>{a.active===false?"PAUSADO":"ACTIVO"}</span></div>)}</div></>)}</section>
+
+        <main style={{ flex:1, overflow:"auto", padding:28 }}>
+          <div style={{ maxWidth:1280, margin:"0 auto" }}>
+            <header style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:20, marginBottom:22 }}>
+              <div>
+                <div style={{ fontSize:13, color:"#2563eb", fontWeight:900, letterSpacing:".8px", textTransform:"uppercase" }}>Rap Drive Enterprise</div>
+                <h1 style={{ fontSize:34, lineHeight:1.1, letterSpacing:"-1px", margin:"6px 0 8px", fontWeight:900 }}>Gestión de oficinas</h1>
+                <p style={{ margin:0, color:"#64748b", fontSize:15, lineHeight:1.6, maxWidth:720 }}>Administra oficinas, accesos y operación. Pausa una oficina por pago pendiente o contrato finalizado sin afectar las demás.</p>
+              </div>
+              <button onClick={() => setShowCreate(true)} style={primaryButton}>+ Nueva oficina</button>
+            </header>
+
+            {msg && <div style={{ marginBottom:16, padding:"13px 15px", borderRadius:14, border:"1px solid " + (msg.startsWith("✓") ? "#bbf7d0" : "#bfdbfe"), background: msg.startsWith("✓") ? "#f0fdf4" : "#eff6ff", color: msg.startsWith("✓") ? "#166534" : "#1d4ed8", fontWeight:800 }}>{msg}</div>}
+
+            <section style={{ ...card, overflow:"hidden" }}>
+              <div style={{ padding:18, borderBottom:"1px solid #e2e8f0", display:"flex", alignItems:"center", justifyContent:"space-between", gap:14, flexWrap:"wrap" }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:900 }}>Oficinas registradas</div>
+                  <div style={{ fontSize:13, color:"#64748b", marginTop:3 }}>{filteredOffices.length} resultado{filteredOffices.length!==1?"s":""}</div>
+                </div>
+                <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                  <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar oficina, código, responsable..." style={{ ...field, width:300, height:42 }} />
+                  <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{ ...field, width:150, height:42 }}>
+                    <option value="all">Todas</option>
+                    <option value="active">Activas</option>
+                    <option value="disabled">Pausadas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", minWidth:940 }}>
+                  <thead style={{ background:"#f8fafc" }}>
+                    <tr>{["Oficina", "Código", "Admin", "Base", "Estado", "Acciones"].map(h => <th key={h} style={{ padding:"13px 18px", textAlign:"left", fontSize:12, color:"#64748b", textTransform:"uppercase", letterSpacing:".7px", borderBottom:"1px solid #e2e8f0" }}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {filteredOffices.length === 0 ? (
+                      <tr><td colSpan={6} style={{ padding:42, textAlign:"center", color:"#64748b" }}>No hay oficinas para mostrar. Crea una nueva oficina para empezar.</td></tr>
+                    ) : filteredOffices.map(o => {
+                      const admins = users.filter(u => u.officeId === o.id && u.role === "admin");
+                      const isActive = o.activa !== false;
+                      return (
+                        <tr key={o.id} onClick={() => setSelected(o.id)} style={{ background:selected===o.id?"#eff6ff":"#fff", cursor:"pointer" }}>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                              <div style={{ width:38, height:38, borderRadius:12, background:isActive?"#dbeafe":"#fee2e2", color:isActive?"#1d4ed8":"#b91c1c", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900 }}>{(o.nombre||o.id||"OF").slice(0,2).toUpperCase()}</div>
+                              <div><div style={{ fontWeight:900 }}>{o.nombre || o.id}</div><div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>{o.responsable || "Sin responsable"}</div></div>
+                            </div>
+                          </td>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7", color:"#334155", fontWeight:700 }}>{o.id}</td>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}>{admins[0]?.email || <span style={{color:'#94a3b8'}}>Sin admin</span>}</td>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7", color:"#475569", maxWidth:240, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{o.ubicacionBase?.direccion || "Sin ubicación"}</td>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }}><span style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"6px 10px", borderRadius:999, background:isActive?"#dcfce7":"#fee2e2", color:isActive?"#166534":"#991b1b", fontSize:12, fontWeight:900 }}><span style={{ width:7,height:7,borderRadius:"50%",background:isActive?"#22c55e":"#ef4444" }} />{isActive?"Activa":"Pausada"}</span></td>
+                          <td style={{ padding:"15px 18px", borderBottom:"1px solid #eef2f7" }} onClick={e=>e.stopPropagation()}>
+                            <div style={{ display:"flex", gap:8 }}>
+                              <button onClick={()=>toggleOffice(o.id, !isActive)} style={{ ...softButton, padding:"8px 10px", fontSize:12 }}>{isActive?"Pausar":"Activar"}</button>
+                              <button onClick={()=>{setSelected(o.id);}} style={{ ...softButton, padding:"8px 10px", fontSize:12 }}>Ver</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section style={{ marginTop:18, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
+              {[
+                ["Control operativo", "Pausa oficinas sin borrar datos ni afectar otras sucursales."],
+                ["Accesos separados", "Cada admin se crea vinculado a su oficina."],
+                ["Base por oficina", "Cada oficina define su punto de salida para rutas."],
+              ].map(([t,d]) => <div key={t} style={{ ...card, padding:18 }}><div style={{ fontWeight:900, marginBottom:6 }}>{t}</div><div style={{ fontSize:13, color:"#64748b", lineHeight:1.5 }}>{d}</div></div>)}
+            </section>
           </div>
         </main>
+
+        {selectedOffice && (
+          <aside style={{ width:390, background:"#fff", borderLeft:"1px solid #e2e8f0", padding:22, overflow:"auto", boxShadow:"-12px 0 30px rgba(15,23,42,.04)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:18 }}>
+              <div><div style={{ fontSize:22, fontWeight:900, letterSpacing:"-.5px" }}>{selectedOffice.nombre}</div><div style={{ color:"#64748b", fontSize:13, marginTop:4 }}>ID: {selected}</div></div>
+              <button onClick={()=>setSelected(null)} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:34, height:34, cursor:"pointer", fontWeight:900 }}>×</button>
+            </div>
+            <div style={{ display:"flex", gap:8, marginBottom:18 }}>
+              <button onClick={()=>toggleOffice(selected, selectedOffice.activa === false)} style={{ flex:1, ...primaryButton, background:selectedOffice.activa===false?"#16a34a":"#ea580c", boxShadow:"none" }}>{selectedOffice.activa===false?"Habilitar oficina":"Pausar oficina"}</button>
+              <button onClick={()=>deleteOffice(selected)} style={{ ...softButton, color:"#b91c1c", borderColor:"#fecaca" }}>Eliminar</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+              <div style={{ ...card, padding:15, boxShadow:"none" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:800 }}>Estado</div><div style={{ fontSize:18, fontWeight:900, color:selectedOffice.activa===false?"#dc2626":"#16a34a", marginTop:5 }}>{selectedOffice.activa===false?"Pausada":"Activa"}</div></div>
+              <div style={{ ...card, padding:15, boxShadow:"none" }}><div style={{ fontSize:12, color:"#64748b", fontWeight:800 }}>Admins</div><div style={{ fontSize:18, fontWeight:900, marginTop:5 }}>{selectedAdmins.length}</div></div>
+            </div>
+            <div style={{ ...card, padding:16, boxShadow:"none", marginBottom:16 }}>
+              <div style={{ fontSize:12, color:"#64748b", fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Ubicación base</div>
+              <div style={{ fontSize:15, fontWeight:800, marginTop:8 }}>{selectedOffice.ubicacionBase?.direccion || "Sin dirección"}</div>
+              <div style={{ fontSize:13, color:"#64748b", marginTop:7 }}>Lat {selectedOffice.ubicacionBase?.lat || "—"} · Lng {selectedOffice.ubicacionBase?.lng || "—"}</div>
+            </div>
+            <div style={{ ...card, padding:16, boxShadow:"none", marginBottom:16 }}>
+              <div style={{ fontSize:12, color:"#64748b", fontWeight:900, textTransform:"uppercase", letterSpacing:".6px" }}>Responsable</div>
+              <div style={{ fontSize:15, fontWeight:800, marginTop:8 }}>{selectedOffice.responsable || "Sin responsable"}</div>
+              <div style={{ fontSize:13, color:"#64748b", marginTop:7 }}>{selectedOffice.telefono || "Sin teléfono"}</div>
+            </div>
+            <div style={{ fontSize:14, fontWeight:900, margin:"20px 0 10px" }}>Admins de oficina</div>
+            <div style={{ display:"grid", gap:10 }}>
+              {selectedAdmins.length === 0 && <div style={{ padding:16, border:"1px dashed #cbd5e1", borderRadius:14, color:"#64748b" }}>No hay admins asignados.</div>}
+              {selectedAdmins.map(a => <div key={a.id} style={{ padding:14, border:"1px solid #e2e8f0", borderRadius:14, background:"#f8fafc" }}><div style={{ fontWeight:900 }}>{a.name}</div><div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>{a.email}</div></div>)}
+            </div>
+          </aside>
+        )}
+
+        {showCreate && (
+          <div style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(15,23,42,.42)", backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:22 }}>
+            <div style={{ width:"min(760px,100%)", maxHeight:"92vh", overflow:"auto", ...card, boxShadow:"0 24px 80px rgba(15,23,42,.28)" }}>
+              <div style={{ padding:22, borderBottom:"1px solid #e2e8f0", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                <div><div style={{ fontSize:22, fontWeight:900 }}>Nueva oficina</div><div style={{ fontSize:14, color:"#64748b", marginTop:4 }}>Crea la oficina y su administrador inicial.</div></div>
+                <button onClick={()=>{setShowCreate(false); resetForm();}} style={{ border:"none", background:"#f1f5f9", borderRadius:10, width:36, height:36, cursor:"pointer", fontWeight:900 }}>×</button>
+              </div>
+              <div style={{ padding:22 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14 }}><div><label style={label}>Nombre oficina</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value,codigo:form.codigo||slugify(e.target.value)})} placeholder="Ej. Oficina Herrera" style={field}/></div><div><label style={label}>Código</label><input value={form.codigo} onChange={e=>setForm({...form,codigo:slugify(e.target.value)})} placeholder="herrera" style={field}/></div></div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 170px", gap:14, marginTop:14 }}><div><label style={label}>Responsable</label><input value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="Nombre responsable" style={field}/></div><div><label style={label}>Teléfono</label><input value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} placeholder="809..." style={field}/></div></div>
+                <div style={{ marginTop:14 }}><label style={label}>Ubicación base / punto de salida</label><input value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} placeholder="Dirección base de la oficina" style={field}/></div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:14 }}><div><label style={label}>Latitud</label><input value={form.lat} onChange={e=>setForm({...form,lat:e.target.value})} style={field}/></div><div><label style={label}>Longitud</label><input value={form.lng} onChange={e=>setForm({...form,lng:e.target.value})} style={field}/></div></div>
+                <div style={{ height:1, background:"#e2e8f0", margin:"22px 0" }}/>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}><div><label style={label}>Nombre admin</label><input value={form.adminName} onChange={e=>setForm({...form,adminName:e.target.value})} placeholder="Admin oficina" style={field}/></div><div><label style={label}>Correo admin</label><input value={form.adminEmail} onChange={e=>setForm({...form,adminEmail:e.target.value})} placeholder="admin@oficina.com" style={field}/></div></div>
+                <div style={{ marginTop:14 }}><label style={label}>Contraseña inicial</label><input value={form.adminPassword} onChange={e=>setForm({...form,adminPassword:e.target.value})} placeholder="Contraseña para esa oficina" style={field}/></div>
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:22 }}><button onClick={()=>{setShowCreate(false); resetForm();}} style={softButton}>Cancelar</button><button onClick={saveOffice} disabled={saving} style={{ ...primaryButton, opacity:saving?0.7:1 }}>{saving?"Guardando...":"Crear oficina y admin"}</button></div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
