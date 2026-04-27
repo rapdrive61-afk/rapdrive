@@ -2702,37 +2702,18 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     const { lat, lng, accuracy } = myLocation;
     const pos = { lat, lng };
 
-    // Círculo de precisión
-    if (locationAccuracyRef.current) {
-      locationAccuracyRef.current.setCenter(pos);
-      locationAccuracyRef.current.setRadius(accuracy || 20);
-    } else {
-      locationAccuracyRef.current = new window.google.maps.Circle({
-        map: gMapRef.current,
-        center: pos,
-        radius: accuracy || 20,
-        fillColor: "#3b82f6",
-        fillOpacity: 0.08,
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.25,
-        strokeWeight: 1.5,
-        zIndex: 200,
-      });
-    }
+// En producción NO usamos círculo de precisión en el mapa del mensajero.
+// Ese círculo se escala con el zoom y visualmente parece que los pines crecen/encogen.
+if (locationAccuracyRef.current) {
+  try { locationAccuracyRef.current.setMap(null); } catch(e) {}
+  locationAccuracyRef.current = null;
+}
 
-    // Icono de motor (moto) animado
-    const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-      <defs>
-        <radialGradient id="lg" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#60a5fa"/>
-          <stop offset="100%" stop-color="#1d4ed8"/>
-        </radialGradient>
-        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      <circle cx="24" cy="24" r="23" fill="rgba(59,130,246,0.18)" filter="url(#glow)"/>
-      <circle cx="24" cy="24" r="17" fill="url(#lg)" stroke="white" stroke-width="2.5"/>
-      <text x="24" y="29" text-anchor="middle" font-size="16" font-weight="900" fill="white" font-family="-apple-system,sans-serif">🏍</text>
-    </svg>`;
+// Icono fijo de ubicación del mensajero: sin filtros, sin pulso, sin animación.
+const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+  <circle cx="17" cy="17" r="15" fill="#2563eb" stroke="white" stroke-width="2"/>
+  <text x="17" y="22" text-anchor="middle" font-size="15" font-weight="900" fill="white" font-family="Arial, sans-serif">🏍</text>
+</svg>`;
 
     if (locationMarkerRef.current) {
       locationMarkerRef.current.setPosition(pos);
@@ -2742,11 +2723,11 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
         position: pos,
         zIndex: 9999,
         title: driver.name || "Mi ubicación",
-        optimized: false,
+        optimized: true,
         icon: {
           url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(motorSvg),
-          scaledSize: new window.google.maps.Size(48, 48),
-          anchor: new window.google.maps.Point(24, 24),
+          scaledSize: new window.google.maps.Size(34, 34),
+          anchor: new window.google.maps.Point(17, 17),
         },
       });
     }
@@ -3073,16 +3054,16 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
       const dark = isDone ? "#15803d" : "#1d4ed8";
       const fs = label.length > 2 ? 8.5 : 10.5;
       // Pin sólido, sin filtros, sin animación y con tamaño fijo. Optimizado para que Google Maps no lo reescale durante zoom.
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="42" viewBox="0 0 36 42">
-        <path d="M18 40s13-11.5 13-23A13 13 0 0 0 5 17c0 11.5 13 23 13 23z" fill="${color}" stroke="rgba(255,255,255,.92)" stroke-width="1.15"/>
-        <circle cx="18" cy="17" r="10" fill="${dark}" opacity=".34"/>
-        <circle cx="18" cy="17" r="8.2" fill="${color}"/>
-        <text x="18" y="20.8" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="40" viewBox="0 0 34 40">
+        <path d="M17 38s12-10.6 12-21A12 12 0 0 0 5 17c0 10.4 12 21 12 21z" fill="" stroke="rgba(255,255,255,.95)" stroke-width="1"/>
+        <circle cx="17" cy="17" r="9.4" fill="" opacity=".30"/>
+        <circle cx="17" cy="17" r="7.6" fill=""/>
+        <text x="17" y="20.5" text-anchor="middle" font-size="" font-weight="900" fill="white" font-family="Arial, sans-serif"></text>
       </svg>`;
       const icon = {
         url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-        scaledSize: new window.google.maps.Size(36, 42),
-        anchor: new window.google.maps.Point(18, 40),
+        scaledSize: new window.google.maps.Size(34, 40),
+        anchor: new window.google.maps.Point(17, 38),
       };
       pinIconCacheRef.current[cacheKey] = icon;
       return icon;
@@ -3104,7 +3085,7 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
           position: pos,
           title: `#${stop.stopNum} ${stop.client || ""}`,
           zIndex: stop.navStatus === "visited" ? 5 : 20,
-          optimized: false,
+          optimized: true,
           clickable: true,
           icon: makeFixedPinIcon(stop),
         });
