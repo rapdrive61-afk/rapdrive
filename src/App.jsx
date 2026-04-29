@@ -5329,9 +5329,12 @@ const geocodeWithGoogle = async (rawAddress) => {
 
   // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
   const anchor = findAnchor(rawAddress);
-  const hintBounds = anchor ? new window.google.maps.LatLngBounds(
-    { lat: anchor.lat - 0.08, lng: anchor.lng - 0.08 },
-    { lat: anchor.lat + 0.08, lng: anchor.lng + 0.08 }
+  const strictAnchor = rdStrictAnchorFromText(rawAddress) || anchor;
+  const strictSectorKey = strictAnchor?.key || rdDetectSectorKey(rawAddress);
+  const boundDelta = strictAnchor ? 0.035 : 0.08;
+  const hintBounds = strictAnchor ? new window.google.maps.LatLngBounds(
+    { lat: strictAnchor.lat - boundDelta, lng: strictAnchor.lng - boundDelta },
+    { lat: strictAnchor.lat + boundDelta, lng: strictAnchor.lng + boundDelta }
   ) : null;
 
   // ── CAPA 1: Geocoding API con todas las variantes ─────────────────────────
@@ -5352,18 +5355,39 @@ const geocodeWithGoogle = async (rawAddress) => {
       // Evaluar TODOS los candidatos, quedarse con el mejor score
       const candidates = result
         .filter(r => { const l = r.geometry.location; return inRD(l.lat(), l.lng()); })
-        .map(r => ({ r, score: scoreGoogleResult(r, rawAddress) }))
+        .map(r => {
+          const l = r.geometry.location;
+          const lat = l.lat(), lng = l.lng();
+          let score = scoreGoogleResult(r, rawAddress);
+          let sectorDistKm = null;
+          if (strictAnchor) {
+            const v = rdValidateAgainstSector(lat, lng, strictAnchor, true);
+            sectorDistKm = v.distKm;
+            if (!v.ok) score -= 100;       // sector equivocado: descartar aunque Google lo ame
+            else score += Math.max(0, 28 - (v.distKm * 6)); // más cerca del sector explícito = mejor
+          }
+          const formatted = rdNorm(r.formatted_address || "");
+          const sec = rdNorm(strictSectorKey || "");
+          if (sec && formatted.includes(sec)) score += 10;
+          return { r, score, sectorDistKm };
+        })
+        .filter(x => x.score > 0)
         .sort((a, b) => b.score - a.score);
 
       if (candidates.length === 0) continue;
       const { r: top, score: conf } = candidates[0];
 
-      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
-      if (anchor) {
+      // Si el Excel trae sector explícito, ese sector manda. No aceptar saltos entre zonas.
+      if (strictAnchor) {
+        const lat = top.geometry.location.lat();
+        const lng = top.geometry.location.lng();
+        const v = rdValidateAgainstSector(lat, lng, strictAnchor, true);
+        if (!v.ok) continue;
+      } else if (anchor) {
         const dlat = top.geometry.location.lat() - anchor.lat;
         const dlng = top.geometry.location.lng() - anchor.lng;
         const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
-        if (distKm > 15) continue; // resultado random, ignorar
+        if (distKm > 12) continue;
       }
 
       if (conf > bestScore) {
@@ -5386,11 +5410,14 @@ const geocodeWithGoogle = async (rawAddress) => {
       confidence: conf,
       types: top.types || [],
       source: "geocoding_api",
-      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
+      sectorKey: strictSectorKey || "",
+      anchorName: strictAnchor?.key || "",
+      allResults: allCandidates.slice(0, 5).map(({ r, score, sectorDistKm }) => ({
         display: r.formatted_address,
         lat: r.geometry.location.lat(),
         lng: r.geometry.location.lng(),
         confidence: score,
+        sectorDistKm,
       })),
     };
     _geoCache.set(cacheKey, out);
@@ -5400,7 +5427,7 @@ const geocodeWithGoogle = async (rawAddress) => {
   // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
   try {
     const placesResult = await searchWithPlaces(rawAddress);
-    if (placesResult) {
+    if (placesResult && (!strictAnchor || rdValidateAgainstSector(placesResult.lat, placesResult.lng, strictAnchor, true).ok)) {
       _geoCache.set(cacheKey, placesResult);
       return placesResult;
     }
@@ -5423,7 +5450,11 @@ const geocodeWithGoogle = async (rawAddress) => {
       const nmData = await nm.json();
       if (!nmData?.length) continue;
 
-      const rdResults = nmData.filter(r => inRD(parseFloat(r.lat), parseFloat(r.lon)));
+      const rdResults = nmData.filter(r => {
+        const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+        if (!inRD(lat, lng)) return false;
+        return !strictAnchor || rdValidateAgainstSector(lat, lng, strictAnchor, true).ok;
+      });
       if (rdResults.length === 0) continue;
 
       const top = rdResults[0];
@@ -5457,16 +5488,17 @@ const geocodeWithGoogle = async (rawAddress) => {
   // ── CAPA 4: Fallback de anchor local (último recurso) ─────────────────────
   // Si Google y Nominatim fallaron pero detectamos el sector, devolver el anchor
   // con confianza baja para que el admin sepa que es aproximado
-  const lastAnchor = findAnchor(rawAddress);
+  const lastAnchor = strictAnchor || findAnchor(rawAddress);
   if (lastAnchor) {
     const fallbackOut = {
       ok: true,
       lat: lastAnchor.lat,
       lng: lastAnchor.lng,
       display: `${rawAddress} (aprox. ${lastAnchor.city})`,
-      confidence: 35,
+      confidence: strictAnchor ? 58 : 35,
+      sectorKey: strictSectorKey || lastAnchor.key || "",
       types: ["anchor_fallback"],
-      source: "anchor_local",
+      source: strictAnchor ? "sector_anchor_strict" : "anchor_local",
       allResults: [],
     };
     _geoCache.set(cacheKey, fallbackOut);
@@ -6209,7 +6241,10 @@ const rdBaseDistanceBonus = (lat, lng) => {
   return 0;
 };
 const rdBuildStrictStopQuery = (raw, sector, ciudad, provincia, cp, addr2="") => {
-  const clean = [raw, sector, ciudad, provincia, cp].filter(Boolean).join(", ");
+  const strictSector = rdDetectSectorKey([sector, raw, addr2].filter(Boolean).join(" "));
+  const sectorText = strictSector ? strictSector.replace(/\w/g, c => c.toUpperCase()) : sector;
+  const cityHint = ciudad || (rdAnchorForSectorKey(strictSector)?.city) || "Santo Domingo";
+  const clean = [raw, sectorText, cityHint, provincia, cp].filter(Boolean).join(", ");
   const ref = addr2 ? ` referencia ${addr2}` : "";
   return `${clean}${ref}`.replace(/\s+/g," ").trim();
 };
@@ -6318,124 +6353,102 @@ const optimizeRouteLocal = (stops) => {
   const valid   = stops.filter(s => s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng));
   const invalid = stops.filter(s => !(s.lat != null && s.lng != null && isFinite(s.lat) && isFinite(s.lng)));
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
-  if (valid.length === 1) return [{ ...valid[0], stopNum: 1 }, ...invalid.map(s => ({ ...s, stopNum: null }))];
 
   const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
-  const centroid = (idxArr) => ({
-    lat: idxArr.reduce((s, i) => s + valid[i].lat, 0) / idxArr.length,
-    lng: idxArr.reduce((s, i) => s + valid[i].lng, 0) / idxArr.length,
+  const centroidOf = (arr) => ({
+    lat: arr.reduce((sum,s)=>sum + Number(s.lat),0) / arr.length,
+    lng: arr.reduce((sum,s)=>sum + Number(s.lng),0) / arr.length,
   });
 
-  // PASO 1: Clustering geográfico greedy
-  const clusters = [];
-  valid.forEach((stop, si) => {
-    let bestCluster = -1, bestDist = CLUSTER_KM;
-    clusters.forEach((cl, ci) => {
-      const d = hav(stop, centroid(cl));
-      if (d < bestDist) { bestDist = d; bestCluster = ci; }
-    });
-    if (bestCluster === -1) clusters.push([si]);
-    else clusters[bestCluster].push(si);
-  });
-
-  // PASO 1b: Fusionar outliers solitarios con el cluster más cercano
-  // Un cluster de 1 sola parada a >3km de cualquier otro es un "outlier excursión".
-  // En vez de visitarlo por separado (crea zigzag), se fusiona con el cluster
-  // más cercano para que quede de paso en esa zona.
-  const OUTLIER_MERGE_KM = 3.5; // si está a menos de esto del cluster más cercano, fusionar
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let ci = 0; ci < clusters.length; ci++) {
-      if (clusters[ci].length > 1) continue; // solo outliers solitarios
-      const c = centroid(clusters[ci]);
-      let bestOther = -1, bestDist = Infinity;
-      clusters.forEach((cl, oi) => {
-        if (oi === ci) return;
-        const d = hav(c, centroid(cl));
-        if (d < bestDist) { bestDist = d; bestOther = oi; }
+  const nearestTour = (arr, entry) => {
+    const rem = [...arr];
+    const out = [];
+    let cur = entry;
+    while (rem.length) {
+      let best = 0, bestD = Infinity;
+      rem.forEach((s,i)=>{
+        const d = hav(cur, s);
+        if (d < bestD) { bestD = d; best = i; }
       });
-      if (bestOther >= 0 && bestDist < OUTLIER_MERGE_KM) {
-        clusters[bestOther].push(...clusters[ci]);
-        clusters.splice(ci, 1);
-        changed = true;
-        break;
-      }
+      const n = rem.splice(best,1)[0];
+      out.push(n); cur = n;
     }
-  }
-
-  // PASO 2: Ordenar clusters desde DEPOT (NN entre centroides)
-  let remClusters = clusters.map((_, ci) => ci);
-  const ordClusters = [];
-  let curPoint = depot;
-  while (remClusters.length) {
-    let bestPos = 0, bestDist = Infinity;
-    remClusters.forEach((ci, pos) => {
-      const d = hav(curPoint, centroid(clusters[ci]));
-      if (d < bestDist) { bestDist = d; bestPos = pos; }
-    });
-    const chosen = remClusters.splice(bestPos, 1)[0];
-    ordClusters.push(chosen);
-    curPoint = centroid(clusters[chosen]);
-  }
-
-  // PASO 3: NN dentro de cada cluster desde punto de entrada
-  let tour = [];
-  let entryPt = depot;
-  ordClusters.forEach(ci => {
-    let remStops = [...clusters[ci]];
-    const clTour = [];
-    while (remStops.length) {
-      let bestPos = 0, bestDist = Infinity;
-      remStops.forEach((si, pos) => {
-        const d = hav(entryPt, valid[si]);
-        if (d < bestDist) { bestDist = d; bestPos = pos; }
-      });
-      const chosen = remStops.splice(bestPos, 1)[0];
-      clTour.push(valid[chosen]);
-      entryPt = valid[chosen];
-    }
-    tour = tour.concat(clTour);
-  });
-
-  // PASO 4: 2-opt global
-  let improved = true, iterations = 0;
-  while (improved && iterations < 150) {
-    improved = false; iterations++;
-    for (let i = 0; i < tour.length - 1; i++) {
-      for (let j = i + 1; j < tour.length; j++) {
-        const A = i === 0 ? depot : tour[i-1], B = tour[i];
-        const C = tour[j], D = j+1 < tour.length ? tour[j+1] : depot;
-        if (hav(A, C) + hav(B, D) < hav(A, B) + hav(C, D) - 0.001) {
-          let l = i, r = j;
-          while (l < r) { [tour[l], tour[r]] = [tour[r], tour[l]]; l++; r--; }
-          improved = true;
+    // 2-opt SOLO dentro de esta zona. No mezclar sectores ya ordenados.
+    let improved = true, loops = 0;
+    while (improved && loops < 60) {
+      improved = false; loops++;
+      for (let i=0; i<out.length-1; i++) {
+        for (let j=i+1; j<out.length; j++) {
+          const A = i===0 ? entry : out[i-1], B = out[i];
+          const C = out[j], D = j+1<out.length ? out[j+1] : null;
+          const oldD = hav(A,B) + (D ? hav(C,D) : 0);
+          const newD = hav(A,C) + (D ? hav(B,D) : 0);
+          if (newD < oldD - 0.001) {
+            let l=i, r=j;
+            while(l<r){ [out[l],out[r]]=[out[r],out[l]]; l++; r--; }
+            improved = true;
+          }
         }
       }
     }
+    return out;
+  };
+
+  // PASO 1: sectores explícitos primero. Esto evita Girasoles → Ríos → Girasoles.
+  const explicitGroups = new Map();
+  const unknown = [];
+  valid.forEach(stop => {
+    const key = rdSectorKeyForStop(stop);
+    if (key && key !== "sin-sector") {
+      if (!explicitGroups.has(key)) explicitGroups.set(key, []);
+      explicitGroups.get(key).push({ ...stop, sectorKey: key });
+    } else {
+      unknown.push(stop);
+    }
+  });
+
+  // PASO 2: para direcciones sin sector claro, cluster geográfico pequeño.
+  const geoClusters = [];
+  unknown.forEach(stop => {
+    let best = -1, bestD = 1.15; // radio más pequeño para no mezclar barrios cercanos
+    geoClusters.forEach((cl,ci)=>{
+      const d = hav(stop, centroidOf(cl));
+      if (d < bestD) { bestD = d; best = ci; }
+    });
+    if (best === -1) geoClusters.push([stop]);
+    else geoClusters[best].push(stop);
+  });
+
+  const blocks = [];
+  explicitGroups.forEach((arr,key)=>{
+    const anchor = rdAnchorForSectorKey(key);
+    blocks.push({ key, stops: arr, centroid: anchor || centroidOf(arr), explicit:true });
+  });
+  geoClusters.forEach((arr,i)=>blocks.push({ key:`geo-${i}`, stops:arr, centroid:centroidOf(arr), explicit:false }));
+
+  // PASO 3: ordenar bloques desde DEPOT. Una vez se entra a un sector, se completa ese sector.
+  const remBlocks = [...blocks];
+  const orderedBlocks = [];
+  let cur = depot;
+  while (remBlocks.length) {
+    let best=0, bestD=Infinity;
+    remBlocks.forEach((b,i)=>{
+      const d = hav(cur, b.centroid);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    const chosen = remBlocks.splice(best,1)[0];
+    orderedBlocks.push(chosen);
+    cur = chosen.centroid;
   }
 
-  // PASO 5: Or-opt (mover nodos individuales)
-  let orImproved = true, orIter = 0;
-  while (orImproved && orIter < 30) {
-    orImproved = false; orIter++;
-    for (let i = 0; i < tour.length; i++) {
-      const node = tour[i], prev = i === 0 ? depot : tour[i-1], next = i === tour.length-1 ? depot : tour[i+1];
-      const removeCost = hav(prev, node) + hav(node, next) - hav(prev, next);
-      let bestGain = 0.001, bestJ = -1;
-      for (let j = 0; j < tour.length; j++) {
-        if (j === i || j === i-1) continue;
-        const a = tour[j], b = j+1 < tour.length ? tour[j+1] : depot;
-        const gain = removeCost - (hav(a, node) + hav(node, b) - hav(a, b));
-        if (gain > bestGain) { bestGain = gain; bestJ = j; }
-      }
-      if (bestJ >= 0) {
-        const removed = tour.splice(i, 1)[0];
-        tour.splice(bestJ > i ? bestJ : bestJ+1, 0, removed);
-        orImproved = true; break;
-      }
-    }
-  }
+  // PASO 4: optimizar dentro de cada bloque solamente.
+  let tour = [];
+  let entry = depot;
+  orderedBlocks.forEach(block => {
+    const inside = nearestTour(block.stops, entry).map(s => ({ ...s, sectorKey: block.key }));
+    tour = tour.concat(inside);
+    if (inside.length) entry = inside[inside.length-1];
+  });
 
   return [
     ...tour.map((s, i) => ({ ...s, stopNum: i+1 })),
@@ -6985,6 +6998,8 @@ const ImportModal = ({ onClose, onImported }) => {
             stop.displayAddr = r.display || rawAddr;
             stop.confidence  = r.confidence;
             stop.allResults  = r.allResults || [];
+            stop.sectorKey   = r.sectorKey || rdSectorKeyForStop(stop);
+            stop.geoSource   = r.source || "geocoder";
             stop.geocoded    = true;
             stop.status      = r.confidence >= 70 ? "ok" : "warning";
             stop.issue       = r.confidence < 70 ? "Confianza baja — verifica en mapa" : null;
@@ -8146,6 +8161,113 @@ const SDO_ANCHORS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MOTOR RD STRICT SECTOR v23
+// El sector del Excel es una RESTRICCIÓN fuerte: si dice Los Girasoles,
+// el motor no debe aceptar un resultado en Herrera, Bayona ni otro sector.
+// Si falla la calle exacta, cae al anchor del sector para que el admin corrija,
+// pero nunca manda el paquete a un sector equivocado.
+// ─────────────────────────────────────────────────────────────────────────────
+Object.assign(SDO_ANCHORS, {
+  // Puntos / residenciales frecuentes para guiar geocoding local
+  "residencial los girasoles":       { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
+  "res los girasoles":               { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
+  "girasoles":                       { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
+  "avenida monumental los girasoles":{ lat: 18.5305, lng: -69.9960, city: "Distrito Nacional" },
+  "av monumental los girasoles":     { lat: 18.5305, lng: -69.9960, city: "Distrito Nacional" },
+  "supermercado bravo monumental":   { lat: 18.5307, lng: -69.9958, city: "Distrito Nacional" },
+  "residencial monumental":          { lat: 18.5320, lng: -69.9965, city: "Distrito Nacional" },
+  "colinas de los rios":             { lat: 18.5085, lng: -69.9810, city: "Distrito Nacional" },
+  "residencial colinas de los rios": { lat: 18.5085, lng: -69.9810, city: "Distrito Nacional" },
+  "los rios":                        { lat: 18.5058, lng: -69.9758, city: "Distrito Nacional" },
+  "los ríos":                        { lat: 18.5058, lng: -69.9758, city: "Distrito Nacional" },
+  "supermercado nacional los rios":  { lat: 18.5056, lng: -69.9737, city: "Distrito Nacional" },
+  "iglesia los rios":                { lat: 18.5062, lng: -69.9756, city: "Distrito Nacional" },
+  "parque los rios":                 { lat: 18.5060, lng: -69.9764, city: "Distrito Nacional" },
+  "cristo rey":                      { lat: 18.4960, lng: -69.9530, city: "Distrito Nacional" },
+  "la 40 cristo rey":                { lat: 18.4970, lng: -69.9540, city: "Distrito Nacional" },
+  "la 41 cristo rey":                { lat: 18.4965, lng: -69.9550, city: "Distrito Nacional" },
+  "plaza isabel aguiar":             { lat: 18.4925, lng: -70.0055, city: "Santo Domingo Oeste" },
+  "hospital marcelino velez":        { lat: 18.4866, lng: -70.0082, city: "Santo Domingo Oeste" },
+  "hospital marcelino velez santana":{ lat: 18.4866, lng: -70.0082, city: "Santo Domingo Oeste" },
+  "plaza duarte herrera":            { lat: 18.4876, lng: -70.0052, city: "Santo Domingo Oeste" },
+  "price smart herrera":             { lat: 18.4824, lng: -70.0215, city: "Santo Domingo Oeste" },
+  "pricesmart herrera":              { lat: 18.4824, lng: -70.0215, city: "Santo Domingo Oeste" },
+});
+
+const rdNorm = (txt="") => String(txt || "")
+  .toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9\s]/g, " ")
+  .replace(/\b(?:sector|ensanche|ens|residencial|res|urb|urbanizacion|barrio|reparto)\b/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const RD_SECTOR_ALIASES = [
+  ["los girasoles iii", ["los girasoles iii", "girasoles iii", "girasoles 3", "girasoles tercero"]],
+  ["los girasoles ii",  ["los girasoles ii", "girasoles ii", "girasoles 2", "girasoles segundo"]],
+  ["los girasoles i",   ["los girasoles i", "los girasoles", "girasoles i", "girasoles 1", "girasoles"]],
+  ["los rios",          ["los rios", "los ríos", "colinas de los rios", "colinas de los ríos"]],
+  ["cristo rey",        ["cristo rey", "cmdo", "cristo rey dn"]],
+  ["arroyo hondo",      ["arroyo hondo", "altos de arroyo hondo"]],
+  ["arroyo manzano",    ["arroyo manzano"]],
+  ["ciudad real",       ["ciudad real", "ciudad real ii", "ciudad real 2"]],
+  ["villa marina",      ["villa marina"]],
+  ["herrera",           ["herrera", "buenos aires de herrera", "zona industrial herrera", "el cafe de herrera", "las palmas de herrera"]],
+  ["las caobas",        ["las caobas", "las caobitas", "altos de las caobas"]],
+  ["bayona",            ["bayona", "el 8 de bayona", "la venta"]],
+  ["manoguayabo",       ["manoguayabo", "buenos aires de manoguayabo"]],
+  ["engombe",           ["engombe", "altos de engombe"]],
+  ["los alcarrizos",    ["los alcarrizos", "alcarrizos"]],
+  ["pantoja",           ["pantoja"]],
+  ["naco",              ["naco"]],
+  ["piantini",          ["piantini"]],
+  ["bella vista",       ["bella vista"]],
+];
+
+const rdDetectSectorKey = (txt="") => {
+  const t = rdNorm(txt);
+  if (!t) return "";
+  for (const [canonical, aliases] of RD_SECTOR_ALIASES) {
+    if (aliases.some(a => t.includes(rdNorm(a)))) return canonical;
+  }
+  const keys = Object.keys(SDO_ANCHORS).sort((a,b)=>b.length-a.length);
+  for (const k of keys) if (t.includes(rdNorm(k))) return rdNorm(k);
+  return "";
+};
+
+const rdAnchorForSectorKey = (key="") => {
+  const k = rdNorm(key);
+  if (!k) return null;
+  if (SDO_ANCHORS[k]) return { ...SDO_ANCHORS[k], key:k };
+  for (const [canonical, aliases] of RD_SECTOR_ALIASES) {
+    if (canonical === k || aliases.map(rdNorm).includes(k)) {
+      const anchor = SDO_ANCHORS[canonical] || SDO_ANCHORS[rdNorm(aliases[0])] || null;
+      return anchor ? { ...anchor, key: canonical } : null;
+    }
+  }
+  return null;
+};
+
+const rdStrictAnchorFromText = (txt="") => {
+  const key = rdDetectSectorKey(txt);
+  const anchor = rdAnchorForSectorKey(key);
+  return anchor ? { ...anchor, key } : null;
+};
+
+const rdKm = (a,b) => hav(a,b);
+const RD_STRICT_SECTOR_RADIUS_KM = 4.2;     // no permitir cambiar de sector en direcciones explícitas
+const RD_STRICT_LANDMARK_RADIUS_KM = 2.4;   // POIs/residenciales conocidos son más precisos
+
+const rdValidateAgainstSector = (lat, lng, anchor, strict=true) => {
+  if (!anchor) return { ok:true, distKm:0 };
+  const d = rdKm({lat,lng}, anchor);
+  const radius = strict ? RD_STRICT_SECTOR_RADIUS_KM : 9.0;
+  return { ok: d <= radius, distKm: d };
+};
+
+const rdSectorKeyForStop = (s) => rdDetectSectorKey([s?.sector, s?.rawAddr, s?.displayAddr, s?.notes, s?.addr2].filter(Boolean).join(" ")) || "sin-sector";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NIVEL 3: CACHE DE APRENDIZAJE PERSISTENTE
 // Cuando el admin corrige manualmente una dirección, la corrección se guarda
 // en Firebase y se usa en futuras geocodificaciones de la misma dirección.
@@ -8203,6 +8325,7 @@ const inRD = (lat, lng) => lat >= RD_BOUNDS.south && lat <= RD_BOUNDS.north && l
 // Encuentra landmarks, negocios y sectores informales que el Geocoder no resuelve
 const searchWithPlaces = async (rawAddress) => {
   await loadGoogleMaps();
+  const strictAnchor = rdStrictAnchorFromText(rawAddress);
   const service = new window.google.maps.places.PlacesService(
     document.createElement("div")
   );
@@ -8230,7 +8353,8 @@ const searchWithPlaces = async (rawAddress) => {
         if (!loc) return false;
         const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
         const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
-        return inRD(lat, lng);
+        if (!inRD(lat, lng)) return false;
+        return !strictAnchor || rdValidateAgainstSector(lat, lng, strictAnchor, true).ok;
       });
 
       if (valid.length > 0) {
@@ -8411,6 +8535,8 @@ const CircuitEngine = () => {
             if (r.ok) {
               stop.lat = r.lat; stop.lng = r.lng; stop.displayAddr = r.display;
               stop.confidence = r.confidence; stop.allResults = r.allResults;
+              stop.sectorKey = r.sectorKey || rdSectorKeyForStop(stop);
+              stop.geoSource = r.source || "geocoder";
               stop.status = r.confidence >= 70 ? "ok" : "warning";
               stop.issue  = r.confidence < 70 ? "Confianza baja - verifica" : null;
             } else {
