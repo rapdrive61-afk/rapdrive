@@ -5425,7 +5425,19 @@ const geocodeWithGoogle = async (rawAddress) => {
   }
 
   // ── CAPA 2: Places Text Search (landmarks, negocios, sectores informales) ──
+  // V24: si la calle exacta no aparece, usar Dirección 2 como punto de referencia fuerte
+  // dentro del mismo sector. Ej: "Frente al colegio Arcoiris" + "El Palmar de Herrera".
   try {
+    const placesQueries = rdBuildSectorReferenceQueries(rawAddress);
+    for (const pq of placesQueries) {
+      const placesResult = await searchWithPlaces(pq);
+      if (placesResult && (!strictAnchor || rdValidateAgainstSector(placesResult.lat, placesResult.lng, strictAnchor, true).ok)) {
+        placesResult.source = placesResult.source || "places_reference_sector";
+        placesResult.sectorKey = strictSectorKey || placesResult.sectorKey || "";
+        _geoCache.set(cacheKey, placesResult);
+        return placesResult;
+      }
+    }
     const placesResult = await searchWithPlaces(rawAddress);
     if (placesResult && (!strictAnchor || rdValidateAgainstSector(placesResult.lat, placesResult.lng, strictAnchor, true).ok)) {
       _geoCache.set(cacheKey, placesResult);
@@ -5495,7 +5507,7 @@ const geocodeWithGoogle = async (rawAddress) => {
       lat: lastAnchor.lat,
       lng: lastAnchor.lng,
       display: `${rawAddress} (aprox. ${lastAnchor.city})`,
-      confidence: strictAnchor ? 58 : 35,
+      confidence: strictAnchor ? (rdExtractReferenceFromQuery(rawAddress) ? 63 : 58) : 35,
       sectorKey: strictSectorKey || lastAnchor.key || "",
       types: ["anchor_fallback"],
       source: strictAnchor ? "sector_anchor_strict" : "anchor_local",
@@ -5517,6 +5529,10 @@ const buildQueryVariants = (raw) => {
 
   const expanded = expandRDAddress(s);
   const variants = new Set();
+
+  // V24: primero probar combinaciones del Excel: dirección + sector + dirección2/referencia.
+  // Esto evita que una calle básica termine en otro sector cuando Google conoce otra con el mismo nombre.
+  rdBuildSectorReferenceQueries(s).forEach(q => variants.add(q));
 
   // ── Usar query optimizada del parser dominicano como variante prioritaria ──
   const parsed = parseAddress(s);
@@ -6129,7 +6145,7 @@ const scoreGoogleResult = (result, original) => {
   }
 
   // Bonus: resultado tiene número de calle cuando el original también lo tiene
-  const numInOrig = (original || "").match(/\d{1,4}/g);
+  const numInOrig = (original || "").match(/\b\d{1,4}\b/g);
   if (numInOrig) {
     const anyMatch = numInOrig.some(n => addr.includes(n));
     if (anyMatch) score = Math.min(score + 3, 99);
@@ -6242,11 +6258,53 @@ const rdBaseDistanceBonus = (lat, lng) => {
 };
 const rdBuildStrictStopQuery = (raw, sector, ciudad, provincia, cp, addr2="") => {
   const strictSector = rdDetectSectorKey([sector, raw, addr2].filter(Boolean).join(" "));
-  const sectorText = strictSector ? strictSector.replace(/\w/g, c => c.toUpperCase()) : sector;
+  const sectorText = strictSector ? strictSector.replace(/\b\w/g, c => c.toUpperCase()) : sector;
   const cityHint = ciudad || (rdAnchorForSectorKey(strictSector)?.city) || "Santo Domingo";
-  const clean = [raw, sectorText, cityHint, provincia, cp].filter(Boolean).join(", ");
-  const ref = addr2 ? ` referencia ${addr2}` : "";
-  return `${clean}${ref}`.replace(/\s+/g," ").trim();
+  // V24: la dirección del Excel manda, el sector bloquea la zona, Dirección 2 es referencia fuerte.
+  const main = [raw, sectorText, cityHint, provincia, cp].filter(Boolean).join(", ");
+  const ref = addr2 ? ` referencia: ${addr2}` : "";
+  return `${main}${ref}`.replace(/\s+/g," ").trim();
+};
+
+const rdExtractReferenceText = (txt="") => {
+  let t = String(txt || "").trim();
+  if (!t) return "";
+  t = t.replace(/^referencia\s*:?\s*/i, "").trim();
+  t = t.replace(/^(?:al\s+lado\s+de(?:l|\s+la)?|frente\s+a(?:l)?|detr[aá]s\s+de(?:l)?|cerca\s+de(?:l)?|pr[oó]ximo\s+a(?:l)?|proximo\s+a(?:l)?|ubicado\s+detr[aá]s\s+de(?:l)?|en\s+frente\s+de(?:l)?)\s+/i, "");
+  return t.replace(/\s+/g," ").trim();
+};
+
+const rdExtractReferenceFromQuery = (raw="") => {
+  const s = String(raw || "");
+  const refMatch = s.match(/referencia\s*:\s*(.+)$/i);
+  if (refMatch?.[1]) return rdExtractReferenceText(refMatch[1]);
+  for (const pat of RD_REF_PATTERNS) {
+    pat.lastIndex = 0;
+    const m = pat.exec(s);
+    if (m?.[1]) return rdExtractReferenceText(m[1]);
+  }
+  return "";
+};
+
+const rdCleanPrimaryAddress = (raw="") => String(raw || "").replace(/referencia\s*:\s*.+$/i, "").replace(/\s+/g," ").trim();
+
+const rdBuildSectorReferenceQueries = (raw="") => {
+  const original = String(raw || "").trim();
+  if (!original) return [];
+  const primary = rdCleanPrimaryAddress(original);
+  const reference = rdExtractReferenceFromQuery(original);
+  const sectorKey = rdDetectSectorKey(original);
+  const anchor = rdAnchorForSectorKey(sectorKey);
+  const sectorText = sectorKey ? sectorKey.replace(/\b\w/g, c => c.toUpperCase()) : "";
+  const city = anchor?.city || (/distrito nacional/i.test(original) ? "Distrito Nacional" : "Santo Domingo");
+  const out = [];
+  if (primary && sectorText && reference) out.push(`${primary}, ${sectorText}, ${city}, cerca de ${reference}, República Dominicana`);
+  if (reference && sectorText) out.push(`${reference}, ${sectorText}, ${city}, República Dominicana`);
+  if (primary && sectorText) out.push(`${primary}, ${sectorText}, ${city}, República Dominicana`);
+  if (reference) out.push(`${reference}, ${city}, República Dominicana`);
+  if (primary) out.push(`${primary}, ${city}, República Dominicana`);
+  if (sectorText) out.push(`${sectorText}, ${city}, República Dominicana`);
+  return [...new Set(out.map(x => x.replace(/\s+/g," ").trim()).filter(Boolean))];
 };
 
 // --- ROUTES API v2 — WAYPOINT OPTIMIZER REAL ---------------------------------
@@ -8168,6 +8226,24 @@ const SDO_ANCHORS = {
 // pero nunca manda el paquete a un sector equivocado.
 // ─────────────────────────────────────────────────────────────────────────────
 Object.assign(SDO_ANCHORS, {
+  // V24: POIs/residenciales/negocios usados como referencia real por clientes
+  "gbc los rios":                     { lat: 18.5059, lng: -69.9757, city: "Distrito Nacional" },
+  "gbc de los rios":                  { lat: 18.5059, lng: -69.9757, city: "Distrito Nacional" },
+  "colegio mi nido de amor":          { lat: 18.5062, lng: -69.9760, city: "Distrito Nacional" },
+  "mr signs publicitaria":            { lat: 18.5320, lng: -69.9967, city: "Distrito Nacional" },
+  "mr signs":                         { lat: 18.5320, lng: -69.9967, city: "Distrito Nacional" },
+  "avenida telforo jaime":            { lat: 18.5328, lng: -69.9974, city: "Distrito Nacional" },
+  "calle mariano nunez":              { lat: 18.5326, lng: -69.9971, city: "Distrito Nacional" },
+  "calle mariano núñez":              { lat: 18.5326, lng: -69.9971, city: "Distrito Nacional" },
+  "residencial cumbre del paraiso":   { lat: 18.5316, lng: -69.9978, city: "Distrito Nacional" },
+  "cumbre del paraiso":               { lat: 18.5316, lng: -69.9978, city: "Distrito Nacional" },
+  "las orquideas":                    { lat: 18.5312, lng: -69.9972, city: "Distrito Nacional" },
+  "las orquideas n 3":                { lat: 18.5312, lng: -69.9972, city: "Distrito Nacional" },
+  "el palmar de herrera":             { lat: 18.4898, lng: -70.0135, city: "Santo Domingo Oeste" },
+  "palmar de herrera":                { lat: 18.4898, lng: -70.0135, city: "Santo Domingo Oeste" },
+  "calle respaldo jose reyes":        { lat: 18.4899, lng: -70.0131, city: "Santo Domingo Oeste" },
+  "colegio arcoiris azul":            { lat: 18.4897, lng: -70.0133, city: "Santo Domingo Oeste" },
+  "colegio arcoiris":                 { lat: 18.4897, lng: -70.0133, city: "Santo Domingo Oeste" },
   // Puntos / residenciales frecuentes para guiar geocoding local
   "residencial los girasoles":       { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
   "res los girasoles":               { lat: 18.5325, lng: -69.9980, city: "Distrito Nacional" },
@@ -8212,6 +8288,7 @@ const RD_SECTOR_ALIASES = [
   ["arroyo manzano",    ["arroyo manzano"]],
   ["ciudad real",       ["ciudad real", "ciudad real ii", "ciudad real 2"]],
   ["villa marina",      ["villa marina"]],
+  ["el palmar de herrera", ["el palmar de herrera", "palmar de herrera", "respaldo jose reyes", "colegio arcoiris azul"]],
   ["herrera",           ["herrera", "buenos aires de herrera", "zona industrial herrera", "el cafe de herrera", "las palmas de herrera"]],
   ["las caobas",        ["las caobas", "las caobitas", "altos de las caobas"]],
   ["bayona",            ["bayona", "el 8 de bayona", "la venta"]],
@@ -8255,7 +8332,7 @@ const rdStrictAnchorFromText = (txt="") => {
 };
 
 const rdKm = (a,b) => hav(a,b);
-const RD_STRICT_SECTOR_RADIUS_KM = 4.2;     // no permitir cambiar de sector en direcciones explícitas
+const RD_STRICT_SECTOR_RADIUS_KM = 2.8;     // no permitir cambiar de sector en direcciones explícitas
 const RD_STRICT_LANDMARK_RADIUS_KM = 2.4;   // POIs/residenciales conocidos son más precisos
 
 const rdValidateAgainstSector = (lat, lng, anchor, strict=true) => {
@@ -8334,17 +8411,21 @@ const searchWithPlaces = async (rawAddress) => {
     { lat: RD_BOUNDS.north, lng: RD_BOUNDS.east }
   );
 
-  // Intentar varias queries: expandida, raw, y simplificada
+  // Intentar varias queries: referencia+sector, expandida, raw y simplificada
   const queries = [
+    ...rdBuildSectorReferenceQueries(rawAddress),
     expandRDAddress(rawAddress) + ", República Dominicana",
     rawAddress + ", Santo Domingo, República Dominicana",
     rawAddress.split(",")[0].trim() + ", Santo Domingo",
-  ];
+  ].filter(Boolean);
 
   for (const query of queries) {
     try {
       const results = await new Promise((res, rej) =>
-        service.textSearch({ query, bounds: rdBounds, region: "do" },
+        service.textSearch({ query, bounds: strictAnchor ? new window.google.maps.LatLngBounds(
+            { lat: strictAnchor.lat - 0.018, lng: strictAnchor.lng - 0.018 },
+            { lat: strictAnchor.lat + 0.018, lng: strictAnchor.lng + 0.018 }
+          ) : rdBounds, region: "do" },
           (r, s) => (s === "OK" || s === "ZERO_RESULTS") ? res(r || []) : rej(s))
       );
 
