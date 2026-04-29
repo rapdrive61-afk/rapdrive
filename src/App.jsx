@@ -6413,62 +6413,65 @@ const optimizeRouteLocal = (stops) => {
   if (valid.length === 0) return invalid.map(s => ({ ...s, stopNum: null }));
 
   const depot = { lat: DEPOT.lat, lng: DEPOT.lng };
+
+  // V25 — MOTOR POR SECUENCIA REAL DE ENTREGA.
+  // Regla de oro: Base → completar sector completo → saltar al próximo sector.
+  // No hay 2-opt global ni reordenamiento entre sectores, porque eso provocaba
+  // Girasoles → Ríos → Girasoles y rompía la lógica real del mensajero.
+  const normalizeClusterKey = (stop) => {
+    const excelSector = rdDetectSectorKey(stop?.sector || "");
+    if (excelSector) return excelSector;
+    const detected = rdSectorKeyForStop(stop);
+    if (detected && detected !== "sin-sector") return detected;
+    return "sin-sector";
+  };
+
   const centroidOf = (arr) => ({
     lat: arr.reduce((sum,s)=>sum + Number(s.lat),0) / arr.length,
     lng: arr.reduce((sum,s)=>sum + Number(s.lng),0) / arr.length,
   });
 
-  const nearestTour = (arr, entry) => {
+  const distanceFromPointToBlock = (point, block) => {
+    // Elegir el próximo sector por su parada más cercana al punto actual,
+    // no por centroide genérico. Eso evita saltos raros al borde del sector.
+    return Math.min(...block.stops.map(s => hav(point, s)));
+  };
+
+  const nearestTourStrict = (arr, entry) => {
     const rem = [...arr];
     const out = [];
     let cur = entry;
     while (rem.length) {
-      let best = 0, bestD = Infinity;
+      let best = 0;
+      let bestD = Infinity;
       rem.forEach((s,i)=>{
         const d = hav(cur, s);
         if (d < bestD) { bestD = d; best = i; }
       });
       const n = rem.splice(best,1)[0];
-      out.push(n); cur = n;
-    }
-    // 2-opt SOLO dentro de esta zona. No mezclar sectores ya ordenados.
-    let improved = true, loops = 0;
-    while (improved && loops < 60) {
-      improved = false; loops++;
-      for (let i=0; i<out.length-1; i++) {
-        for (let j=i+1; j<out.length; j++) {
-          const A = i===0 ? entry : out[i-1], B = out[i];
-          const C = out[j], D = j+1<out.length ? out[j+1] : null;
-          const oldD = hav(A,B) + (D ? hav(C,D) : 0);
-          const newD = hav(A,C) + (D ? hav(B,D) : 0);
-          if (newD < oldD - 0.001) {
-            let l=i, r=j;
-            while(l<r){ [out[l],out[r]]=[out[r],out[l]]; l++; r--; }
-            improved = true;
-          }
-        }
-      }
+      out.push(n);
+      cur = n;
     }
     return out;
   };
 
-  // PASO 1: sectores explícitos primero. Esto evita Girasoles → Ríos → Girasoles.
-  const explicitGroups = new Map();
-  const unknown = [];
+  // 1) Agrupar por sector real del Excel / dirección.
+  const sectorGroups = new Map();
+  const noSector = [];
   valid.forEach(stop => {
-    const key = rdSectorKeyForStop(stop);
+    const key = normalizeClusterKey(stop);
     if (key && key !== "sin-sector") {
-      if (!explicitGroups.has(key)) explicitGroups.set(key, []);
-      explicitGroups.get(key).push({ ...stop, sectorKey: key });
+      if (!sectorGroups.has(key)) sectorGroups.set(key, []);
+      sectorGroups.get(key).push({ ...stop, sectorKey: key, clusterKey: key });
     } else {
-      unknown.push(stop);
+      noSector.push({ ...stop, sectorKey: "sin-sector", clusterKey: "sin-sector" });
     }
   });
 
-  // PASO 2: para direcciones sin sector claro, cluster geográfico pequeño.
+  // 2) Para paquetes sin sector, micro-clusters por cercanía. Radio bajo para no mezclar barrios.
   const geoClusters = [];
-  unknown.forEach(stop => {
-    let best = -1, bestD = 1.15; // radio más pequeño para no mezclar barrios cercanos
+  noSector.forEach(stop => {
+    let best = -1, bestD = 0.85;
     geoClusters.forEach((cl,ci)=>{
       const d = hav(stop, centroidOf(cl));
       if (d < bestD) { bestD = d; best = ci; }
@@ -6478,50 +6481,68 @@ const optimizeRouteLocal = (stops) => {
   });
 
   const blocks = [];
-  explicitGroups.forEach((arr,key)=>{
+  sectorGroups.forEach((arr,key)=>{
     const anchor = rdAnchorForSectorKey(key);
-    blocks.push({ key, stops: arr, centroid: anchor || centroidOf(arr), explicit:true });
+    blocks.push({
+      key,
+      label: key,
+      stops: arr,
+      anchor: anchor || centroidOf(arr),
+      explicit: true,
+      distToDepot: Math.min(...arr.map(s => hav(depot, s))),
+    });
   });
-  geoClusters.forEach((arr,i)=>blocks.push({ key:`geo-${i}`, stops:arr, centroid:centroidOf(arr), explicit:false }));
+  geoClusters.forEach((arr,i)=>blocks.push({
+    key:`geo-${i}`,
+    label:`geo-${i}`,
+    stops: arr,
+    anchor: centroidOf(arr),
+    explicit: false,
+    distToDepot: Math.min(...arr.map(s => hav(depot, s))),
+  }));
 
-  // PASO 3: ordenar bloques desde DEPOT. Una vez se entra a un sector, se completa ese sector.
-  const remBlocks = [...blocks];
+  // 3) Ordenar sectores desde base; al terminar uno, buscar el próximo sector más cercano
+  // desde la última parada real, no volver atrás ni mezclar sectores pendientes.
+  const remBlocks = [...blocks].sort((a,b)=>a.distToDepot-b.distToDepot);
   const orderedBlocks = [];
   let cur = depot;
   while (remBlocks.length) {
-    let best=0, bestD=Infinity;
+    let best = 0, bestD = Infinity;
     remBlocks.forEach((b,i)=>{
-      const d = hav(cur, b.centroid);
-      if (d < bestD) { bestD = d; best = i; }
+      const d = distanceFromPointToBlock(cur, b);
+      const adjusted = d - (b.explicit ? 0.05 : 0);
+      if (adjusted < bestD) { bestD = adjusted; best = i; }
     });
     const chosen = remBlocks.splice(best,1)[0];
     orderedBlocks.push(chosen);
-    cur = chosen.centroid;
+    const preview = nearestTourStrict(chosen.stops, cur);
+    cur = preview[preview.length - 1] || chosen.anchor;
   }
 
-  // PASO 4: optimizar dentro de cada bloque solamente.
+  // 4) Dentro de cada sector: primer paquete más cerca del punto actual, luego vecino más cercano
+  // hasta completar TODO ese sector. Sin 2-opt para no romper secuencia de calle.
   let tour = [];
   let entry = depot;
   orderedBlocks.forEach(block => {
-    const inside = nearestTour(block.stops, entry).map(s => ({ ...s, sectorKey: block.key }));
+    const inside = nearestTourStrict(block.stops, entry).map(s => ({ ...s, sectorKey: block.key, clusterKey: block.key }));
     tour = tour.concat(inside);
-    if (inside.length) entry = inside[inside.length-1];
+    if (inside.length) entry = inside[inside.length - 1];
   });
 
   return [
-    ...tour.map((s, i) => ({ ...s, stopNum: i+1 })),
-    ...invalid.map(s => ({ ...s, stopNum: null })),
+    ...tour.map((s, i) => ({ ...s, stopNum: i + 1, routeCluster: s.clusterKey || s.sectorKey || "sin-sector" })),
+    ...invalid.map(s => ({ ...s, stopNum: null, routeCluster: rdSectorKeyForStop(s) })),
   ];
 };
 
 // ⚠️ Routes API deshabilitada — producía saltos entre zonas.
-// Motor v3 local (clustering) da mejores resultados para mensajería urbana en RD.
+// V25: motor local por sectores completos: Base → sector entero → próximo sector.
 const optimizeRoute = (stops) => optimizeRouteLocal(stops);
 
 const optimizeRouteAsync = async (stops, onProgress) => {
-  onProgress?.("Optimizando con motor de zonas v3…");
+  onProgress?.("Optimizando por sectores completos: base → sector → próximo sector…");
   const result = optimizeRouteLocal(stops);
-  onProgress?.("✓ Ruta optimizada con motor de zonas");
+  onProgress?.("✓ Ruta optimizada por sectores completos");
   return result;
 };
 
