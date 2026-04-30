@@ -2444,6 +2444,29 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
         @keyframes dlFU{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
         @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* V28 FULL ENTERPRISE — elevar columnas/revisión/ruta sin cambiar lógica */
+        .rd-circuit-v28{--glass:rgba(8,19,35,.74);--glass2:rgba(10,24,42,.86);--stroke:rgba(96,165,250,.16);--stroke2:rgba(148,163,184,.10);--blue:#3b82f6;--cyan:#38bdf8;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--text:#eaf2ff;--muted:#7890ad;}
+        .rd-circuit-v28 > div:nth-of-type(2){position:relative;z-index:2;background:linear-gradient(135deg,rgba(5,10,18,.72),rgba(7,18,32,.82));}
+        .rd-circuit-v28 > div:nth-of-type(2):before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 12% 20%,rgba(59,130,246,.10),transparent 24%),radial-gradient(circle at 88% 82%,rgba(16,185,129,.07),transparent 28%);}
+        .rd-circuit-v28 > div:nth-of-type(2) > div{position:relative;z-index:1;}
+        .rd-circuit-v28 [style*="width: 320px"], .rd-circuit-v28 [style*="width:320px"]{width:370px!important;background:linear-gradient(180deg,rgba(6,14,26,.98),rgba(4,10,18,.98))!important;border-right:1px solid rgba(96,165,250,.18)!important;box-shadow:18px 0 50px rgba(0,0,0,.25)!important;}
+        .rd-circuit-v28 [style*="borderRight: \"1px solid #0d1420\""]{border-right-color:rgba(96,165,250,.18)!important;}
+        .rd-circuit-v28 [style*="Configurar ruta"]{letter-spacing:.2px!important;}
+        .rd-circuit-v28 select, .rd-circuit-v28 input{box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;}
+        .rd-circuit-v28 .enterprise-panel{background:linear-gradient(145deg,rgba(15,30,52,.86),rgba(5,12,22,.92))!important;border:1px solid rgba(96,165,250,.18)!important;border-radius:20px!important;box-shadow:0 18px 50px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.045)!important;}
+        .rd-circuit-v28 .enterprise-table-shell{border-radius:24px!important;border:1px solid rgba(96,165,250,.16)!important;background:linear-gradient(180deg,rgba(8,18,34,.78),rgba(3,8,15,.86))!important;box-shadow:0 28px 80px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.045)!important;overflow:hidden!important;}
+        .rd-circuit-v28 th{height:54px!important;vertical-align:middle!important;text-transform:uppercase!important;}
+        .rd-circuit-v28 td{height:48px!important;vertical-align:middle!important;}
+        .rd-circuit-v28 tbody tr{transition:transform .14s ease, filter .14s ease!important;}
+        .rd-circuit-v28 tbody tr:hover{filter:brightness(1.18)!important;}
+        .rd-circuit-v28 .route-card-pro{background:linear-gradient(145deg,rgba(10,22,40,.94),rgba(5,12,22,.98))!important;border:1px solid rgba(96,165,250,.17)!important;border-radius:22px!important;box-shadow:0 18px 44px rgba(0,0,0,.33), inset 0 1px 0 rgba(255,255,255,.045)!important;}
+        .rd-circuit-v28 .route-card-pro:hover{border-color:rgba(59,130,246,.35)!important;transform:translateY(-1px)!important;}
+        .rd-circuit-v28 .rd-map-chrome{background:linear-gradient(145deg,rgba(5,10,18,.88),rgba(10,22,40,.78))!important;border:1px solid rgba(96,165,250,.18)!important;border-radius:18px!important;box-shadow:0 18px 52px rgba(0,0,0,.34)!important;backdrop-filter:blur(18px)!important;}
+        .rd-circuit-v28 .rd-sticky-action{box-shadow:0 16px 42px rgba(37,99,235,.28)!important;}
+        .rd-circuit-v28 .rd-chip-pro{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.16);color:#93c5fd;font-size:10px;font-family:'Syne',sans-serif;font-weight:900;letter-spacing:.5px;}
+        @keyframes rdPulseLine{0%,100%{opacity:.4}50%{opacity:1}}
+        @keyframes rdGlassIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
       `}</style>
       <div style={{ width:360,animation:"dlFU .5s ease",padding:"0 16px" }}>
         <div style={{ textAlign:"center",marginBottom:32 }}>
@@ -7323,7 +7346,7 @@ const ImportModal = ({ onClose, onImported }) => {
               }}
               disabled={stage==="mapping"&&!mapping.address}
               style={{padding:"9px 20px",borderRadius:9,border:"none",background:stage==="mapping"&&!mapping.address?"#0d1420":"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:stage==="mapping"&&!mapping.address?"#1e3550":"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:stage==="mapping"&&!mapping.address?"not-allowed":"pointer",boxShadow:stage==="mapping"&&!mapping.address?"none":"0 4px 16px #3b82f630",letterSpacing:"0.5px"}}>
-              {stage==="upload"?"":stage==="mapping"?"Geocodificar →":stage==="optimize"?"✓ Crear ruta":""}
+              {stage==="upload"?"":stage==="mapping"?"Validar y geocodificar →":stage==="optimize"?"✓ Crear ruta":""}
             </button>
           </div>
         )}
@@ -8275,14 +8298,14 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-// V27: Circuit Mode Enterprise UI. Rediseño visual profundo, sin tocar lógica/Firebase/geocoding/algoritmo.
+// V28: Circuit Mode Full Enterprise UI. Rediseño visual completo de upload, columnas, revisión y ruta; geolocalización intacta.
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
   const [headers, setHeaders]     = useState([]);
   const [mapping, setMapping]     = useState({});
   const [stops, setStops]         = useState([]);
-  const [routeName, setRouteName] = useState("Ruta nueva");
+  const [routeName, setRouteName] = useState("Nuevo circuito");
   const [driverName, setDriverName] = useState(() => (window.__rdMensajeros || DEFAULT_MENSAJEROS).find(m=>m.active)?.id || "");
   const [geoProgress, setGeoProgress] = useState(0);
   const [geoStatus, setGeoStatus] = useState("");
@@ -8581,7 +8604,7 @@ const CircuitEngine = () => {
 
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="rd-circuit-v26" style={{ display:"flex", flexDirection:"column", height:"100%", background:"#060b10", fontFamily:"'Inter',sans-serif", color:"#f1f5f9", overflow:"hidden" }}>
+    <div className="rd-circuit-v28" style={{ display:"flex", flexDirection:"column", height:"100%", background:"#060b10", fontFamily:"'Inter',sans-serif", color:"#f1f5f9", overflow:"hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -8607,20 +8630,20 @@ const CircuitEngine = () => {
         .pac-icon-marker,.hdpi .pac-icon-marker{background:none!important}
         
         /* V27 Circuit Enterprise UI - solo visual, sin tocar lógica */
-        .rd-circuit-v26{position:relative;background:radial-gradient(circle at 15% 0%,rgba(37,99,235,.16),transparent 30%),radial-gradient(circle at 82% 18%,rgba(14,165,233,.10),transparent 28%),linear-gradient(135deg,#030712 0%,#07111f 54%,#050a12 100%)!important;}
-        .rd-circuit-v26:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(96,165,250,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.035) 1px,transparent 1px);background-size:38px 38px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.18));}
-        .rd-circuit-v26:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 105%,rgba(59,130,246,.13),transparent 35%);}
-        .rd-circuit-v26 > div:first-of-type{height:68px!important;background:linear-gradient(180deg,rgba(7,15,28,.96),rgba(5,10,18,.86))!important;backdrop-filter:blur(22px)!important;border-bottom:1px solid rgba(96,165,250,.16)!important;box-shadow:0 18px 55px rgba(0,0,0,.34)!important;z-index:5!important;}
-        .rd-circuit-v26 > div:first-of-type > div:first-child:after{content:"OPERACIÓN DE RUTAS";font-size:9px;letter-spacing:1.8px;color:#3b82f6;font-weight:900;margin-left:8px;font-family:'Syne',sans-serif;}
-        .rd-circuit-v26 button{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease!important;}
-        .rd-circuit-v26 button:hover{transform:translateY(-1px)!important;box-shadow:0 14px 30px rgba(0,0,0,.22)!important;}
-        .rd-circuit-v26 input,.rd-circuit-v26 select{background:linear-gradient(180deg,#081323,#060d18)!important;border-color:rgba(96,165,250,.18)!important;border-radius:13px!important;min-height:42px!important;color:#eaf2ff!important;}
-        .rd-circuit-v26 input:focus,.rd-circuit-v26 select:focus{border-color:rgba(59,130,246,.55)!important;box-shadow:0 0 0 3px rgba(59,130,246,.11)!important;}
-        .rd-circuit-v26 table{border-collapse:separate!important;border-spacing:0!important;background:rgba(5,10,18,.42)!important;}
-        .rd-circuit-v26 thead th{position:sticky!important;top:0!important;z-index:5!important;background:linear-gradient(180deg,#091426,#07111f)!important;box-shadow:0 1px 0 rgba(96,165,250,.14)!important;}
-        .rd-circuit-v26 tbody td{background:rgba(3,7,18,.30)!important;}
-        .rd-circuit-v26 tbody tr:nth-child(even) td{background:rgba(15,23,42,.25)!important;}
-        .rd-circuit-v26 tbody tr:hover td{background:rgba(59,130,246,.075)!important;}
+        .rd-circuit-v28{position:relative;background:radial-gradient(circle at 15% 0%,rgba(37,99,235,.16),transparent 30%),radial-gradient(circle at 82% 18%,rgba(14,165,233,.10),transparent 28%),linear-gradient(135deg,#030712 0%,#07111f 54%,#050a12 100%)!important;}
+        .rd-circuit-v28:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(96,165,250,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.035) 1px,transparent 1px);background-size:38px 38px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.18));}
+        .rd-circuit-v28:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 105%,rgba(59,130,246,.13),transparent 35%);}
+        .rd-circuit-v28 > div:first-of-type{height:68px!important;background:linear-gradient(180deg,rgba(7,15,28,.96),rgba(5,10,18,.86))!important;backdrop-filter:blur(22px)!important;border-bottom:1px solid rgba(96,165,250,.16)!important;box-shadow:0 18px 55px rgba(0,0,0,.34)!important;z-index:5!important;}
+        .rd-circuit-v28 > div:first-of-type > div:first-child:after{content:"OPERACIÓN DE RUTAS";font-size:9px;letter-spacing:1.8px;color:#3b82f6;font-weight:900;margin-left:8px;font-family:'Syne',sans-serif;}
+        .rd-circuit-v28 button{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease!important;}
+        .rd-circuit-v28 button:hover{transform:translateY(-1px)!important;box-shadow:0 14px 30px rgba(0,0,0,.22)!important;}
+        .rd-circuit-v28 input,.rd-circuit-v28 select{background:linear-gradient(180deg,#081323,#060d18)!important;border-color:rgba(96,165,250,.18)!important;border-radius:13px!important;min-height:42px!important;color:#eaf2ff!important;}
+        .rd-circuit-v28 input:focus,.rd-circuit-v28 select:focus{border-color:rgba(59,130,246,.55)!important;box-shadow:0 0 0 3px rgba(59,130,246,.11)!important;}
+        .rd-circuit-v28 table{border-collapse:separate!important;border-spacing:0!important;background:rgba(5,10,18,.42)!important;}
+        .rd-circuit-v28 thead th{position:sticky!important;top:0!important;z-index:5!important;background:linear-gradient(180deg,#091426,#07111f)!important;box-shadow:0 1px 0 rgba(96,165,250,.14)!important;}
+        .rd-circuit-v28 tbody td{background:rgba(3,7,18,.30)!important;}
+        .rd-circuit-v28 tbody tr:nth-child(even) td{background:rgba(15,23,42,.25)!important;}
+        .rd-circuit-v28 tbody tr:hover td{background:rgba(59,130,246,.075)!important;}
         @keyframes rdRadarSweep{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
         @keyframes rdScanPulse{0%,100%{transform:scale(.92);opacity:.72}50%{transform:scale(1.045);opacity:1}}
         @keyframes rdSoftFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
@@ -8638,7 +8661,7 @@ const CircuitEngine = () => {
           </div>
           <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14 }}>Rap Drive</span>
           <span style={{ color: "#131f30" }}>·</span>
-          <span style={{ fontSize: 11, color: "#2d4a60" }}>Circuit Mode</span>
+          <span className="rd-chip-pro">Circuit Mode Enterprise</span>
           {!mapsReady && <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 6, padding: "2px 8px" }}>Cargando Maps...</span>}
           {mapsReady  && <span style={{ fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 6, padding: "2px 8px" }}>● Google Maps OK</span>}
         </div>
@@ -8671,13 +8694,13 @@ const CircuitEngine = () => {
                 <div style={{ width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)" }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
-                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Circuit Mode Pro</div>
-                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Importa, valida, geolocaliza y arma rutas listas para operación.</div>
+                <div style={{ fontSize: 22, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 8, letterSpacing:"-0.5px" }}>Circuit Mode Enterprise</div>
+                <div style={{ fontSize: 12, color: "#4b5563", lineHeight:1.6 }}>Carga, valida, corrige y despacha rutas con flujo operativo premium.</div>
               </div>
 
               {/* Feature pills */}
               <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:22, flexWrap:"wrap" }}>
-                {[["📍","Dirección real"],["🔢","Orden inteligente"],["📦","Sin cola"],["📱","Enviar al mensajero"]].map(([ic,lb])=>(
+                {[["📍","Dirección real"],["🔢","Orden inteligente"],["📦","Sin cola"],["📱","Enviar ruta al mensajero"]].map(([ic,lb])=>(
                   <div key={lb} style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:20,padding:"4px 12px" }}>
                     <span style={{ fontSize:11 }}>{ic}</span>
                     <span style={{ fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{lb}</span>
@@ -8757,16 +8780,16 @@ const CircuitEngine = () => {
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
             {/* LEFT PANEL */}
-            <div style={{ width: 320, borderRight: "1px solid #0d1420", padding: "0", overflow: "auto", flexShrink: 0, display: "flex", flexDirection: "column", background:"#060b10" }}>
+            <div style={{ width: 370, borderRight: "1px solid rgba(96,165,250,.18)", padding: "0", overflow: "auto", flexShrink: 0, display: "flex", flexDirection: "column", background:"linear-gradient(180deg,rgba(6,14,26,.98),rgba(4,10,18,.98))", boxShadow:"18px 0 50px rgba(0,0,0,.25)" }}>
 
               {/* Panel header */}
-              <div style={{ padding:"16px 18px 12px", borderBottom:"1px solid #0d1420", background:"linear-gradient(180deg,#0a1019,#060b10)" }}>
+              <div className="enterprise-panel" style={{ margin:"14px 14px 12px", padding:"16px", borderBottom:"1px solid rgba(96,165,250,.12)", background:"linear-gradient(145deg,rgba(10,22,40,.95),rgba(5,12,22,.98))" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                   <div style={{ width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 16px rgba(59,130,246,0.4)",flexShrink:0 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                   </div>
                   <div>
-                    <div style={{ fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9" }}>Configurar ruta</div>
+                    <div style={{ fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9" }}>Centro de configuración</div>
                     <div style={{ fontSize:11,color:"#374151",marginTop:1 }}>
                       <span style={{ color:"#3b82f6",fontWeight:700 }}>{rawRows.length}</span> filas detectadas · <span style={{ color:"#10b981",fontWeight:700 }}>{headers.length}</span> columnas
                     </div>
@@ -8783,7 +8806,7 @@ const CircuitEngine = () => {
                   <button onClick={runGeocoding} disabled={!mapping.address}
                     style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background: mapping.address ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#131f30", color: mapping.address ? "white" : "#374151", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor: mapping.address ? "pointer" : "not-allowed", boxShadow: mapping.address ? "0 4px 16px #3b82f640" : "none", display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"all .15s" }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    {mapping.address ? "Geocodificar →" : "Asigna Dirección primero"}
+                    {mapping.address ? "Validar y geocodificar →" : "Asigna Dirección primero"}
                   </button>
                 </div>
               </div>
@@ -8803,7 +8826,7 @@ const CircuitEngine = () => {
                 </div>
 
                 {/* MENSAJERO + RUTA */}
-                <div style={{ background:"rgba(59,130,246,0.05)", border:"1px solid rgba(59,130,246,0.15)", borderRadius:12, padding:"12px 14px" }}>
+                <div className="enterprise-panel" style={{ background:"linear-gradient(145deg,rgba(59,130,246,.10),rgba(5,12,22,.96))", border:"1px solid rgba(96,165,250,.18)", borderRadius:18, padding:"15px" }}>
                   <div style={{ fontSize:9.5,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:8 }}>📦 DESTINO DE LA RUTA</div>
                   <label style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",display:"block",marginBottom:4 }}>MENSAJERO</label>
                   <select value={driverName} onChange={e => setDriverName(e.target.value)} style={{ ...sel, marginBottom:10 }}>
@@ -8828,7 +8851,7 @@ const CircuitEngine = () => {
                   </div>
 
                   {/* Columnas detectadas — chips scrollables */}
-                  <div style={{ background:"#080e16",border:"1px solid #0d1420",borderRadius:10,padding:"10px",marginBottom:10 }}>
+                  <div className="enterprise-panel" style={{ background:"linear-gradient(145deg,rgba(8,18,34,.92),rgba(5,12,22,.94))",border:"1px solid rgba(96,165,250,.14)",borderRadius:18,padding:"12px",marginBottom:12 }}>
                     <div style={{ fontSize:9,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:7 }}>COLUMNAS EN TU ARCHIVO</div>
                     <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
                       {headers.map(h => {
@@ -8870,7 +8893,7 @@ const CircuitEngine = () => {
                     ].map(({ f, l, req, icon, color, desc }) => {
                       const mapped = !!mapping[f];
                       return (
-                        <div key={f} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:10, background: mapped ? `${color}08` : "rgba(255,255,255,0.02)", border:`1px solid ${mapped ? color+"30" : req ? "rgba(59,130,246,0.2)" : "#0d1420"}`, transition:"all .15s" }}>
+                        <div key={f} style={{ display:"flex", alignItems:"center", gap:8, padding:"11px 12px", borderRadius:16, background: mapped ? `linear-gradient(135deg,${color}12,rgba(5,12,22,.94))` : "linear-gradient(145deg,rgba(15,30,52,.55),rgba(5,12,22,.92))", border:`1px solid ${mapped ? color+"38" : req ? "rgba(59,130,246,0.24)" : "rgba(96,165,250,.10)"}`, transition:"all .15s", boxShadow: mapped ? `0 10px 28px ${color}10` : "inset 0 1px 0 rgba(255,255,255,.03)" }}>
                           {/* Icon */}
                           <div style={{ width:30, height:30, borderRadius:8, background: mapped ? `${color}15` : "rgba(255,255,255,0.04)", border:`1px solid ${mapped ? color+"25" : "#1a2d40"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>
                             {mapped ? <span style={{ fontSize:12 }}>✓</span> : icon}
@@ -8898,11 +8921,11 @@ const CircuitEngine = () => {
             </div>
 
             {/* RIGHT: Preview table — más visual */}
-            <div style={{ flex:1, overflow:"auto", padding:"20px", background:"#060b10" }}>
+            <div style={{ flex:1, overflow:"auto", padding:"22px", background:"radial-gradient(circle at 20% 0%,rgba(59,130,246,.08),transparent 28%),#050b14" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
                 <div>
                   <div style={{ fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px" }}>
-                    VISTA PREVIA DEL EXCEL
+                    CONTROL DE DATOS DEL EXCEL
                   </div>
                   <div style={{ fontSize:10,color:"#2d4a60",marginTop:2 }}>
                     {rawRows.length} filas · {headers.length} columnas · mostrando primeras {Math.min(rawRows.length,10)}
@@ -8923,7 +8946,7 @@ const CircuitEngine = () => {
               </div>
 
               {/* Tabla con scroll horizontal para ver todas las columnas */}
-              <div style={{ borderRadius:14, border:"1px solid #0d1420", overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,0.4)" }}>
+              <div className="enterprise-table-shell" style={{ borderRadius:24, border:"1px solid rgba(96,165,250,.16)", overflow:"hidden", boxShadow:"0 28px 80px rgba(0,0,0,.36)" }}>
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
                     <thead>
@@ -9128,13 +9151,13 @@ const CircuitEngine = () => {
 
               {/* Action bar */}
               <div style={{ padding: "8px 16px", borderBottom: "1px solid #0d1420", display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                <button onClick={() => { setPhase("upload"); setStops([]); setRawRows([]); setHeaders([]); setMapping({}); setRouteName("Ruta nueva"); setSelectedId(null); setClientSearch(""); }} className="gh"
+                <button onClick={() => { setPhase("upload"); setStops([]); setRawRows([]); setHeaders([]); setMapping({}); setRouteName("Nuevo circuito"); setSelectedId(null); setClientSearch(""); }} className="gh"
                   style={{ flex: 1, padding: "7px", borderRadius: 8, border: "1px solid #1e3550", background: "rgba(59,130,246,0.08)", color: "#60a5fa", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", transition: "all .1s", minWidth: 110, display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
                   Nueva Ruta
                 </button>
                 <button onClick={() => setPhase(phase === "review" ? "route" : "review")} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#059669,#10b981)", color: "white", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: "pointer", boxShadow: "0 3px 12px #10b98130", minWidth: 100 }}>
-                  {phase === "review" ? "Ver ruta →" : "← Revisar"}
+                  {phase === "review" ? "Ver ruta →" : "← Revisar datos"}
                 </button>
                 {phase === "review" && (statsWarn > 0 || statsError > 0) && <button onClick={reprocessLowConfidence} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "1px solid rgba(245,158,11,.35)", background: "rgba(245,158,11,.10)", color: "#fbbf24", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", minWidth: 128 }}>
                   Reprocesar bajas
@@ -9205,7 +9228,7 @@ const CircuitEngine = () => {
                     }}
                     style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "white", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 150, boxShadow:"0 4px 20px #3b82f650", letterSpacing:"0.3px", position:"relative", overflow:"hidden" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                    Enviar al mensajero
+                    Enviar ruta al mensajero
                   </button>
                 )}
               </div>
@@ -9360,9 +9383,9 @@ const CircuitEngine = () => {
 
             {/* Right: Google Map */}
             <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              <div style={{position:"absolute",left:16,top:16,zIndex:10,background:"rgba(5,10,18,.78)",border:"1px solid rgba(96,165,250,.14)",borderRadius:16,padding:"10px 13px",backdropFilter:"blur(14px)",boxShadow:"0 14px 45px rgba(0,0,0,.32)",pointerEvents:"none"}}>
-                <div style={{fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.2px"}}>MAPA OPERATIVO</div>
-                <div style={{fontSize:11,color:"#93a4bd",marginTop:3}}>pines + secuencia + revisión</div>
+              <div className="rd-map-chrome" style={{position:"absolute",left:16,top:16,zIndex:10,background:"rgba(5,10,18,.78)",border:"1px solid rgba(96,165,250,.14)",borderRadius:18,padding:"12px 15px",backdropFilter:"blur(18px)",boxShadow:"0 18px 52px rgba(0,0,0,.34)",pointerEvents:"none"}}>
+                <div style={{fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.2px"}}>MAPA DE OPERACIÓN</div>
+                <div style={{fontSize:11,color:"#93a4bd",marginTop:3}}>secuencia · zonas · revisión visual</div>
               </div>
               <RouteMap
                 stops={stops}
@@ -9378,7 +9401,7 @@ const CircuitEngine = () => {
               />
               {/* Map overlay: clean stats like Circuit */}
               {(phase === "route" || phase === "review") && km > 0 && (
-                <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,11,16,0.88)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"10px 16px", display:"flex", gap:20 }}>
+                <div style={{ position:"absolute", top:12, right:12, background:"rgba(6,11,16,0.88)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:18, padding:"12px 18px", display:"flex", gap:22, boxShadow:"0 18px 52px rgba(0,0,0,.34)", border:"1px solid rgba(96,165,250,.16)" }}>
                   <div style={{ textAlign:"center" }}>
                     <div style={{ fontSize:18, fontFamily:"'Syne',sans-serif", fontWeight:800, color:"#f1f5f9" }}>{km} <span style={{fontSize:11,color:"#4b5563"}}>km</span></div>
                     <div style={{ fontSize:10, color:"#4b5563" }}>Distancia</div>
