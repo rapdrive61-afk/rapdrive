@@ -8275,7 +8275,7 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-// V26: rediseño visual completo del Circuit Mode. No cambia Firebase, rutas, geocoding ni algoritmo.
+// V27: Circuit Mode Enterprise UI. Rediseño visual profundo, sin tocar lógica/Firebase/geocoding/algoritmo.
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
@@ -8606,18 +8606,28 @@ const CircuitEngine = () => {
         .pac-item:before{content:"📍";margin-right:8px;font-size:13px}
         .pac-icon-marker,.hdpi .pac-icon-marker{background:none!important}
         
-        /* V26 Circuit UX Pro - solo visual */
-        .rd-circuit-v26{background:radial-gradient(circle at 20% 0%,rgba(37,99,235,.10),transparent 34%),linear-gradient(135deg,#050913,#070d16 56%,#050a12)!important;}
-        .rd-circuit-v26 > div:first-of-type{height:58px!important;background:rgba(5,10,18,.86)!important;backdrop-filter:blur(18px)!important;border-bottom:1px solid rgba(96,165,250,.13)!important;box-shadow:0 12px 40px rgba(0,0,0,.26)!important;}
-        .rd-circuit-v26 button{transition:transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease!important;}
-        .rd-circuit-v26 button:hover{transform:translateY(-1px)!important;}
-        .rd-circuit-v26 input,.rd-circuit-v26 select{background:#07111f!important;border-color:#17304e!important;border-radius:12px!important;min-height:42px!important;}
-        .rd-circuit-v26 table{border-collapse:separate!important;border-spacing:0!important;}
-        .rd-circuit-v26 thead th{position:sticky!important;top:0!important;z-index:5!important;background:#07111e!important;box-shadow:0 1px 0 rgba(96,165,250,.12)!important;}
-        .rd-circuit-v26 tbody tr:hover td{background:rgba(59,130,246,.045)!important;}
+        /* V27 Circuit Enterprise UI - solo visual, sin tocar lógica */
+        .rd-circuit-v26{position:relative;background:radial-gradient(circle at 15% 0%,rgba(37,99,235,.16),transparent 30%),radial-gradient(circle at 82% 18%,rgba(14,165,233,.10),transparent 28%),linear-gradient(135deg,#030712 0%,#07111f 54%,#050a12 100%)!important;}
+        .rd-circuit-v26:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(96,165,250,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.035) 1px,transparent 1px);background-size:38px 38px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.18));}
+        .rd-circuit-v26:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 105%,rgba(59,130,246,.13),transparent 35%);}
+        .rd-circuit-v26 > div:first-of-type{height:68px!important;background:linear-gradient(180deg,rgba(7,15,28,.96),rgba(5,10,18,.86))!important;backdrop-filter:blur(22px)!important;border-bottom:1px solid rgba(96,165,250,.16)!important;box-shadow:0 18px 55px rgba(0,0,0,.34)!important;z-index:5!important;}
+        .rd-circuit-v26 > div:first-of-type > div:first-child:after{content:"OPERACIÓN DE RUTAS";font-size:9px;letter-spacing:1.8px;color:#3b82f6;font-weight:900;margin-left:8px;font-family:'Syne',sans-serif;}
+        .rd-circuit-v26 button{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease!important;}
+        .rd-circuit-v26 button:hover{transform:translateY(-1px)!important;box-shadow:0 14px 30px rgba(0,0,0,.22)!important;}
+        .rd-circuit-v26 input,.rd-circuit-v26 select{background:linear-gradient(180deg,#081323,#060d18)!important;border-color:rgba(96,165,250,.18)!important;border-radius:13px!important;min-height:42px!important;color:#eaf2ff!important;}
+        .rd-circuit-v26 input:focus,.rd-circuit-v26 select:focus{border-color:rgba(59,130,246,.55)!important;box-shadow:0 0 0 3px rgba(59,130,246,.11)!important;}
+        .rd-circuit-v26 table{border-collapse:separate!important;border-spacing:0!important;background:rgba(5,10,18,.42)!important;}
+        .rd-circuit-v26 thead th{position:sticky!important;top:0!important;z-index:5!important;background:linear-gradient(180deg,#091426,#07111f)!important;box-shadow:0 1px 0 rgba(96,165,250,.14)!important;}
+        .rd-circuit-v26 tbody td{background:rgba(3,7,18,.30)!important;}
+        .rd-circuit-v26 tbody tr:nth-child(even) td{background:rgba(15,23,42,.25)!important;}
+        .rd-circuit-v26 tbody tr:hover td{background:rgba(59,130,246,.075)!important;}
         @keyframes rdRadarSweep{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-        @keyframes rdScanPulse{0%,100%{transform:scale(.92);opacity:.8}50%{transform:scale(1.04);opacity:1}}
-        @keyframes rdSoftFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+        @keyframes rdScanPulse{0%,100%{transform:scale(.92);opacity:.72}50%{transform:scale(1.045);opacity:1}}
+        @keyframes rdSoftFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+        @keyframes rdRouteDash{to{stroke-dashoffset:-120}}
+        @keyframes rdBeam{0%{transform:translateX(-120%);opacity:0}12%{opacity:.8}88%{opacity:.8}100%{transform:translateX(120%);opacity:0}}
+        @keyframes rdGridPulse{0%,100%{opacity:.45}50%{opacity:.9}}
+        @keyframes rdPinPop{0%{transform:scale(.88);opacity:.55}50%{transform:scale(1.04);opacity:1}100%{transform:scale(.96);opacity:.9}}
       `}</style>
 
       {/* -- TOPBAR -- */}
@@ -8974,68 +8984,95 @@ const CircuitEngine = () => {
 
         {/* ════ GEOCODING ════ */}
         {phase === "geocoding" && (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background:"linear-gradient(135deg,#060b10,#080e16)" }}>
+          <div style={{ flex: 1, position:"relative", overflow:"hidden", display:"grid", placeItems:"center", background:"radial-gradient(circle at 50% 30%,rgba(37,99,235,.18),transparent 36%),linear-gradient(135deg,#030712,#06101d)" }}>
             <style>{`
-              @keyframes orbit1{from{transform:rotate(0deg) translateX(44px) rotate(0deg)}to{transform:rotate(360deg) translateX(44px) rotate(-360deg)}}
-              @keyframes orbit2{from{transform:rotate(120deg) translateX(32px) rotate(-120deg)}to{transform:rotate(480deg) translateX(32px) rotate(-480deg)}}
-              @keyframes orbit3{from{transform:rotate(240deg) translateX(52px) rotate(-240deg)}to{transform:rotate(600deg) translateX(52px) rotate(-600deg)}}
-              @keyframes geoRing1{0%,100%{transform:scale(1);opacity:0.4}50%{transform:scale(1.22);opacity:0.08}}
-              @keyframes geoRing2{0%,100%{transform:scale(1);opacity:0.25}50%{transform:scale(1.35);opacity:0.05}}
-              @keyframes geoRing3{0%,100%{transform:scale(1);opacity:0.12}50%{transform:scale(1.5);opacity:0.03}}
-              @keyframes geoPulseText{0%,100%{opacity:1}50%{opacity:0.6}}
-              @keyframes geoShimmer{0%{background-position:200% center}100%{background-position:-200% center}}
-              @keyframes geoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-              @keyframes scanLine{0%{transform:translateY(-100%);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(300%);opacity:0}}
-              @keyframes addressFly{0%{opacity:0;transform:translateX(-10px)}20%{opacity:1;transform:translateX(0)}80%{opacity:1}100%{opacity:0;transform:translateX(10px)}}
+              @keyframes ceMapPan{0%{background-position:0 0,0 0}100%{background-position:90px 58px,58px 90px}}
+              @keyframes ceSweep{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+              @keyframes ceTravel{0%{offset-distance:0%;opacity:.15}12%{opacity:1}90%{opacity:1}100%{offset-distance:100%;opacity:.15}}
+              @keyframes cePulsePin{0%,100%{transform:scale(.94);box-shadow:0 0 0 0 rgba(59,130,246,.35)}50%{transform:scale(1.04);box-shadow:0 0 0 10px rgba(59,130,246,0)}}
+              @keyframes ceProgressGlow{0%{filter:drop-shadow(0 0 5px rgba(59,130,246,.35))}50%{filter:drop-shadow(0 0 18px rgba(59,130,246,.75))}100%{filter:drop-shadow(0 0 5px rgba(59,130,246,.35))}}
+              @keyframes ceFadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
             `}</style>
-            <div style={{ maxWidth: 460, width: "100%", padding: "36px 32px", textAlign: "center", animation: "fadeUp .3s ease" }}>
 
-              {/* Orbital core */}
-              <div style={{ width: 118, height: 118, position: "relative", margin: "0 auto 28px", animation:"rdSoftFloat 2.8s ease-in-out infinite" }}>
-                {/* Pulse rings */}
-                <div style={{ position:"absolute", inset:-22, borderRadius:"50%", border:"1px solid #3b82f640", animation:"none" }}/>
-                <div style={{ position:"absolute", inset:-38, borderRadius:"50%", border:"1px solid #3b82f625", animation:"none" }}/>
-                <div style={{ position:"absolute", inset:-54, borderRadius:"50%", border:"1px solid #3b82f612", animation:"none" }}/>
-                {/* Glow */}
-                <div style={{ position:"absolute", inset:-8, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,0.2) 0%,transparent 70%)" }}/>
-                {/* Core */}
-                <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 40px rgba(59,130,246,0.7), 0 0 80px rgba(59,130,246,0.3)", overflow:"hidden" }}>
-                  {/* Scan line */}
-                  <div style={{ position:"absolute", left:0, right:0, height:2, background:"rgba(255,255,255,0.4)", animation:"scanLine 2s linear infinite" }}/>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                </div>
-                {/* Orbiting dots */}
-                {[
-                  {size:10,color:"#60a5fa",shadow:"#60a5fa",anim:"orbit1",dur:"1.8s"},
-                  {size:7,color:"#818cf8",shadow:"#818cf8",anim:"orbit2",dur:"2.2s"},
-                  {size:8,color:"#34d399",shadow:"#34d399",anim:"orbit3",dur:"1.5s"},
-                ].map((d,i)=>(
-                  <div key={i} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <div style={{ width:d.size,height:d.size,borderRadius:"50%",background:d.color,boxShadow:`0 0 10px ${d.shadow}`,animation:"geoPulseText 1.6s ease-in-out infinite" }}/>
+            {/* Enterprise map grid background */}
+            <div style={{position:"absolute",inset:0,opacity:.72,backgroundImage:"linear-gradient(rgba(96,165,250,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.055) 1px,transparent 1px)",backgroundSize:"58px 58px",animation:"ceMapPan 9s linear infinite",maskImage:"radial-gradient(circle at center,black 0%,transparent 76%)"}} />
+            <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.32}} viewBox="0 0 1200 700" preserveAspectRatio="none">
+              <defs>
+                <filter id="ceGlow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <linearGradient id="ceLine" x1="0" x2="1"><stop stopColor="#2563eb"/><stop offset=".55" stopColor="#60a5fa"/><stop offset="1" stopColor="#22c55e"/></linearGradient>
+              </defs>
+              <path d="M95 520 C210 350 300 470 420 270 S650 180 760 350 950 410 1110 170" fill="none" stroke="url(#ceLine)" strokeWidth="5" strokeLinecap="round" strokeDasharray="14 14" style={{animation:"rdRouteDash 2.4s linear infinite"}} filter="url(#ceGlow)"/>
+              {[95,270,420,620,760,930,1110].map((x,i)=><circle key={i} cx={x} cy={[520,380,270,215,350,390,170][i]} r="8" fill={i < Math.max(1, Math.round((geoProgress/100)*7)) ? "#22c55e" : "#1e3a5f"} stroke="#93c5fd" strokeWidth="2"/>)}
+            </svg>
+
+            <div style={{width:"min(980px,92vw)",display:"grid",gridTemplateColumns:"360px 1fr",gap:22,position:"relative",zIndex:2,animation:"ceFadeSlide .35s ease both"}}>
+              {/* Left operational status */}
+              <div style={{background:"linear-gradient(145deg,rgba(7,17,31,.96),rgba(5,10,18,.92))",border:"1px solid rgba(96,165,250,.18)",borderRadius:28,padding:26,boxShadow:"0 30px 90px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+                  <div style={{width:46,height:46,borderRadius:16,display:"grid",placeItems:"center",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",boxShadow:"0 18px 45px rgba(37,99,235,.35)"}}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                   </div>
-                ))}
+                  <div>
+                    <div style={{fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.6px"}}>MOTOR DE GEOLOCALIZACIÓN</div>
+                    <div style={{fontSize:18,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:1000,marginTop:3}}>Procesando ruta</div>
+                  </div>
+                </div>
+
+                <div style={{position:"relative",height:210,display:"grid",placeItems:"center",marginBottom:20}}>
+                  <div style={{position:"absolute",width:190,height:190,borderRadius:"50%",border:"1px solid rgba(96,165,250,.18)"}} />
+                  <div style={{position:"absolute",width:150,height:150,borderRadius:"50%",border:"1px solid rgba(96,165,250,.26)"}} />
+                  <div style={{position:"absolute",width:108,height:108,borderRadius:"50%",background:"conic-gradient(from 0deg,rgba(59,130,246,0),rgba(96,165,250,.9),rgba(34,197,94,.75),rgba(59,130,246,0))",animation:"ceSweep 2.2s linear infinite",filter:"blur(.2px)"}} />
+                  <div style={{position:"absolute",width:104,height:104,borderRadius:"50%",background:"#07111f"}} />
+                  <div style={{width:78,height:78,borderRadius:24,display:"grid",placeItems:"center",background:"linear-gradient(135deg,#2563eb,#60a5fa)",boxShadow:"0 0 55px rgba(59,130,246,.55)",animation:"cePulsePin 2s ease-in-out infinite"}}>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 22s7-5.3 7-12A7 7 0 1 0 5 10c0 6.7 7 12 7 12Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+                  </div>
+                  <div style={{position:"absolute",left:18,top:34,width:10,height:10,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 18px #22c55e"}} />
+                  <div style={{position:"absolute",right:30,bottom:42,width:8,height:8,borderRadius:"50%",background:"#60a5fa",boxShadow:"0 0 18px #60a5fa"}} />
+                  <div style={{position:"absolute",right:54,top:24,width:7,height:7,borderRadius:"50%",background:"#f59e0b",boxShadow:"0 0 18px #f59e0b"}} />
+                </div>
+
+                <div style={{height:10,background:"rgba(15,23,42,.9)",border:"1px solid rgba(96,165,250,.12)",borderRadius:999,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${geoProgress}%`,background:"linear-gradient(90deg,#2563eb,#60a5fa,#22c55e)",borderRadius:999,transition:"width .45s cubic-bezier(.4,0,.2,1)",animation:"ceProgressGlow 1.8s ease-in-out infinite"}} />
+                </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:12}}>
+                  <div style={{fontSize:34,lineHeight:1,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:1000}}>{geoProgress}%</div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:11,color:"#22c55e",fontWeight:900}}>Google Maps + referencias RD</div>
+                    <div style={{fontSize:10,color:"#526782",marginTop:3}}>Sin bloquear la interfaz</div>
+                  </div>
+                </div>
               </div>
 
-              {/* Title */}
-              <div style={{ fontSize: 18, fontFamily: "'Syne',sans-serif", fontWeight: 800, marginBottom: 6, color:"#f1f5f9", letterSpacing:"-0.4px" }}>Analizando direcciones</div>
-              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 6 }}>Dirección + sector + referencia trabajando con Google Maps.</div>
+              {/* Right live feed */}
+              <div style={{background:"linear-gradient(145deg,rgba(7,17,31,.90),rgba(5,10,18,.88))",border:"1px solid rgba(96,165,250,.16)",borderRadius:28,padding:24,boxShadow:"0 30px 90px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04)",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                    <div>
+                      <div style={{fontSize:10,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.6px"}}>ANÁLISIS EN VIVO</div>
+                      <div style={{fontSize:24,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:1000,letterSpacing:"-.6px",marginTop:4}}>Ubicaciones inteligentes</div>
+                    </div>
+                    <div style={{padding:"8px 12px",borderRadius:999,background:"rgba(34,197,94,.09)",border:"1px solid rgba(34,197,94,.22)",fontSize:11,color:"#22c55e",fontWeight:900}}>Activo</div>
+                  </div>
 
-              {/* Address flying by */}
-              <div style={{ height:22, overflow:"hidden", marginBottom:18 }}>
-                <div key={geoStatus} style={{ fontSize:11, color:"#3b82f6", fontFamily:"'Inter',monospace", animation:"fadeUp .25s ease", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", padding:"0 20px" }}>{geoStatus || "Iniciando..."}</div>
-              </div>
+                  <div style={{height:78,borderRadius:18,background:"rgba(3,7,18,.56)",border:"1px solid rgba(96,165,250,.13)",padding:"14px 16px",overflow:"hidden",position:"relative",marginBottom:18}}>
+                    <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,transparent,rgba(96,165,250,.08),transparent)",animation:"rdBeam 2.6s linear infinite"}} />
+                    <div style={{fontSize:10,color:"#526782",fontWeight:900,letterSpacing:"1.2px",fontFamily:"'Syne',sans-serif"}}>DIRECCIÓN ACTUAL</div>
+                    <div key={geoStatus} style={{fontSize:14,color:"#bfdbfe",fontWeight:800,marginTop:9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",animation:"ceFadeSlide .28s ease both"}}>{geoStatus || "Preparando lectura del Excel..."}</div>
+                  </div>
 
-              {/* Progress bar - enhanced */}
-              <div style={{ height: 8, background: "#0d1420", borderRadius: 8, marginBottom: 10, overflow: "hidden", border:"1px solid #131f30" }}>
-                <div style={{ height:"100%", borderRadius: 8, width: `${geoProgress}%`, background: "linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa,#3b82f6)", backgroundSize: "300% 100%", animation: "geoShimmer 2s linear infinite", transition: "width .6s cubic-bezier(.4,0,.2,1)", boxShadow:"0 0 12px rgba(59,130,246,0.5)" }} />
-              </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                    {[
+                      ["Procesadas", Math.round((geoProgress/100)*rawRows.length), "#60a5fa"],
+                      ["Total", rawRows.length, "#e2e8f0"],
+                      ["Restantes", Math.max(0, rawRows.length - Math.round((geoProgress/100)*rawRows.length)), "#f59e0b"],
+                    ].map(([k,v,c])=><div key={k} style={{background:"rgba(255,255,255,.035)",border:"1px solid rgba(255,255,255,.07)",borderRadius:18,padding:"16px 14px"}}><div style={{fontSize:10,color:"#526782",fontWeight:900,letterSpacing:"1px",fontFamily:"'Syne',sans-serif"}}>{k}</div><div style={{fontSize:26,color:c,fontFamily:"'Syne',sans-serif",fontWeight:1000,marginTop:6}}>{v}</div></div>)}
+                  </div>
+                </div>
 
-              {/* Stats row */}
-              <div style={{ display:"flex", justifyContent:"center", gap:16, marginTop:8 }}>
-                <div style={{ fontSize: 24, fontFamily: "'Syne',sans-serif", fontWeight: 900, color: "#3b82f6", animation:"geoPulseText 1.8s ease-in-out infinite" }}>{geoProgress}%</div>
-                <div style={{ display:"flex", flexDirection:"column", justifyContent:"center", gap:2, textAlign:"left" }}>
-                  <div style={{ fontSize:10, color:"#10b981", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✓ {stops.filter(s=>s.status==="ok"||s.confidence>=70).length} geocodificadas</div>
-                  {stops.filter(s=>s.status==="error").length > 0 && <div style={{ fontSize:10, color:"#ef4444", fontFamily:"'Syne',sans-serif", fontWeight:700 }}>✕ {stops.filter(s=>s.status==="error").length} con error</div>}
+                <div style={{marginTop:20,borderTop:"1px solid rgba(96,165,250,.12)",paddingTop:18,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                  {[
+                    ["1","Normaliza"],["2","Sectoriza"],["3","Geocodifica"],["4","Ordena"]
+                  ].map(([n,t])=><div key={n} style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:24,height:24,borderRadius:8,background:"rgba(59,130,246,.16)",border:"1px solid rgba(96,165,250,.24)",display:"grid",placeItems:"center",fontSize:10,color:"#93c5fd",fontWeight:900}}>{n}</div><div style={{fontSize:10,color:"#93a4bd",fontWeight:800}}>{t}</div></div>)}
                 </div>
               </div>
             </div>
