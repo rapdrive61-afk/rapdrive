@@ -5348,7 +5348,10 @@ const geocodeWithGoogle = async (rawAddress) => {
 
   await loadGoogleMaps();
   const geocoder = new window.google.maps.Geocoder();
-  const queries = buildQueryVariants(rawAddress);
+  let queries = buildQueryVariants(rawAddress);
+  const smartExpanded = rdSmartExpandLocationContext(rawAddress);
+  if (smartExpanded && smartExpanded !== rawAddress) queries = [smartExpanded, ...queries];
+  queries = [...new Set(queries)].slice(0, 14);
 
   // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
   const anchor = findAnchor(rawAddress);
@@ -5386,7 +5389,7 @@ const geocodeWithGoogle = async (rawAddress) => {
         const dlat = top.geometry.location.lat() - anchor.lat;
         const dlng = top.geometry.location.lng() - anchor.lng;
         const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
-        if (distKm > 15) continue; // resultado random, ignorar
+        if (distKm > 10) continue; // resultado lejos del sector/ref local, ignorar
       }
 
       if (conf > bestScore) {
@@ -5487,7 +5490,7 @@ const geocodeWithGoogle = async (rawAddress) => {
       lat: lastAnchor.lat,
       lng: lastAnchor.lng,
       display: `${rawAddress} (aprox. ${lastAnchor.city})`,
-      confidence: 35,
+      confidence: 45,
       types: ["anchor_fallback"],
       source: "anchor_local",
       allResults: [],
@@ -5506,7 +5509,7 @@ const buildQueryVariants = (raw) => {
   const s = String(raw || "").trim();
   if (!s) return [];
 
-  const expanded = expandRDAddress(s);
+  const expanded = rdSmartExpandLocationContext(expandRDAddress(s));
   const variants = new Set();
 
   // ── Usar query optimizada del parser dominicano como variante prioritaria ──
@@ -6138,10 +6141,19 @@ const scoreGoogleResult = (result, original) => {
   const anchor = rdContextHint(original);
   if (anchor) {
     const dAnchor = hav({lat,lng}, anchor);
-    if (dAnchor <= 3) score += 10;
-    else if (dAnchor <= 6) score += 5;
-    else if (dAnchor > 18) score -= 25;
-    else if (dAnchor > 10) score -= 12;
+    if (dAnchor <= 1.2) score += 16;
+    else if (dAnchor <= 3) score += 10;
+    else if (dAnchor <= 6) score += 4;
+    else if (dAnchor > 12) score -= 32;
+    else if (dAnchor > 8) score -= 18;
+  }
+  // Si hay múltiples referencias locales en el texto, escoger resultados cercanos a cualquiera de ellas.
+  const rdAnchorMatches = rdAnchorCandidatesFromText(original);
+  if (rdAnchorMatches.length) {
+    const minD = Math.min(...rdAnchorMatches.map(x => hav({lat,lng}, x.anchor)));
+    if (minD <= 1.5) score += 12;
+    else if (minD <= 3) score += 7;
+    else if (minD > 10) score -= 24;
   }
 
   score += rdBaseDistanceBonus(lat, lng);
@@ -8169,6 +8181,135 @@ const SDO_ANCHORS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MOTOR RD SMART LOCATION PACK v29
+// Expande el diccionario local sin cambiar la lógica de rutas/Firebase.
+// Más sectores, residenciales, calles, colegios, negocios y referencias comunes
+// de SDO + DN para que Google reciba mejor contexto y el fallback quede cerca.
+// ─────────────────────────────────────────────────────────────────────────────
+const RD_LOCATION_BOOSTERS = {
+  "los girasoles": { lat:18.5325, lng:-69.9980, city:"Distrito Nacional" },
+  "los girasoles 1": { lat:18.5310, lng:-69.9960, city:"Distrito Nacional" },
+  "los girasoles i": { lat:18.5310, lng:-69.9960, city:"Distrito Nacional" },
+  "los girasoles 2": { lat:18.5335, lng:-69.9990, city:"Distrito Nacional" },
+  "los girasoles ii": { lat:18.5335, lng:-69.9990, city:"Distrito Nacional" },
+  "los girasoles 3": { lat:18.5360, lng:-70.0020, city:"Distrito Nacional" },
+  "los girasoles iii": { lat:18.5360, lng:-70.0020, city:"Distrito Nacional" },
+  "avenida monumental los girasoles": { lat:18.5315, lng:-69.9965, city:"Distrito Nacional" },
+  "residencial monumental": { lat:18.5320, lng:-69.9965, city:"Distrito Nacional" },
+  "residencial carmen renata": { lat:18.5368, lng:-69.9925, city:"Distrito Nacional" },
+  "ciudad real": { lat:18.5372, lng:-69.9840, city:"Distrito Nacional" },
+  "ciudad real ii": { lat:18.5385, lng:-69.9865, city:"Distrito Nacional" },
+  "arroyo manzano": { lat:18.5460, lng:-69.9790, city:"Distrito Nacional" },
+  "pantoja": { lat:18.5500, lng:-70.0100, city:"Santo Domingo Oeste" },
+  "los peralejos": { lat:18.5268, lng:-69.9938, city:"Distrito Nacional" },
+  "brisas del norte": { lat:18.5265, lng:-69.9985, city:"Distrito Nacional" },
+  "los rios": { lat:18.5058, lng:-69.9758, city:"Distrito Nacional" },
+  "los ríos": { lat:18.5058, lng:-69.9758, city:"Distrito Nacional" },
+  "colinas de los rios": { lat:18.5085, lng:-69.9810, city:"Distrito Nacional" },
+  "colinas de los ríos": { lat:18.5085, lng:-69.9810, city:"Distrito Nacional" },
+  "villa marina": { lat:18.5108, lng:-69.9925, city:"Distrito Nacional" },
+  "la esperanza": { lat:18.5075, lng:-69.9720, city:"Distrito Nacional" },
+  "arroyo hondo": { lat:18.4910, lng:-69.9650, city:"Distrito Nacional" },
+  "altos de arroyo hondo": { lat:18.5265, lng:-69.9690, city:"Distrito Nacional" },
+  "cuesta hermosa": { lat:18.5142, lng:-69.9675, city:"Distrito Nacional" },
+  "cuesta brava": { lat:18.5097, lng:-69.9655, city:"Distrito Nacional" },
+  "jardin botanico": { lat:18.4949, lng:-69.9519, city:"Distrito Nacional" },
+  "gbc los rios": { lat:18.5059, lng:-69.9761, city:"Distrito Nacional" },
+  "colegio mi nido de amor": { lat:18.5068, lng:-69.9765, city:"Distrito Nacional" },
+  "cristo rey": { lat:18.4960, lng:-69.9530, city:"Distrito Nacional" },
+  "la agustinita": { lat:18.5030, lng:-69.9490, city:"Distrito Nacional" },
+  "ensanche la fe": { lat:18.5010, lng:-69.9430, city:"Distrito Nacional" },
+  "ensanche luperon": { lat:18.5030, lng:-69.9600, city:"Distrito Nacional" },
+  "ensanche espaillat": { lat:18.4840, lng:-69.9450, city:"Distrito Nacional" },
+  "villa juana": { lat:18.4940, lng:-69.9360, city:"Distrito Nacional" },
+  "villa consuelo": { lat:18.4895, lng:-69.9200, city:"Distrito Nacional" },
+  "capotillo": { lat:18.5040, lng:-69.9360, city:"Distrito Nacional" },
+  "gualey": { lat:18.5010, lng:-69.9280, city:"Distrito Nacional" },
+  "guachupita": { lat:18.5050, lng:-69.9200, city:"Distrito Nacional" },
+  "herrera": { lat:18.4890, lng:-70.0023, city:"Santo Domingo Oeste" },
+  "el palmar de herrera": { lat:18.4815, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "palmar de herrera": { lat:18.4815, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "colegio arcoiris azul": { lat:18.4820, lng:-70.0062, city:"Santo Domingo Oeste" },
+  "colegio arcoiris": { lat:18.4820, lng:-70.0062, city:"Santo Domingo Oeste" },
+  "respaldo jose reyes": { lat:18.4824, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "respaldo josé reyes": { lat:18.4824, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "buenos aires de herrera": { lat:18.4865, lng:-70.0105, city:"Santo Domingo Oeste" },
+  "las palmas de herrera": { lat:18.4840, lng:-70.0060, city:"Santo Domingo Oeste" },
+  "el cafe de herrera": { lat:18.4820, lng:-70.0180, city:"Santo Domingo Oeste" },
+  "el café de herrera": { lat:18.4820, lng:-70.0180, city:"Santo Domingo Oeste" },
+  "zona industrial herrera": { lat:18.4830, lng:-70.0200, city:"Santo Domingo Oeste" },
+  "avenida isabel aguiar": { lat:18.5050, lng:-70.0280, city:"Santo Domingo Oeste" },
+  "prolongacion 27 de febrero": { lat:18.4780, lng:-70.0050, city:"Santo Domingo Oeste" },
+  "prolongación 27 de febrero": { lat:18.4780, lng:-70.0050, city:"Santo Domingo Oeste" },
+  "residencial cumbre del paraiso": { lat:18.4860, lng:-70.0128, city:"Santo Domingo Oeste" },
+  "cumbre del paraiso": { lat:18.4860, lng:-70.0128, city:"Santo Domingo Oeste" },
+  "las orquideas": { lat:18.4852, lng:-70.0136, city:"Santo Domingo Oeste" },
+  "las orquídeas": { lat:18.4852, lng:-70.0136, city:"Santo Domingo Oeste" },
+  "mr signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "mr. signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "publicitaria mr signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "las caobas": { lat:18.5020, lng:-70.0180, city:"Santo Domingo Oeste" },
+  "las caobitas": { lat:18.5040, lng:-70.0200, city:"Santo Domingo Oeste" },
+  "bayona": { lat:18.5120, lng:-70.0320, city:"Santo Domingo Oeste" },
+  "manoguayabo": { lat:18.5200, lng:-70.0450, city:"Santo Domingo Oeste" },
+  "buenos aires de manoguayabo": { lat:18.5180, lng:-70.0470, city:"Santo Domingo Oeste" },
+  "engombe": { lat:18.5250, lng:-70.0600, city:"Santo Domingo Oeste" },
+  "altos de engombe": { lat:18.5280, lng:-70.0630, city:"Santo Domingo Oeste" },
+  "hato nuevo": { lat:18.5350, lng:-70.0750, city:"Santo Domingo Oeste" },
+  "batey bienvenido": { lat:18.5400, lng:-70.0800, city:"Santo Domingo Oeste" },
+  "la venta": { lat:18.5100, lng:-70.0300, city:"Santo Domingo Oeste" },
+  "km 9 autopista duarte": { lat:18.5030, lng:-69.9900, city:"Distrito Nacional" },
+  "kilometro 9 autopista duarte": { lat:18.5030, lng:-69.9900, city:"Distrito Nacional" },
+  "km9": { lat:18.5030, lng:-69.9900, city:"Distrito Nacional" },
+  "autopista duarte": { lat:18.5100, lng:-70.0500, city:"Santo Domingo Oeste" },
+  "avenida republica de colombia": { lat:18.5300, lng:-69.9700, city:"Distrito Nacional" },
+  "república de colombia": { lat:18.5300, lng:-69.9700, city:"Distrito Nacional" },
+};
+Object.assign(SDO_ANCHORS, RD_LOCATION_BOOSTERS);
+
+const RD_LOCATION_ALIASES = [
+  [/kms*9/gi, "kilometro 9 autopista duarte"],
+  [/aut.?s*duarte/gi, "autopista duarte"],
+  [/autop.?s*duarte/gi, "autopista duarte"],
+  [/rep.?s*des*colombia/gi, "avenida republica de colombia"],
+  [/rev.?s*colombia/gi, "avenida republica de colombia"],
+  [/res.?s*/gi, "residencial "],
+  [/urb.?s*/gi, "urbanizacion "],
+  [/prol.?s*/gi, "prolongacion "],
+  [/cll?e?.?s*/gi, "calle "],
+  [/av.?s*/gi, "avenida "],
+  [/no.?s*/gi, "numero "],
+  [/frentes+a/gi, "frente a"],
+  [/als+lados+de/gi, "cerca de"],
+];
+
+const rdSmartExpandLocationContext = (value="") => {
+  let out = String(value || "");
+  RD_LOCATION_ALIASES.forEach(([re, rep]) => { out = out.replace(re, rep); });
+  out = out.replace(/s+/g, " ").trim();
+  const norm = out.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const matches = Object.keys(SDO_ANCHORS)
+    .filter(k => norm.includes(k.normalize("NFD").replace(/[̀-ͯ]/g, "")))
+    .sort((a,b) => b.length - a.length)
+    .slice(0, 2);
+  if (matches.length) {
+    const cities = [...new Set(matches.map(k => SDO_ANCHORS[k]?.city).filter(Boolean))];
+    const ctx = [...matches, ...cities, "Republica Dominicana"].join(", ");
+    if (!norm.includes("republica dominicana")) out = out + ", " + ctx;
+  }
+  return out;
+};
+
+const rdAnchorCandidatesFromText = (value="") => {
+  const t = String(value || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return Object.keys(SDO_ANCHORS)
+    .map(k => ({ key:k, norm:k.normalize("NFD").replace(/[̀-ͯ]/g, ""), anchor:SDO_ANCHORS[k] }))
+    .filter(x => t.includes(x.norm))
+    .sort((a,b) => b.norm.length - a.norm.length)
+    .slice(0, 5);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NIVEL 3: CACHE DE APRENDIZAJE PERSISTENTE
 // Cuando el admin corrige manualmente una dirección, la corrección se guarda
 // en Firebase y se usa en futuras geocodificaciones de la misma dirección.
@@ -8234,12 +8375,20 @@ const searchWithPlaces = async (rawAddress) => {
     { lat: RD_BOUNDS.north, lng: RD_BOUNDS.east }
   );
 
-  // Intentar varias queries: expandida, raw, y simplificada
-  const queries = [
+  // Intentar varias queries: dirección enriquecida, referencias locales, raw y simplificada.
+  // Se agrega contexto local sin cambiar el flujo: mejora Google Places para colegios,
+  // residenciales, colmados, negocios y referencias escritas por clientes.
+  const smartRaw = rdSmartExpandLocationContext(rawAddress);
+  const anchorMatches = rdAnchorCandidatesFromText(rawAddress);
+  const anchorQueries = anchorMatches.map(x => `${rawAddress}, ${x.key}, ${x.anchor.city}, República Dominicana`);
+  const queries = [...new Set([
+    smartRaw,
+    rdSmartExpandLocationContext(expandRDAddress(rawAddress)),
+    ...anchorQueries,
     expandRDAddress(rawAddress) + ", República Dominicana",
     rawAddress + ", Santo Domingo, República Dominicana",
     rawAddress.split(",")[0].trim() + ", Santo Domingo",
-  ];
+  ].filter(Boolean))].slice(0, 10);
 
   for (const query of queries) {
     try {
