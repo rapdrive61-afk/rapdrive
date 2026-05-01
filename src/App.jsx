@@ -57,6 +57,71 @@ const installRapDriveBranding = () => {
 // En las Reglas de Firebase pon: { "rules": { ".read": true, ".write": true } }
 const FB_URL = "https://rapdrive-default-rtdb.firebaseio.com";
 
+
+// --- FIREBASE CLOUD MESSAGING / PUSH NOTIFICATIONS --------------------------
+// Web config público de Firebase + VAPID key. La llave privada del service account
+// NO va aquí; va en variables de entorno del backend /api/send-push.
+const RD_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC17KefrJEms-Be8rmMvnscgDSStxmLYjU",
+  authDomain: "rapdrive.firebaseapp.com",
+  databaseURL: "https://rapdrive-default-rtdb.firebaseio.com",
+  projectId: "rapdrive",
+  storageBucket: "rapdrive.firebasestorage.app",
+  messagingSenderId: "101750387556",
+  appId: "1:101750387556:web:2e3b672142ad4235958071",
+  measurementId: "G-SPVVM3NS6X",
+};
+const RD_FCM_VAPID_KEY = "BGbAV0eeCh5qOhlNZFsiyBr1kvo4FKeXu6uFDttP2igVID4JeX8_VY287mWWcOg7rdfaAteOlrDToMiaEEV1dpU";
+
+const loadExternalScript = (src) => new Promise((resolve, reject) => {
+  if (typeof document === "undefined") return reject(new Error("No document"));
+  const existing = document.querySelector(`script[src="${src}"]`);
+  if (existing) return existing.dataset.loaded === "true" ? resolve() : existing.addEventListener("load", resolve, { once:true });
+  const s = document.createElement("script");
+  s.src = src; s.async = true;
+  s.onload = () => { s.dataset.loaded = "true"; resolve(); };
+  s.onerror = reject; document.head.appendChild(s);
+});
+
+const initRapDriveMessaging = async () => {
+  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) return null;
+  await loadExternalScript("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
+  await loadExternalScript("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
+  if (!window.firebase.apps.length) window.firebase.initializeApp(RD_FIREBASE_CONFIG);
+  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  const messaging = window.firebase.messaging();
+  return { messaging, reg };
+};
+
+const safeTokenKey = (token) => String(token || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+
+const requestRapDrivePushToken = async (user) => {
+  try {
+    if (!user || user.role !== "driver" || !user.driverId) return null;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return null;
+    const ctx = await initRapDriveMessaging();
+    if (!ctx) return null;
+    const token = await ctx.messaging.getToken({ vapidKey: RD_FCM_VAPID_KEY, serviceWorkerRegistration: ctx.reg });
+    if (!token) return null;
+    const payload = { token, driverId:user.driverId, userId:user.id, officeId:user.officeId||null, ua:navigator.userAgent||"", updatedAt:Date.now(), origin:window.location.origin };
+    await FB.set(RD.path(`pushTokens/${user.driverId}/${safeTokenKey(token)}`), payload);
+    window.__rdPushReady = true;
+    return token;
+  } catch (e) { console.warn("RapDrive push token error", e); return null; }
+};
+
+const sendPushToDriver = async (driverId, payload) => {
+  try {
+    if (!driverId) return { ok:false, reason:"missing_driver" };
+    const tokensObj = await FB.get(RD.path(`pushTokens/${driverId}`));
+    const tokens = Object.values(tokensObj || {}).map(x => typeof x === "string" ? x : x?.token).filter(Boolean);
+    if (!tokens.length) return { ok:false, reason:"no_tokens" };
+    const res = await fetch("/api/send-push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ tokens, ...payload }) });
+    return res.ok ? await res.json().catch(()=>({ok:true})) : { ok:false, status:res.status };
+  } catch (e) { console.warn("sendPushToDriver error", e); return { ok:false, error:String(e?.message||e) }; }
+};
+
 const RD = {
   officeId: () => {
     try {
@@ -9355,6 +9420,13 @@ const CircuitEngine = () => {
                         sentAt: new Date().toISOString(),
                         read: false,
                       });
+                      // Push nativa tipo app: aparece aunque el mensajero tenga Rap Drive en segundo plano.
+                      sendPushToDriver(driverId, {
+                        title: "Nueva ruta asignada",
+                        body: `${routeName} · ${confirmed.length} paradas · ${km} km`,
+                        icon: "/rapdrive-icon-192.png", badge: "/rapdrive-badge-72.png", tag: `route-${route.routeId}`,
+                        data: { type: "route_assigned", routeId: route.routeId, driverId, officeId: RD.officeId() || "", url: "/?open=driver-route&routeId=" + encodeURIComponent(route.routeId) },
+                      });
 
                       // Chat automático
                       if (!window.__rdChatStore) window.__rdChatStore = {};
@@ -9636,6 +9708,12 @@ const AdminRoutesV5 = ({ routes }) => {
     const clean = { ...r, isActive:false, resentAt:new Date().toISOString(), sentAt:new Date().toISOString() };
     delete clean.isActive;
     await FB.set(RD.path(`routes/${r.driverId}`), clean);
+    sendPushToDriver(r.driverId, {
+      title:'Nueva ruta asignada',
+      body:`${r.routeName||'Ruta'} fue reenviada · ${(r.stops||[]).length} paradas`,
+      icon:'/rapdrive-icon-192.png', badge:'/rapdrive-badge-72.png', tag:`route-${r.routeId||Date.now()}`,
+      data:{ type:'route_assigned', routeId:r.routeId||'', driverId:r.driverId, officeId:RD.officeId()||'', url:'/?open=driver-route&routeId='+encodeURIComponent(r.routeId||'') }
+    });
     _memStore.routes[r.driverId] = clean;
     if (typeof window !== 'undefined') window.__rdRouteStore = { ...(window.__rdRouteStore||{}), [r.driverId]: clean };
     setRouteToast({ title:'Ruta reenviada', message:`${r.routeName||'Ruta'} fue enviada nuevamente al mensajero.` });
@@ -9648,6 +9726,12 @@ const AdminRoutesV5 = ({ routes }) => {
     const key=r.routeId||`${r.driverId}_${r.sentAt}`;
     if(r.isActive && r.driverId){
       await FB.remove(RD.path(`routes/${r.driverId}`));
+      sendPushToDriver(r.driverId, {
+        title:'Ruta eliminada',
+        body:`${r.routeName||'La ruta activa'} fue eliminada por el admin.`,
+        icon:'/rapdrive-icon-192.png', badge:'/rapdrive-badge-72.png', tag:`route-deleted-${r.routeId||Date.now()}`,
+        data:{ type:'route_deleted', routeId:r.routeId||'', driverId:r.driverId, officeId:RD.officeId()||'', url:'/?open=driver-home' }
+      });
       delete _memStore.routes[r.driverId];
       if (typeof window !== 'undefined' && window.__rdRouteStore) delete window.__rdRouteStore[r.driverId];
     }
@@ -9720,6 +9804,12 @@ export default function RapDrive() {
       FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
     });
   }, [currentUser?.officeId]);
+
+  // Push nativa para mensajeros: guarda el token FCM en Firebase por oficina/mensajero.
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "driver") return;
+    requestRapDrivePushToken(currentUser);
+  }, [currentUser?.id, currentUser?.driverId, currentUser?.officeId]);
 
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
