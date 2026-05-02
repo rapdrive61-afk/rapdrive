@@ -6737,22 +6737,27 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   };
 
   const mappedText   = cleanAddressText(stop.displayAddr || "");
-  const excelAddress = cleanAddressText(stop.rawAddr || stop.address || stop.direccion || mappedText);
-  const excelAddr2   = cleanAddressText(stop.addr2 || stop.address2 || stop.direccion2 || stop.referencia || "");
-  const excelSector  = cleanAddressText(stop.sector || "");
-  const excelCity    = cleanAddressText(stop.city || stop.ciudad || "");
-  const excelProvince= cleanAddressText(stop.provincia || "");
-  const excelCp      = cleanAddressText(stop.cp || stop.postalCode || "");
+  const looksMappedResult = (v="") => {
+    const t = cleanAddressText(v).toLowerCase();
+    return /^([a-z0-9+]{4,}\+|[-+]?\d{1,2}\.\d+)/i.test(t) || /rep[uú]blica dominicana/i.test(t) && !stop.excelRawAddr && !stop.excelAddr2;
+  };
+  const excelAddressRaw = cleanAddressText(stop.excelRawAddr || stop.originalRawAddr || stop.originalAddress || stop.addressExcel || stop.rawExcelAddress || stop.address || stop.direccion || stop.rawAddr || "");
+  const excelAddress = cleanAddressText(excelAddressRaw && !looksMappedResult(excelAddressRaw) ? excelAddressRaw : (stop.rawAddr && !looksMappedResult(stop.rawAddr) ? stop.rawAddr : ""));
+  const excelAddr2   = cleanAddressText(stop.excelAddr2 || stop.addr2 || stop.address2 || stop.direccion2 || stop.referencia || "");
+  const excelSector  = cleanAddressText(stop.excelSector || stop.sector || "");
+  const excelCity    = cleanAddressText(stop.excelCity || stop.city || stop.ciudad || "");
+  const excelProvince= cleanAddressText(stop.excelProvince || stop.provincia || "");
+  const excelCp      = cleanAddressText(stop.excelCp || stop.cp || stop.postalCode || "");
 
   const currentText = mappedText || excelAddress || "Sin dirección";
-  const googleExcelQuery = joinQuery(excelAddress, excelSector, excelCity, excelProvince, excelCp, "República Dominicana");
-  const excelDirectionQuery = googleExcelQuery || joinQuery(excelAddress, "República Dominicana");
-  const address2Query = joinQuery(excelAddr2, excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana");
-  const sectorQuery = joinQuery(excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana");
+  // Estas tres sugerencias son EXACTAMENTE campos del Excel. No se mezclan con la dirección mapeada.
+  const excelDirectionQuery = excelAddress;
+  const address2Query = excelAddr2;
+  const sectorQuery = joinQuery(excelSector, excelCity, excelProvince, excelCp, "República Dominicana");
 
   const buildGoogleMapsQuery = () => {
-    // Abrir Google Maps SIEMPRE con la dirección original del Excel limpia.
-    return excelDirectionQuery || excelAddress || "Santo Domingo Oeste, República Dominicana";
+    // Abrir Google Maps con la dirección original del Excel, no con la ubicación ya mapeada.
+    return excelAddress || joinQuery(excelSector, excelCity, excelProvince, excelCp, "República Dominicana") || currentText || "Santo Domingo Oeste, República Dominicana";
   };
 
   const openGoogleMaps = () => {
@@ -6792,6 +6797,8 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
           -webkit-appearance:none!important;
           appearance:none!important;
           box-shadow:inset 0 1px 0 rgba(255,255,255,.92), 0 0 0 4px rgba(37,99,235,.08)!important;
+          filter:none!important;
+          mix-blend-mode:normal!important;
         }
         .rd-address-search-input::placeholder { color:#94a3b8!important; -webkit-text-fill-color:#94a3b8!important; opacity:1!important; }
         .rd-address-search-input:-webkit-autofill,
@@ -6856,11 +6863,12 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       }
     }
 
-    // Búsqueda limpia: dirección principal manda; dirección 2 solo entra si el usuario la escoge.
+    // Búsqueda escalonada desde el modal: texto elegido/escrito → Dirección 2 → Sector.
+    // Las sugerencias visuales siguen siendo solo campos limpios del Excel.
     const searchVariants = [
       text,
-      joinQuery(text, excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana"),
-      excelDirectionQuery,
+      joinQuery(text, excelSector, excelCity || "Santo Domingo Oeste", excelProvince, excelCp, "República Dominicana"),
+      address2Query ? joinQuery(address2Query, excelSector, excelCity || "Santo Domingo Oeste", excelProvince, excelCp, "República Dominicana") : "",
       sectorQuery,
     ].filter(Boolean);
 
@@ -6966,7 +6974,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
             </div>
 
             <div style={{ display:"flex",gap:10,alignItems:"stretch" }}>
-              <div style={{ flex:1, position:"relative", background:"#ffffff", borderRadius:14 }}>
+              <div style={{ flex:1, position:"relative", background:"#ffffff", backgroundColor:"#ffffff", borderRadius:14, colorScheme:"light" }}>
                 <svg style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", zIndex:2 }} width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input
                   ref={inputRef}
@@ -8797,7 +8805,7 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-// V32: SDO Location Engine Plus. Más sectores/referencias SDO + corrector Google light; rutas/Firebase intactos.
+// V36: Address modal Excel strict + búsqueda escalonada dirección/ref/sector; rutas/Firebase intactos.
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
@@ -8906,6 +8914,12 @@ const CircuitEngine = () => {
         id:          `S${String(i + 1).padStart(3, "0")}`,
         stopNum:     null,
         rawAddr:     raw,
+        excelRawAddr: raw,
+        excelAddr2:   addr2,
+        excelSector:  sector,
+        excelCity:    ciudad,
+        excelProvince: provincia,
+        excelCp:      cp,
         displayAddr: raw ? expandRDAddress(enrichedRaw) : "Sin dirección",
         client:      String(row[mapping.client]   || `Parada ${i + 1}`).trim(),
         phone:       String(row[mapping.phone]    || "").trim(),
@@ -8930,7 +8944,26 @@ const CircuitEngine = () => {
             if (r.ok) Object.assign(stop, { lat: r.lat, lng: r.lng, status: "ok", confidence: 99, displayAddr: r.display || raw });
             else { stop.status = "error"; stop.issue = "Plus Code no reconocido"; }
           } else {
-            const r = await geocodeWithGoogle(enrichedRaw);
+            // Búsqueda escalonada sin romper la lógica:
+            // 1) Dirección principal del Excel, 2) Dirección 2 / referencia, 3) Sector.
+            // Dirección 2 ayuda cuando contiene puntos reconocibles en Google (ej: paradita aduanera, colegio, negocio).
+            const layeredQueries = [
+              rdBuildStrictStopQuery(raw, sector, ciudad, provincia, cp, ""),
+              addr2 ? rdBuildStrictStopQuery(addr2, sector, ciudad, provincia, cp, "") : "",
+              sector ? rdBuildStrictStopQuery(sector, ciudad || "Santo Domingo Oeste", provincia, cp, "") : "",
+              enrichedRaw,
+            ].map(x => String(x || "").trim()).filter(Boolean);
+            const uniqueLayered = [...new Set(layeredQueries.map(x => x.toLowerCase()))]
+              .map(low => layeredQueries.find(x => x.toLowerCase() === low));
+            let r = { ok:false };
+            let fallbackOk = null;
+            for (const qv of uniqueLayered) {
+              const rr = await geocodeWithGoogle(qv);
+              if (!rr.ok) continue;
+              if (!fallbackOk) fallbackOk = rr;
+              if ((rr.confidence || 0) >= 70) { r = rr; break; }
+            }
+            if (!r.ok && fallbackOk) r = fallbackOk;
             if (r.ok) {
               stop.lat = r.lat; stop.lng = r.lng; stop.displayAddr = r.display;
               stop.confidence = r.confidence; stop.allResults = r.allResults;
@@ -8975,7 +9008,7 @@ const CircuitEngine = () => {
       setStops(prev => {
         const updated = prev.map(s => s.id !== stopId ? s : {
           ...s, lat: placeResult.lat, lng: placeResult.lng,
-          displayAddr: placeResult.display, rawAddr: placeResult.display,
+          displayAddr: placeResult.display,
           confidence: placeResult.confidence || 95, status: "ok", issue: null, allResults: [],
         });
         return optimizeRoute(updated);
@@ -8984,7 +9017,7 @@ const CircuitEngine = () => {
     }
 
     // Manual text → re-geocode
-    setStops(prev => prev.map(s => s.id !== stopId ? s : { ...s, status: "pending", confidence: 0, displayAddr: newAddr, rawAddr: newAddr }));
+    setStops(prev => prev.map(s => s.id !== stopId ? s : { ...s, status: "pending", confidence: 0, displayAddr: newAddr }));
     const coords = detectCoords(newAddr);
     let result;
     if (coords) {
