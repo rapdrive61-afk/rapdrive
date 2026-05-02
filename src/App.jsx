@@ -94,32 +94,67 @@ const initRapDriveMessaging = async () => {
 };
 
 const safeTokenKey = (token) => String(token || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+const resolvePushDriverId = (user) => String(user?.driverId || user?.mensajeroId || user?.id || "").trim();
+
+const extractPushTokens = (obj) => {
+  if (!obj) return [];
+  if (typeof obj === "string") return [obj];
+  if (Array.isArray(obj)) return obj.flatMap(extractPushTokens);
+  if (typeof obj !== "object") return [];
+  return Object.values(obj).flatMap(v => typeof v === "string" ? [v] : v?.token ? [v.token] : extractPushTokens(v));
+};
+
+const savePushDebug = async (event, data={}) => {
+  try {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+    await FB.set(`pushDebug/${id}`, { event, ...data, ts:Date.now(), origin: typeof window !== "undefined" ? window.location.origin : "server" });
+  } catch(e) {}
+};
 
 const requestRapDrivePushToken = async (user) => {
   try {
-    if (!user || user.role !== "driver" || !user.driverId) return null;
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return null;
+    const driverId = resolvePushDriverId(user);
+    if (!user || user.role !== "driver" || !driverId) { await savePushDebug("skip_token", { reason:"no_driver_user", userId:user?.id||null, role:user?.role||null }); return null; }
+    if (typeof Notification === "undefined") { await savePushDebug("skip_token", { driverId, reason:"no_notification_api" }); return null; }
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission !== "granted") { await savePushDebug("skip_token", { driverId, reason:"permission_"+permission }); return null; }
     const ctx = await initRapDriveMessaging();
-    if (!ctx) return null;
+    if (!ctx) { await savePushDebug("skip_token", { driverId, reason:"messaging_not_ready" }); return null; }
     const token = await ctx.messaging.getToken({ vapidKey: RD_FCM_VAPID_KEY, serviceWorkerRegistration: ctx.reg });
-    if (!token) return null;
-    const payload = { token, driverId:user.driverId, userId:user.id, officeId:user.officeId||null, ua:navigator.userAgent||"", updatedAt:Date.now(), origin:window.location.origin };
-    await FB.set(RD.path(`pushTokens/${user.driverId}/${safeTokenKey(token)}`), payload);
+    if (!token) { await savePushDebug("skip_token", { driverId, reason:"empty_token" }); return null; }
+    const officeId = user.officeId || RD.officeId() || null;
+    const payload = { token, driverId, userId:user.id||driverId, officeId, ua:navigator.userAgent||"", updatedAt:Date.now(), origin:window.location.origin };
+
+    // Guardado doble y seguro: global + por oficina. Así no falla si admin y mensajero están en paths distintos.
+    await FB.set(`pushTokens/${driverId}/${safeTokenKey(token)}`, payload);
+    if (officeId) await FB.set(`oficinas/${officeId}/pushTokens/${driverId}/${safeTokenKey(token)}`, payload);
+    await FB.set(`pushTokensByToken/${safeTokenKey(token)}`, payload);
     window.__rdPushReady = true;
+    window.__rdPushToken = token;
+    await savePushDebug("token_saved", { driverId, officeId, tokenEnd: token.slice(-12) });
     return token;
-  } catch (e) { console.warn("RapDrive push token error", e); return null; }
+  } catch (e) { console.warn("RapDrive push token error", e); await savePushDebug("token_error", { error:String(e?.message||e) }); return null; }
 };
 
 const sendPushToDriver = async (driverId, payload) => {
   try {
     if (!driverId) return { ok:false, reason:"missing_driver" };
-    const tokensObj = await FB.get(RD.path(`pushTokens/${driverId}`));
-    const tokens = Object.values(tokensObj || {}).map(x => typeof x === "string" ? x : x?.token).filter(Boolean);
-    if (!tokens.length) return { ok:false, reason:"no_tokens" };
+    const scopedPath = RD.path(`pushTokens/${driverId}`);
+    const [scopedObj, globalObj] = await Promise.all([
+      FB.get(scopedPath),
+      FB.get(`pushTokens/${driverId}`),
+    ]);
+    const tokens = [...new Set([...extractPushTokens(scopedObj), ...extractPushTokens(globalObj)])].filter(Boolean);
+    if (!tokens.length) {
+      await savePushDebug("send_no_tokens", { driverId, scopedPath, title:payload?.title||"" });
+      return { ok:false, reason:"no_tokens", driverId, scopedPath };
+    }
     const res = await fetch("/api/send-push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ tokens, ...payload }) });
-    return res.ok ? await res.json().catch(()=>({ok:true})) : { ok:false, status:res.status };
-  } catch (e) { console.warn("sendPushToDriver error", e); return { ok:false, error:String(e?.message||e) }; }
+    const body = await res.json().catch(()=>({}));
+    const out = res.ok ? body : { ok:false, status:res.status, ...body };
+    await savePushDebug(res.ok ? "send_result" : "send_error", { driverId, tokenCount:tokens.length, status:res.status, response:out, title:payload?.title||"" });
+    return out;
+  } catch (e) { console.warn("sendPushToDriver error", e); await savePushDebug("send_exception", { driverId, error:String(e?.message||e) }); return { ok:false, error:String(e?.message||e) }; }
 };
 
 const RD = {
@@ -2498,7 +2533,7 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
     setTimeout(() => {
       const m = mensajeros.find(x => x.id === selId);
       if (!m) { setError("Mensajero no encontrado"); setLoading(false); return; }
-      onLogin({ ...m, role:"driver" });
+      onLogin({ ...m, role:"driver", driverId: m.driverId || m.id, officeId: m.officeId || RD.officeId() || window.__rdOfficeId || null });
     }, 700);
   };
 
@@ -9800,8 +9835,8 @@ export default function RapDrive() {
       setMensajeros(arr);
       _memStore.mens = arr;
       window.__rdMensajeros = arr;
-      // Si Firebase tenía mezcla array+objeto, se corrige una sola vez al entrar.
-      FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
+      // Seguridad V31: NO reescribir mensajeros al entrar. Evita borrar datos si Firebase responde vacío.
+      if (false) FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
     });
   }, [currentUser?.officeId]);
 
@@ -9809,7 +9844,7 @@ export default function RapDrive() {
   useEffect(() => {
     if (!currentUser || currentUser.role !== "driver") return;
     requestRapDrivePushToken(currentUser);
-  }, [currentUser?.id, currentUser?.driverId, currentUser?.officeId]);
+  }, [currentUser?.id, currentUser?.driverId, currentUser?.officeId, currentUser?.role]);
 
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
@@ -10203,6 +10238,22 @@ export default function RapDrive() {
       {modalOpen && <ModalNewDelivery onClose={()=>setModalOpen(false)} onCreated={handleCreated}/>}
 
 
+
+      {/* PUSH V2: botón manual para registrar el celular del mensajero.
+          Es importante porque algunos navegadores móviles solo muestran permiso de notificación
+          cuando el usuario toca un botón real. */}
+      {currentUser?.role === "driver" && typeof Notification !== "undefined" && Notification.permission !== "granted" && (
+        <div style={{position:"fixed",left:14,right:14,bottom:92,zIndex:9000,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+          <div style={{width:"min(460px,100%)",background:"linear-gradient(135deg,#0b1626,#08111e)",border:"1px solid rgba(59,130,246,.35)",borderRadius:18,padding:"14px 15px",boxShadow:"0 18px 50px rgba(0,0,0,.55)",display:"flex",alignItems:"center",gap:12,pointerEvents:"auto"}}>
+            <div style={{width:42,height:42,borderRadius:14,background:"rgba(59,130,246,.15)",display:"grid",placeItems:"center",fontSize:20}}>🔔</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#eaf2ff"}}>Activar notificaciones</div>
+              <div style={{fontSize:11,color:"#7c8fa8",marginTop:3}}>Recibe aviso cuando te asignen o eliminen una ruta.</div>
+            </div>
+            <button onClick={() => requestRapDrivePushToken(currentUser)} style={{border:"none",borderRadius:12,padding:"10px 13px",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"white",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 8px 22px rgba(59,130,246,.35)"}}>Activar</button>
+          </div>
+        </div>
+      )}
 
       {/* Toast stack */}
       <div style={{position:"fixed",top:64,right:12,display:"flex",flexDirection:"column",gap:8,zIndex:3000,pointerEvents:"none",alignItems:"flex-end"}}>

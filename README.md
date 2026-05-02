@@ -1,16 +1,40 @@
-# React + Vite
+# Rap Drive Push Notifications
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Archivos incluidos:
 
-Currently, two official plugins are available:
+1. `App_RapDrive_ADMIN_V30_PUSH_READY.jsx`
+2. `public/firebase-messaging-sw.js`
+3. `api/send-push.js`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Instalar dependencia backend
 
-## React Compiler
+```bash
+npm install firebase-admin
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Variables en Vercel
 
-## Expanding the ESLint configuration
+Project Settings → Environment Variables:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```txt
+FIREBASE_PROJECT_ID=rapdrive
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@rapdrive.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
+```
+
+También puedes usar una sola variable:
+
+```txt
+FIREBASE_SERVICE_ACCOUNT_JSON={...json completo...}
+```
+
+## Flujo
+
+- El mensajero inicia sesión.
+- El navegador pide permiso de notificaciones.
+- Se guarda el token en `oficinas/{officeId}/pushTokens/{driverId}`.
+- Cuando el admin envía o elimina una ruta activa, llama `/api/send-push`.
+
+## Importante
+
+No pongas la llave privada del service account dentro del frontend.
