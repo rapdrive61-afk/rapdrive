@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V32 SDO LOCATION BOOST: motor SDO reforzado + corrector Google light, sin tocar lógica de rutas/Firebase.
+// V34 ADDRESS MODAL FIX: Google Maps usa dirección Excel, barra clara y sugerencias por dirección principal.
 
 const DELIVERIES = [];
 
@@ -5424,7 +5424,7 @@ const geocodeWithGoogle = async (rawAddress) => {
       confidence: conf,
       types: top.types || [],
       source: "geocoding_api",
-      allResults: allCandidates.slice(0, 3).map(({ r, score }) => ({
+      allResults: allCandidates.slice(0, 8).map(({ r, score }) => ({
         display: r.formatted_address,
         lat: r.geometry.location.lat(),
         lng: r.geometry.location.lng(),
@@ -5481,7 +5481,7 @@ const geocodeWithGoogle = async (rawAddress) => {
         confidence: conf,
         types: [top.type || "nominatim"],
         source: "nominatim",
-        allResults: rdResults.slice(0, 3).map(r => ({
+        allResults: rdResults.slice(0, 8).map(r => ({
           display: r.display_name.split(",").slice(0, 3).join(",").trim(),
           lat: parseFloat(r.lat), lng: parseFloat(r.lon),
           confidence: 52,
@@ -6713,11 +6713,22 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const [query,   setQuery]   = useState("");
 
   const currentText = stop.displayAddr || stop.rawAddr || "";
-  const sectorHint = [stop.sector, stop.city || stop.ciudad, "República Dominicana"].filter(Boolean).join(", ");
+  const excelAddress = String(stop.rawAddr || stop.address || stop.direccion || "").trim();
+  const excelSector = String(stop.sector || "").trim();
+  const excelCity = String(stop.city || stop.ciudad || "").trim();
+  const excelProvince = String(stop.provincia || "").trim();
+  const excelCp = String(stop.cp || stop.postalCode || "").trim();
+  const sectorHint = [excelSector, excelCity, "República Dominicana"].filter(Boolean).join(", ");
+  const primaryExcelQuery = [excelAddress || currentText, excelSector, excelCity, excelProvince, excelCp, "República Dominicana"]
+    .filter(Boolean)
+    .join(", ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const buildGoogleMapsQuery = () => {
-    const txt = (inputRef.current?.value || query || currentText || "").trim();
-    return txt || currentText || "Santo Domingo Oeste";
+    // IMPORTANTE: abrir Google Maps con la dirección original del Excel, no con el resultado ya mapeado.
+    // Esto permite corregir cuando Google/Firebase guardó una ubicación incorrecta.
+    return primaryExcelQuery || excelAddress || currentText || "Santo Domingo Oeste, República Dominicana";
   };
 
   const openGoogleMaps = () => {
@@ -6752,6 +6763,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
         .pac-matched { color:#2563eb!important; }
         .pac-icon { display:none!important; }
         .pac-logo:after { display:none!important; }
+        input::placeholder { color:#64748b!important; opacity:1!important; }
       `;
       document.head.appendChild(s);
     }
@@ -6799,20 +6811,46 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       }
     }
 
-    const r = await geocodeWithGoogle(text);
+    // Buscar con varias variantes para mostrar más opciones reales, pero priorizando dirección principal del Excel.
+    const searchVariants = [
+      text,
+      [text, excelSector, excelCity, "República Dominicana"].filter(Boolean).join(", "),
+      primaryExcelQuery,
+      [excelAddress, excelSector, "Santo Domingo Oeste", "República Dominicana"].filter(Boolean).join(", "),
+    ].map(v => String(v || "").trim()).filter(Boolean);
+
+    const uniqueVariants = [...new Set(searchVariants)].slice(0, 4);
+    const collected = [];
+    let firstOk = null;
+
+    for (const qv of uniqueVariants) {
+      try {
+        const r = await geocodeWithGoogle(qv);
+        if (!r.ok) continue;
+        if (!firstOk) firstOk = r;
+        collected.push({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence || 92 });
+        (r.allResults || []).forEach(x => {
+          if (x && x.lat && x.lng && x.display) collected.push({ display: x.display, lat: x.lat, lng: x.lng, confidence: x.confidence || 80 });
+        });
+      } catch (_) {}
+    }
+
     setSaving(false);
-    if (r.ok) {
-      const main = { display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence || 92 };
-      const alternatives = (r.allResults || [])
-        .filter(x => x && x.lat && x.lng && x.display)
-        .map(x => ({ display: x.display, lat: x.lat, lng: x.lng, confidence: x.confidence || 80 }));
-      const merged = [main, ...alternatives].filter((x, idx, arr) =>
-        idx === arr.findIndex(y => String(y.display).toLowerCase() === String(x.display).toLowerCase())
-      ).slice(0, 8);
+    if (firstOk || collected.length) {
+      const merged = collected
+        .filter(x => x && x.display && Number.isFinite(Number(x.lat)) && Number.isFinite(Number(x.lng)))
+        .filter((x, idx, arr) => idx === arr.findIndex(y => {
+          const sameText = String(y.display).toLowerCase() === String(x.display).toLowerCase();
+          const sameCoord = Math.abs(Number(y.lat)-Number(x.lat)) < 0.00008 && Math.abs(Number(y.lng)-Number(x.lng)) < 0.00008;
+          return sameText || sameCoord;
+        }))
+        .sort((a,b) => (b.confidence||0) - (a.confidence||0))
+        .slice(0, 12);
+      const main = merged[0] || { display: firstOk.display, lat: firstOk.lat, lng: firstOk.lng, confidence: firstOk.confidence || 92 };
       applyFound(main);
-      setOptions(merged);
+      setOptions(merged.length ? merged : [main]);
     } else {
-      setErrMsg("No encontrada. Prueba con sector + referencia, coordenadas, Plus Code o abre Google Maps para copiar la ubicación exacta.");
+      setErrMsg("No encontrada. Prueba con dirección principal + sector, coordenadas, Plus Code o abre Google Maps con la dirección original del Excel.");
     }
   };
 
@@ -6826,11 +6864,12 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const handleConfirm = () => { if (found) onSave(found); };
 
   const quickChips = [
-    sectorHint && `Buscar en ${sectorHint}`,
-    currentText && `${currentText}, ${sectorHint}`,
-    stop.address2 && `${stop.address2}, ${sectorHint}`,
+    primaryExcelQuery && `Buscar dirección del Excel: ${primaryExcelQuery}`,
+    excelAddress && excelSector && `${excelAddress}, ${excelSector}, Santo Domingo Oeste`,
+    excelAddress && `${excelAddress}, República Dominicana`,
+    sectorHint && `Buscar solo en el sector: ${sectorHint}`,
     "Pegar coordenadas 18.x, -70.x",
-  ].filter(Boolean).slice(0, 4);
+  ].filter(Boolean).slice(0, 5);
 
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(15,23,42,0.48)", backdropFilter:"blur(8px)" }}
@@ -6874,7 +6913,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
             <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10 }}>
               <div>
                 <div style={{ fontSize:11,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1px" }}>NUEVA DIRECCIÓN</div>
-                <div style={{ fontSize:11,color:"#64748b",marginTop:3 }}>Busca como en Google Maps. Puedes usar calle, sector, negocio, Plus Code o coordenadas.</div>
+                <div style={{ fontSize:11,color:"#64748b",marginTop:3 }}>Usa la dirección principal del Excel. La referencia queda solo como apoyo.</div>
               </div>
               <button onClick={openGoogleMaps}
                 style={{ border:"1px solid #bfdbfe", background:"linear-gradient(180deg,#eff6ff,#dbeafe)", color:"#1d4ed8", borderRadius:12, padding:"9px 11px", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:900, cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
@@ -6890,9 +6929,9 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
                   defaultValue=""
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                  placeholder="Ej: Colinas del Norte C F 16, Pantoja / Plus Code / 18.51,-70.00"
+                  placeholder="Ej: C. Primera 3, Engombe / Colinas del Norte C F 16 / Plus Code"
                   autoComplete="off"
-                  style={{ width:"100%", boxSizing:"border-box", background:"#ffffff", border:"2px solid #bfdbfe", borderRadius:14, padding:"14px 15px 14px 44px", color:"#0f172a", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"0 0 0 4px rgba(37,99,235,0.06)" }}
+                  style={{ width:"100%", boxSizing:"border-box", background:"#ffffff", backgroundColor:"#ffffff", border:"2px solid #bfdbfe", borderRadius:14, padding:"14px 15px 14px 44px", color:"#0f172a", WebkitTextFillColor:"#0f172a", fontSize:14, fontFamily:"'Inter',sans-serif", fontWeight:600, outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 4px rgba(37,99,235,0.06)" }}
                 />
               </div>
               <button onClick={handleSearch} disabled={saving}
@@ -6905,7 +6944,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
             <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:10 }}>
               {quickChips.map((chip, idx) => (
                 <button key={idx} onClick={() => quickFill(chip)}
-                  style={{ border:"1px solid #e0e7ff", background:idx===0?"#eff6ff":"#fff", color:"#1e40af", borderRadius:999, padding:"6px 10px", fontSize:10.5, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
+                  style={{ border:"1px solid #e0e7ff", background:idx===0?"#eff6ff":"#fff", color:"#1e40af", borderRadius:999, padding:"6px 10px", fontSize:11.5, fontFamily:"'Inter',sans-serif", fontWeight:700, cursor:"pointer", lineHeight:1.35, textAlign:"left" }}>
                   {idx===0 ? "📌 " : idx===1 ? "➕ " : idx===2 ? "🏷️ " : "🌐 "}{chip.length > 58 ? chip.slice(0,58)+"..." : chip}
                 </button>
               ))}
@@ -6927,7 +6966,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
                       style={{ textAlign:"left", border:active?"2px solid #2563eb":"1px solid #e2e8f0", background:active?"#eff6ff":"#ffffff", borderRadius:14, padding:"11px 12px", cursor:"pointer", boxShadow:active?"0 10px 24px rgba(37,99,235,0.10)":"0 6px 18px rgba(15,23,42,0.04)", display:"flex", gap:10, alignItems:"flex-start" }}>
                       <div style={{ width:30,height:30,borderRadius:10,background:active?"#2563eb":"#f1f5f9",color:active?"white":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,flexShrink:0 }}>{idx+1}</div>
                       <div style={{ flex:1,minWidth:0 }}>
-                        <div style={{ fontSize:12.5,color:"#0f172a",fontWeight:800,lineHeight:1.35 }}>{opt.display}</div>
+                        <div style={{ fontSize:13,color:"#0f172a",fontWeight:650,lineHeight:1.45,fontFamily:"'Inter',sans-serif" }}>{opt.display}</div>
                         <div style={{ marginTop:4,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
                           <span style={{ fontSize:10,color:"#64748b",fontFamily:"monospace" }}>{Number(opt.lat).toFixed(5)}, {Number(opt.lng).toFixed(5)}</span>
                           <span style={{ fontSize:10,color:opt.confidence>=80?"#16a34a":"#f59e0b",background:opt.confidence>=80?"#dcfce7":"#fef3c7",padding:"2px 7px",borderRadius:999,fontFamily:"'Syne',sans-serif",fontWeight:900 }}>{opt.confidence}%</span>
