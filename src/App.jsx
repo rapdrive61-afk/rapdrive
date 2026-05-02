@@ -6712,23 +6712,47 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const [errMsg,  setErrMsg]  = useState("");
   const [query,   setQuery]   = useState("");
 
-  const currentText = stop.displayAddr || stop.rawAddr || "";
-  const excelAddress = String(stop.rawAddr || stop.address || stop.direccion || "").trim();
-  const excelSector = String(stop.sector || "").trim();
-  const excelCity = String(stop.city || stop.ciudad || "").trim();
-  const excelProvince = String(stop.provincia || "").trim();
-  const excelCp = String(stop.cp || stop.postalCode || "").trim();
-  const sectorHint = [excelSector, excelCity, "República Dominicana"].filter(Boolean).join(", ");
-  const primaryExcelQuery = [excelAddress || currentText, excelSector, excelCity, excelProvince, excelCp, "República Dominicana"]
-    .filter(Boolean)
-    .join(", ")
+  // Limpia textos que vienen de chips/sugerencias anteriores. Nunca se manda a Google con
+  // prefijos visuales como "Buscar dirección del Excel:".
+  const cleanAddressText = (value) => String(value || "")
+    .replace(/^\s*(buscar\s+)?direcci[oó]n\s+del\s+excel\s*:\s*/i, "")
+    .replace(/^\s*buscar\s+(solo\s+)?en\s+el\s+sector\s*:\s*/i, "")
+    .replace(/^\s*direcci[oó]n\s*2\s*\/\s*referencia\s*:\s*/i, "")
+    .replace(/^\s*referencia\s*:\s*/i, "")
+    .replace(/^\s*sector\s*:\s*/i, "")
+    .replace(/^\s*pegar\s+coordenadas.*$/i, "")
     .replace(/\s+/g, " ")
+    .replace(/,\s*,+/g, ",")
     .trim();
 
+  const joinQuery = (...parts) => {
+    const out = [];
+    parts.flat().forEach(part => {
+      const clean = cleanAddressText(part);
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (!out.some(x => x.toLowerCase() === key)) out.push(clean);
+    });
+    return out.join(", ").replace(/\s+/g, " ").trim();
+  };
+
+  const mappedText   = cleanAddressText(stop.displayAddr || "");
+  const excelAddress = cleanAddressText(stop.rawAddr || stop.address || stop.direccion || mappedText);
+  const excelAddr2   = cleanAddressText(stop.addr2 || stop.address2 || stop.direccion2 || stop.referencia || "");
+  const excelSector  = cleanAddressText(stop.sector || "");
+  const excelCity    = cleanAddressText(stop.city || stop.ciudad || "");
+  const excelProvince= cleanAddressText(stop.provincia || "");
+  const excelCp      = cleanAddressText(stop.cp || stop.postalCode || "");
+
+  const currentText = mappedText || excelAddress || "Sin dirección";
+  const googleExcelQuery = joinQuery(excelAddress, excelSector, excelCity, excelProvince, excelCp, "República Dominicana");
+  const excelDirectionQuery = googleExcelQuery || joinQuery(excelAddress, "República Dominicana");
+  const address2Query = joinQuery(excelAddr2, excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana");
+  const sectorQuery = joinQuery(excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana");
+
   const buildGoogleMapsQuery = () => {
-    // IMPORTANTE: abrir Google Maps con la dirección original del Excel, no con el resultado ya mapeado.
-    // Esto permite corregir cuando Google/Firebase guardó una ubicación incorrecta.
-    return primaryExcelQuery || excelAddress || currentText || "Santo Domingo Oeste, República Dominicana";
+    // Abrir Google Maps SIEMPRE con la dirección original del Excel limpia.
+    return excelDirectionQuery || excelAddress || "Santo Domingo Oeste, República Dominicana";
   };
 
   const openGoogleMaps = () => {
@@ -6739,7 +6763,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const applyFound = (candidate) => {
     if (!candidate) return;
     const clean = {
-      display: candidate.display,
+      display: cleanAddressText(candidate.display),
       lat: Number(candidate.lat),
       lng: Number(candidate.lng),
       confidence: candidate.confidence || 92,
@@ -6748,22 +6772,43 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
     setErrMsg("");
   };
 
-  // Estilo claro para Google Places. La barra NO queda dark.
+  // Estilo claro forzado para input + Google Places. La barra NO queda dark.
   useEffect(() => {
-    const id = "pac-light-style-pro";
+    const id = "rd-address-modal-light-style-v35";
     if (!document.getElementById(id)) {
       const s = document.createElement("style");
       s.id = id;
       s.textContent = `
+        .rd-address-search-input,
+        .rd-address-search-input:focus,
+        .rd-address-search-input:active,
+        .rd-address-search-input:hover {
+          background:#ffffff!important;
+          background-color:#ffffff!important;
+          color:#0f172a!important;
+          -webkit-text-fill-color:#0f172a!important;
+          caret-color:#2563eb!important;
+          color-scheme:light!important;
+          -webkit-appearance:none!important;
+          appearance:none!important;
+          box-shadow:inset 0 1px 0 rgba(255,255,255,.92), 0 0 0 4px rgba(37,99,235,.08)!important;
+        }
+        .rd-address-search-input::placeholder { color:#94a3b8!important; -webkit-text-fill-color:#94a3b8!important; opacity:1!important; }
+        .rd-address-search-input:-webkit-autofill,
+        .rd-address-search-input:-webkit-autofill:hover,
+        .rd-address-search-input:-webkit-autofill:focus {
+          -webkit-box-shadow:0 0 0 1000px #ffffff inset!important;
+          -webkit-text-fill-color:#0f172a!important;
+          transition:background-color 9999s ease-in-out 0s!important;
+        }
         .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #dbeafe!important; border-radius:16px!important; box-shadow:0 18px 46px rgba(15,23,42,0.16)!important; margin-top:8px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; padding:6px!important; }
-        .pac-item { background:#fff!important; color:#334155!important; padding:12px 14px!important; cursor:pointer!important; border-top:1px solid #eff6ff!important; font-size:13px!important; border-radius:10px!important; }
+        .pac-item { background:#fff!important; color:#334155!important; padding:12px 14px!important; cursor:pointer!important; border-top:1px solid #eff6ff!important; font-size:13px!important; border-radius:10px!important; font-family:'Inter',sans-serif!important; }
         .pac-item:first-child { border-top:0!important; }
         .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
-        .pac-item-query { color:#0f172a!important; font-size:13px!important; font-weight:800!important; }
+        .pac-item-query { color:#0f172a!important; font-size:13px!important; font-weight:750!important; font-family:'Inter',sans-serif!important; }
         .pac-matched { color:#2563eb!important; }
         .pac-icon { display:none!important; }
         .pac-logo:after { display:none!important; }
-        input::placeholder { color:#64748b!important; opacity:1!important; }
       `;
       document.head.appendChild(s);
     }
@@ -6793,7 +6838,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   }, []);
 
   const handleSearch = async () => {
-    const text = inputRef.current?.value?.trim();
+    const text = cleanAddressText(inputRef.current?.value || query);
     if (!text) return;
     setFound(null); setOptions([]); setErrMsg(""); setSaving(true);
 
@@ -6811,15 +6856,15 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       }
     }
 
-    // Buscar con varias variantes para mostrar más opciones reales, pero priorizando dirección principal del Excel.
+    // Búsqueda limpia: dirección principal manda; dirección 2 solo entra si el usuario la escoge.
     const searchVariants = [
       text,
-      [text, excelSector, excelCity, "República Dominicana"].filter(Boolean).join(", "),
-      primaryExcelQuery,
-      [excelAddress, excelSector, "Santo Domingo Oeste", "República Dominicana"].filter(Boolean).join(", "),
-    ].map(v => String(v || "").trim()).filter(Boolean);
+      joinQuery(text, excelSector, excelCity || "Santo Domingo Oeste", "República Dominicana"),
+      excelDirectionQuery,
+      sectorQuery,
+    ].filter(Boolean);
 
-    const uniqueVariants = [...new Set(searchVariants)].slice(0, 4);
+    const uniqueVariants = [...new Set(searchVariants.map(cleanAddressText).filter(Boolean))].slice(0, 4);
     const collected = [];
     let firstOk = null;
 
@@ -6839,6 +6884,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
     if (firstOk || collected.length) {
       const merged = collected
         .filter(x => x && x.display && Number.isFinite(Number(x.lat)) && Number.isFinite(Number(x.lng)))
+        .map(x => ({ ...x, display: cleanAddressText(x.display) }))
         .filter((x, idx, arr) => idx === arr.findIndex(y => {
           const sameText = String(y.display).toLowerCase() === String(x.display).toLowerCase();
           const sameCoord = Math.abs(Number(y.lat)-Number(x.lat)) < 0.00008 && Math.abs(Number(y.lng)-Number(x.lng)) < 0.00008;
@@ -6850,26 +6896,24 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       applyFound(main);
       setOptions(merged.length ? merged : [main]);
     } else {
-      setErrMsg("No encontrada. Prueba con dirección principal + sector, coordenadas, Plus Code o abre Google Maps con la dirección original del Excel.");
+      setErrMsg("No encontrada. Prueba con Dirección del Excel, Dirección 2, Sector, coordenadas o Plus Code.");
     }
   };
 
-  const quickFill = (text) => {
-    const value = text.trim();
-    if (inputRef.current) inputRef.current.value = value;
-    setQuery(value);
+  const quickFill = (value) => {
+    const clean = cleanAddressText(value);
+    if (inputRef.current) inputRef.current.value = clean;
+    setQuery(clean);
     setTimeout(() => inputRef.current?.focus(), 20);
   };
 
   const handleConfirm = () => { if (found) onSave(found); };
 
   const quickChips = [
-    primaryExcelQuery && `Buscar dirección del Excel: ${primaryExcelQuery}`,
-    excelAddress && excelSector && `${excelAddress}, ${excelSector}, Santo Domingo Oeste`,
-    excelAddress && `${excelAddress}, República Dominicana`,
-    sectorHint && `Buscar solo en el sector: ${sectorHint}`,
-    "Pegar coordenadas 18.x, -70.x",
-  ].filter(Boolean).slice(0, 5);
+    excelDirectionQuery && { label:"1. Dirección del Excel", value: excelDirectionQuery, icon:"📍", hint:"Usar dirección principal" },
+    address2Query && { label:"2. Dirección 2 / Referencia", value: address2Query, icon:"🏷️", hint:"Usar referencia como apoyo" },
+    sectorQuery && { label:"3. Sector", value: sectorQuery, icon:"🌐", hint:"Buscar dentro del sector" },
+  ].filter(Boolean);
 
   return (
     <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(15,23,42,0.48)", backdropFilter:"blur(8px)" }}
@@ -6880,7 +6924,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       <div style={{ width:620, maxWidth:"94vw", background:"#ffffff", borderRadius:24, boxShadow:"0 30px 90px rgba(15,23,42,0.28)", overflow:"hidden", animation:"addrPop .22s cubic-bezier(.4,0,.2,1)", border:"1px solid rgba(219,234,254,0.9)" }}>
 
         {/* HEADER PREMIUM LIGHT */}
-        <div style={{ background:"linear-gradient(135deg,#2563eb 0%,#1d4ed8 48%,#0f172a 100%)", padding:"20px 24px", display:"flex", alignItems:"center", gap:14, position:"relative", overflow:"hidden" }}>
+        <div style={{ background:"linear-gradient(135deg,#2563eb 0%,#1d4ed8 58%,#1e3a8a 100%)", padding:"20px 24px", display:"flex", alignItems:"center", gap:14, position:"relative", overflow:"hidden" }}>
           <div style={{ position:"absolute", right:-50, top:-50, width:150, height:150, borderRadius:"50%", background:"rgba(255,255,255,0.11)" }}/>
           <div style={{ width:44,height:44,borderRadius:14,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0, boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.25)" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -6888,7 +6932,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
           <div style={{ flex:1, minWidth:0, position:"relative" }}>
             <div style={{ fontSize:20,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"white",letterSpacing:"-.3px" }}>Corregir ubicación</div>
             <div style={{ fontSize:12,color:"rgba(255,255,255,0.78)",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-              {stop.client} · Parada #{stop.stopNum || "?"} · usa Google, coordenadas o referencia local
+              {stop.client} · Parada #{stop.stopNum || "?"} · Dirección Excel, referencia o sector
             </div>
           </div>
           <button onClick={onCancel} style={{ width:36,height:36,borderRadius:12,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.12)",color:"white",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0, position:"relative" }}>✕</button>
@@ -6913,7 +6957,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
             <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10 }}>
               <div>
                 <div style={{ fontSize:11,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1px" }}>NUEVA DIRECCIÓN</div>
-                <div style={{ fontSize:11,color:"#64748b",marginTop:3 }}>Usa la dirección principal del Excel. La referencia queda solo como apoyo.</div>
+                <div style={{ fontSize:11,color:"#64748b",marginTop:3 }}>Elige una sugerencia limpia o escribe igual que en Google Maps.</div>
               </div>
               <button onClick={openGoogleMaps}
                 style={{ border:"1px solid #bfdbfe", background:"linear-gradient(180deg,#eff6ff,#dbeafe)", color:"#1d4ed8", borderRadius:12, padding:"9px 11px", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:900, cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
@@ -6922,16 +6966,18 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
             </div>
 
             <div style={{ display:"flex",gap:10,alignItems:"stretch" }}>
-              <div style={{ flex:1, position:"relative" }}>
-                <svg style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }} width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <div style={{ flex:1, position:"relative", background:"#ffffff", borderRadius:14 }}>
+                <svg style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", zIndex:2 }} width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input
                   ref={inputRef}
+                  className="rd-address-search-input"
                   defaultValue=""
-                  onChange={e => setQuery(e.target.value)}
+                  onChange={e => setQuery(cleanAddressText(e.target.value))}
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                  placeholder="Ej: C. Primera 3, Engombe / Colinas del Norte C F 16 / Plus Code"
+                  placeholder="Ej: Calle Segunda, Caballona / Plus Code / 18.x,-70.x"
                   autoComplete="off"
-                  style={{ width:"100%", boxSizing:"border-box", background:"#ffffff", backgroundColor:"#ffffff", border:"2px solid #bfdbfe", borderRadius:14, padding:"14px 15px 14px 44px", color:"#0f172a", WebkitTextFillColor:"#0f172a", fontSize:14, fontFamily:"'Inter',sans-serif", fontWeight:600, outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 4px rgba(37,99,235,0.06)" }}
+                  spellCheck="false"
+                  style={{ width:"100%", boxSizing:"border-box", background:"#ffffff", backgroundColor:"#ffffff", border:"2px solid #bfdbfe", borderRadius:14, padding:"14px 15px 14px 44px", color:"#0f172a", WebkitTextFillColor:"#0f172a", fontSize:14, fontFamily:"'Inter',sans-serif", fontWeight:600, outline:"none", caretColor:"#2563eb", colorScheme:"light", WebkitAppearance:"none", appearance:"none" }}
                 />
               </div>
               <button onClick={handleSearch} disabled={saving}
@@ -6941,11 +6987,15 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
               </button>
             </div>
 
-            <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:10 }}>
+            <div style={{ display:"grid", gap:8, marginTop:12 }}>
               {quickChips.map((chip, idx) => (
-                <button key={idx} onClick={() => quickFill(chip)}
-                  style={{ border:"1px solid #e0e7ff", background:idx===0?"#eff6ff":"#fff", color:"#1e40af", borderRadius:999, padding:"6px 10px", fontSize:11.5, fontFamily:"'Inter',sans-serif", fontWeight:700, cursor:"pointer", lineHeight:1.35, textAlign:"left" }}>
-                  {idx===0 ? "📌 " : idx===1 ? "➕ " : idx===2 ? "🏷️ " : "🌐 "}{chip.length > 58 ? chip.slice(0,58)+"..." : chip}
+                <button key={idx} onClick={() => quickFill(chip.value)}
+                  style={{ border:"1px solid #dbeafe", background:idx===0?"#eff6ff":"#ffffff", color:"#0f172a", borderRadius:14, padding:"10px 12px", fontSize:12, fontFamily:"'Inter',sans-serif", fontWeight:650, cursor:"pointer", lineHeight:1.35, textAlign:"left", display:"flex", gap:10, alignItems:"flex-start", boxShadow:"0 8px 18px rgba(15,23,42,0.035)" }}>
+                  <span style={{ width:26,height:26,borderRadius:9,background:idx===0?"#2563eb":"#f1f5f9",color:idx===0?"white":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{chip.icon}</span>
+                  <span style={{ minWidth:0 }}>
+                    <span style={{ display:"block",fontSize:11,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:".3px" }}>{chip.label}</span>
+                    <span style={{ display:"block",marginTop:3,color:"#334155",fontWeight:600,whiteSpace:"normal" }}>{chip.value}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -6966,7 +7016,7 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
                       style={{ textAlign:"left", border:active?"2px solid #2563eb":"1px solid #e2e8f0", background:active?"#eff6ff":"#ffffff", borderRadius:14, padding:"11px 12px", cursor:"pointer", boxShadow:active?"0 10px 24px rgba(37,99,235,0.10)":"0 6px 18px rgba(15,23,42,0.04)", display:"flex", gap:10, alignItems:"flex-start" }}>
                       <div style={{ width:30,height:30,borderRadius:10,background:active?"#2563eb":"#f1f5f9",color:active?"white":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,flexShrink:0 }}>{idx+1}</div>
                       <div style={{ flex:1,minWidth:0 }}>
-                        <div style={{ fontSize:13,color:"#0f172a",fontWeight:650,lineHeight:1.45,fontFamily:"'Inter',sans-serif" }}>{opt.display}</div>
+                        <div style={{ fontSize:13,color:"#0f172a",fontWeight:650,lineHeight:1.45,fontFamily:"'Inter',sans-serif" }}>{cleanAddressText(opt.display)}</div>
                         <div style={{ marginTop:4,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
                           <span style={{ fontSize:10,color:"#64748b",fontFamily:"monospace" }}>{Number(opt.lat).toFixed(5)}, {Number(opt.lng).toFixed(5)}</span>
                           <span style={{ fontSize:10,color:opt.confidence>=80?"#16a34a":"#f59e0b",background:opt.confidence>=80?"#dcfce7":"#fef3c7",padding:"2px 7px",borderRadius:999,fontFamily:"'Syne',sans-serif",fontWeight:900 }}>{opt.confidence}%</span>
@@ -7034,7 +7084,7 @@ const AddressSearchBox = ({ value, onChange, onSelect, placeholder }) => {
   }, []);
   return (
     <input ref={ref} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "Buscar dirección en RD..."}
-      style={{ width:"100%", background:"#0a1019", border:"1px solid #3b82f6", borderRadius:9, padding:"10px 13px", color:"#e2e8f0", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#3b82f6", boxShadow:"0 0 0 3px rgba(59,130,246,0.15)" }} autoFocus/>
+      style={{ width:"100%", background:"#ffffff", backgroundColor:"#ffffff", border:"1px solid #93c5fd", borderRadius:9, padding:"10px 13px", color:"#0f172a", WebkitTextFillColor:"#0f172a", fontSize:12, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"0 0 0 3px rgba(59,130,246,0.10)" }} autoFocus/>
   );
 };
 
