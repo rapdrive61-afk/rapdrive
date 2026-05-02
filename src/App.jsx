@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V15 UBER MAP STABLE: mapa mensajero sin parpadeo, pines fijos y modales internos.
+// V32 SDO LOCATION BOOST: motor SDO reforzado + corrector Google light, sin tocar lógica de rutas/Firebase.
 
 const DELIVERIES = [];
 
@@ -56,106 +56,6 @@ const installRapDriveBranding = () => {
 // La URL tiene este formato: https://TU-PROYECTO-default-rtdb.firebaseio.com
 // En las Reglas de Firebase pon: { "rules": { ".read": true, ".write": true } }
 const FB_URL = "https://rapdrive-default-rtdb.firebaseio.com";
-
-
-// --- FIREBASE CLOUD MESSAGING / PUSH NOTIFICATIONS --------------------------
-// Web config público de Firebase + VAPID key. La llave privada del service account
-// NO va aquí; va en variables de entorno del backend /api/send-push.
-const RD_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC17KefrJEms-Be8rmMvnscgDSStxmLYjU",
-  authDomain: "rapdrive.firebaseapp.com",
-  databaseURL: "https://rapdrive-default-rtdb.firebaseio.com",
-  projectId: "rapdrive",
-  storageBucket: "rapdrive.firebasestorage.app",
-  messagingSenderId: "101750387556",
-  appId: "1:101750387556:web:2e3b672142ad4235958071",
-  measurementId: "G-SPVVM3NS6X",
-};
-const RD_FCM_VAPID_KEY = "BGbAV0eeCh5qOhlNZFsiyBr1kvo4FKeXu6uFDttP2igVID4JeX8_VY287mWWcOg7rdfaAteOlrDToMiaEEV1dpU";
-
-const loadExternalScript = (src) => new Promise((resolve, reject) => {
-  if (typeof document === "undefined") return reject(new Error("No document"));
-  const existing = document.querySelector(`script[src="${src}"]`);
-  if (existing) return existing.dataset.loaded === "true" ? resolve() : existing.addEventListener("load", resolve, { once:true });
-  const s = document.createElement("script");
-  s.src = src; s.async = true;
-  s.onload = () => { s.dataset.loaded = "true"; resolve(); };
-  s.onerror = reject; document.head.appendChild(s);
-});
-
-const initRapDriveMessaging = async () => {
-  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) return null;
-  await loadExternalScript("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
-  await loadExternalScript("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
-  if (!window.firebase.apps.length) window.firebase.initializeApp(RD_FIREBASE_CONFIG);
-  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-  const messaging = window.firebase.messaging();
-  return { messaging, reg };
-};
-
-const safeTokenKey = (token) => String(token || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
-const resolvePushDriverId = (user) => String(user?.driverId || user?.mensajeroId || user?.id || "").trim();
-
-const extractPushTokens = (obj) => {
-  if (!obj) return [];
-  if (typeof obj === "string") return [obj];
-  if (Array.isArray(obj)) return obj.flatMap(extractPushTokens);
-  if (typeof obj !== "object") return [];
-  return Object.values(obj).flatMap(v => typeof v === "string" ? [v] : v?.token ? [v.token] : extractPushTokens(v));
-};
-
-const savePushDebug = async (event, data={}) => {
-  try {
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-    await FB.set(`pushDebug/${id}`, { event, ...data, ts:Date.now(), origin: typeof window !== "undefined" ? window.location.origin : "server" });
-  } catch(e) {}
-};
-
-const requestRapDrivePushToken = async (user) => {
-  try {
-    const driverId = resolvePushDriverId(user);
-    if (!user || user.role !== "driver" || !driverId) { await savePushDebug("skip_token", { reason:"no_driver_user", userId:user?.id||null, role:user?.role||null }); return null; }
-    if (typeof Notification === "undefined") { await savePushDebug("skip_token", { driverId, reason:"no_notification_api" }); return null; }
-    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    if (permission !== "granted") { await savePushDebug("skip_token", { driverId, reason:"permission_"+permission }); return null; }
-    const ctx = await initRapDriveMessaging();
-    if (!ctx) { await savePushDebug("skip_token", { driverId, reason:"messaging_not_ready" }); return null; }
-    const token = await ctx.messaging.getToken({ vapidKey: RD_FCM_VAPID_KEY, serviceWorkerRegistration: ctx.reg });
-    if (!token) { await savePushDebug("skip_token", { driverId, reason:"empty_token" }); return null; }
-    const officeId = user.officeId || RD.officeId() || null;
-    const payload = { token, driverId, userId:user.id||driverId, officeId, ua:navigator.userAgent||"", updatedAt:Date.now(), origin:window.location.origin };
-
-    // Guardado doble y seguro: global + por oficina. Así no falla si admin y mensajero están en paths distintos.
-    await FB.set(`pushTokens/${driverId}/${safeTokenKey(token)}`, payload);
-    if (officeId) await FB.set(`oficinas/${officeId}/pushTokens/${driverId}/${safeTokenKey(token)}`, payload);
-    await FB.set(`pushTokensByToken/${safeTokenKey(token)}`, payload);
-    window.__rdPushReady = true;
-    window.__rdPushToken = token;
-    await savePushDebug("token_saved", { driverId, officeId, tokenEnd: token.slice(-12) });
-    return token;
-  } catch (e) { console.warn("RapDrive push token error", e); await savePushDebug("token_error", { error:String(e?.message||e) }); return null; }
-};
-
-const sendPushToDriver = async (driverId, payload) => {
-  try {
-    if (!driverId) return { ok:false, reason:"missing_driver" };
-    const scopedPath = RD.path(`pushTokens/${driverId}`);
-    const [scopedObj, globalObj] = await Promise.all([
-      FB.get(scopedPath),
-      FB.get(`pushTokens/${driverId}`),
-    ]);
-    const tokens = [...new Set([...extractPushTokens(scopedObj), ...extractPushTokens(globalObj)])].filter(Boolean);
-    if (!tokens.length) {
-      await savePushDebug("send_no_tokens", { driverId, scopedPath, title:payload?.title||"" });
-      return { ok:false, reason:"no_tokens", driverId, scopedPath };
-    }
-    const res = await fetch("/api/send-push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ tokens, ...payload }) });
-    const body = await res.json().catch(()=>({}));
-    const out = res.ok ? body : { ok:false, status:res.status, ...body };
-    await savePushDebug(res.ok ? "send_result" : "send_error", { driverId, tokenCount:tokens.length, status:res.status, response:out, title:payload?.title||"" });
-    return out;
-  } catch (e) { console.warn("sendPushToDriver error", e); await savePushDebug("send_exception", { driverId, error:String(e?.message||e) }); return { ok:false, error:String(e?.message||e) }; }
-};
 
 const RD = {
   officeId: () => {
@@ -2533,7 +2433,7 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
     setTimeout(() => {
       const m = mensajeros.find(x => x.id === selId);
       if (!m) { setError("Mensajero no encontrado"); setLoading(false); return; }
-      onLogin({ ...m, role:"driver", driverId: m.driverId || m.id, officeId: m.officeId || RD.officeId() || window.__rdOfficeId || null });
+      onLogin({ ...m, role:"driver" });
     }, 700);
   };
 
@@ -5336,6 +5236,15 @@ const SDO_SECTORS = [
   "barrio progreso","batey bienvenido","nuevo horizonte","la venta",
   "el hoyo de manoguayabo","carmen renata","brisas del oeste","don honorio",
   "operaciones especiales","residencial altagracia","residencial antonia",
+  "el palmar de herrera","palmar de herrera","colinas del norte","residencial colinas del norte",
+  "colinas de herrera","cumbre del paraiso","cumbre del paraíso","las orquideas","las orquídeas",
+  "residencial cumbre del paraiso","residencial cumbre del paraíso","residencial colinas del oeste",
+  "los jardines de herrera","los pinos de herrera","reparto rosa","reparto oriental","colinas del oeste",
+  "los alcarrizos","pueblo nuevo los alcarrizos","los americanos","los libertadores","barrio landia",
+  "la piña","la pina","la union","la unión","savica los alcarrizos","invi","invi cea",
+  "nuevo amanecer","los barrancones","km 14","kilometro 14","km 13","kilometro 13",
+  "km 17","kilometro 17","km 18","kilometro 18","km 22","kilometro 22",
+  "lebron","nazareno","villa linda","los rieles","24 de abril","nuevo horizonte",
 ];
 
 // Plus Code detector
@@ -5451,7 +5360,7 @@ const geocodeWithGoogle = async (rawAddress) => {
   let queries = buildQueryVariants(rawAddress);
   const smartExpanded = rdSmartExpandLocationContext(rawAddress);
   if (smartExpanded && smartExpanded !== rawAddress) queries = [smartExpanded, ...queries];
-  queries = [...new Set(queries)].slice(0, 14);
+  queries = [...new Set(queries)].slice(0, 22);
 
   // ── Detectar anchor local para sesgar búsqueda y validar resultado ─────────
   const anchor = findAnchor(rawAddress);
@@ -5484,12 +5393,15 @@ const geocodeWithGoogle = async (rawAddress) => {
       if (candidates.length === 0) continue;
       const { r: top, score: conf } = candidates[0];
 
-      // Si hay anchor, penalizar resultados que estén muy lejos de él (>15km)
+      // Si hay anchor local, NO aceptar resultados que salten a otro sector.
+      // En SDO el sector del Excel pesa fuerte: si no aparece la calle, mejor caer cerca
+      // del sector/referencia que mandar el paquete a Herrera/Los Ríos/otro lugar.
       if (anchor) {
         const dlat = top.geometry.location.lat() - anchor.lat;
         const dlng = top.geometry.location.lng() - anchor.lng;
         const distKm = Math.sqrt(dlat*dlat + dlng*dlng) * 111;
-        if (distKm > 10) continue; // resultado lejos del sector/ref local, ignorar
+        const radiusKm = anchor.city === "Santo Domingo Oeste" ? (String(anchor.key||"").length >= 9 ? 4.5 : 7.0) : 10;
+        if (distKm > radiusKm) continue;
       }
 
       if (conf > bestScore) {
@@ -5589,7 +5501,7 @@ const geocodeWithGoogle = async (rawAddress) => {
       ok: true,
       lat: lastAnchor.lat,
       lng: lastAnchor.lng,
-      display: `${rawAddress} (aprox. ${lastAnchor.city})`,
+      display: `${rawAddress} (aprox. sector/referencia: ${lastAnchor.key || lastAnchor.city})`,
       confidence: 45,
       types: ["anchor_fallback"],
       source: "anchor_local",
@@ -5624,6 +5536,16 @@ const buildQueryVariants = (raw) => {
       const sec   = parsed.sector || "Santo Domingo Oeste";
       variants.add(noRef + ", " + sec + ", Santo Domingo Oeste, República Dominicana");
     }
+  }
+
+  // V32: variantes por referencia humana + sector.
+  // Ej.: "Calle K" + "Los Girasoles" + "frente al colmado" → Google recibe todas las pistas.
+  const refHints = rdReferenceHints(s);
+  const anchorMatchesV32 = rdAnchorCandidatesFromText(s);
+  for (const m of anchorMatchesV32) {
+    variants.add(`${expanded}, ${m.key}, ${m.anchor.city}, República Dominicana`);
+    variants.add(`${s}, ${m.key}, ${m.anchor.city}, República Dominicana`);
+    for (const ref of refHints) variants.add(`${ref}, ${m.key}, ${m.anchor.city}, República Dominicana`);
   }
 
   // --- Detección de contexto geográfico ---
@@ -5723,7 +5645,7 @@ const buildQueryVariants = (raw) => {
   if (stripped !== expanded && !hasCity) variants.add(stripped + SD);
 
   // Eliminar variantes vacías o muy cortas
-  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 10); // cap at 10 queries
+  return [...new Set([...variants])].filter(v => v && v.trim().length > 7).slice(0, 18); // cap at 18 queries
 };
 
 // RD-specific address normalizer - expanded for Dominican Republic
@@ -6893,9 +6815,9 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
                 ref={inputRef}
                 defaultValue=""
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                placeholder="Ej: Av. 27 de Febrero 45, Naco  ·  18.4714,-69.9318  ·  G2F8+7G3"
+                placeholder="Escribe como en Google Maps: calle + sector + referencia, coordenadas o Plus Code"
                 autoComplete="off"
-                style={{ flex:1, background:"#f9fafb", border:"2px solid #2563eb", borderRadius:10, padding:"11px 14px", color:"#111827", fontSize:13, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
+                style={{ flex:1, background:"#ffffff", border:"2px solid #2563eb", borderRadius:10, padding:"12px 14px", color:"#111827", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
               />
               <button onClick={handleSearch} disabled={saving}
                 style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
@@ -6903,8 +6825,10 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
                 {saving ? "..." : "Buscar"}
               </button>
             </div>
-            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12 }}>
-              <span>💡 Selecciona una sugerencia de la lista o escribe y pulsa Buscar</span>
+            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap" }}>
+              <span>💡 Selecciona una sugerencia o escribe y pulsa Buscar. El motor usará sector + referencia.</span>
+              <button onClick={() => { const q = encodeURIComponent(inputRef.current?.value?.trim() || stop.rawAddr || stop.displayAddr || ""); if(q) window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank"); }}
+                style={{ border:"1px solid #bfdbfe", background:"#eff6ff", color:"#1d4ed8", borderRadius:8, padding:"6px 9px", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>Abrir Google Maps</button>
             </div>
           </div>
 
@@ -8367,46 +8291,173 @@ const RD_LOCATION_BOOSTERS = {
 };
 Object.assign(SDO_ANCHORS, RD_LOCATION_BOOSTERS);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// V32: REFUERZO SDO / LOS ALCARRIZOS
+// Solo alimenta el motor de búsqueda y fallback. No toca rutas, Firebase ni UI admin.
+// Regla: si el Excel trae sector SDO, Google recibe sector + ciudad; si no encuentra
+// la calle exacta, el paquete queda dentro del sector o cerca de la referencia.
+// ─────────────────────────────────────────────────────────────────────────────
+const RD_SDO_EXTRA_ANCHORS = {
+  // Los Alcarrizos / corredor Duarte
+  "los alcarrizos": { lat:18.5462, lng:-70.1066, city:"Santo Domingo Oeste" },
+  "pueblo nuevo los alcarrizos": { lat:18.5455, lng:-70.1015, city:"Santo Domingo Oeste" },
+  "pueblo nuevo de los alcarrizos": { lat:18.5455, lng:-70.1015, city:"Santo Domingo Oeste" },
+  "los americanos": { lat:18.5485, lng:-70.1125, city:"Santo Domingo Oeste" },
+  "barrio landia": { lat:18.5480, lng:-70.1160, city:"Santo Domingo Oeste" },
+  "los libertadores": { lat:18.5510, lng:-70.1035, city:"Santo Domingo Oeste" },
+  "la piña": { lat:18.5520, lng:-70.1085, city:"Santo Domingo Oeste" },
+  "la pina": { lat:18.5520, lng:-70.1085, city:"Santo Domingo Oeste" },
+  "la union los alcarrizos": { lat:18.5488, lng:-70.0992, city:"Santo Domingo Oeste" },
+  "la unión los alcarrizos": { lat:18.5488, lng:-70.0992, city:"Santo Domingo Oeste" },
+  "savica los alcarrizos": { lat:18.5440, lng:-70.1045, city:"Santo Domingo Oeste" },
+  "invi los alcarrizos": { lat:18.5417, lng:-70.1090, city:"Santo Domingo Oeste" },
+  "invi cea": { lat:18.5417, lng:-70.1090, city:"Santo Domingo Oeste" },
+  "nuevo amanecer los alcarrizos": { lat:18.5395, lng:-70.1115, city:"Santo Domingo Oeste" },
+  "los barrancones": { lat:18.5375, lng:-70.1055, city:"Santo Domingo Oeste" },
+  "nazareno los alcarrizos": { lat:18.5502, lng:-70.1083, city:"Santo Domingo Oeste" },
+  "lebron los alcarrizos": { lat:18.5468, lng:-70.1185, city:"Santo Domingo Oeste" },
+  "km 14 autopista duarte": { lat:18.5368, lng:-70.0806, city:"Santo Domingo Oeste" },
+  "kilometro 14 autopista duarte": { lat:18.5368, lng:-70.0806, city:"Santo Domingo Oeste" },
+  "km 17 autopista duarte": { lat:18.5515, lng:-70.1110, city:"Santo Domingo Oeste" },
+  "kilometro 17 autopista duarte": { lat:18.5515, lng:-70.1110, city:"Santo Domingo Oeste" },
+  "entrada los alcarrizos": { lat:18.5448, lng:-70.1005, city:"Santo Domingo Oeste" },
+  "puente los alcarrizos": { lat:18.5448, lng:-70.1005, city:"Santo Domingo Oeste" },
+  "hospital vinicio calventi": { lat:18.5488, lng:-70.1115, city:"Santo Domingo Oeste" },
+  "vinicio calventi": { lat:18.5488, lng:-70.1115, city:"Santo Domingo Oeste" },
+  "multicentro la sirena los alcarrizos": { lat:18.5460, lng:-70.1040, city:"Santo Domingo Oeste" },
+  "la sirena los alcarrizos": { lat:18.5460, lng:-70.1040, city:"Santo Domingo Oeste" },
+  "ole los alcarrizos": { lat:18.5469, lng:-70.1062, city:"Santo Domingo Oeste" },
+  "supermercado ole los alcarrizos": { lat:18.5469, lng:-70.1062, city:"Santo Domingo Oeste" },
+
+  // Herrera / SDO fino
+  "residencial colinas del norte": { lat:18.5162, lng:-70.0079, city:"Santo Domingo Oeste" },
+  "colinas del norte": { lat:18.5162, lng:-70.0079, city:"Santo Domingo Oeste" },
+  "calle f16 colinas del norte": { lat:18.5162, lng:-70.0079, city:"Santo Domingo Oeste" },
+  "residencial colinas del oeste": { lat:18.4770, lng:-70.0200, city:"Santo Domingo Oeste" },
+  "colinas del oeste": { lat:18.4770, lng:-70.0200, city:"Santo Domingo Oeste" },
+  "reparto rosa": { lat:18.4805, lng:-70.0050, city:"Santo Domingo Oeste" },
+  "el palmar de herrera": { lat:18.4815, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "palmar de herrera": { lat:18.4815, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "calle respaldo jose reyes": { lat:18.4824, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "respaldo jose reyes": { lat:18.4824, lng:-70.0068, city:"Santo Domingo Oeste" },
+  "colegio arcoiris azul": { lat:18.4820, lng:-70.0062, city:"Santo Domingo Oeste" },
+  "colegio arcoiris": { lat:18.4820, lng:-70.0062, city:"Santo Domingo Oeste" },
+  "cumbre del paraiso": { lat:18.4860, lng:-70.0128, city:"Santo Domingo Oeste" },
+  "cumbre del paraíso": { lat:18.4860, lng:-70.0128, city:"Santo Domingo Oeste" },
+  "residencial cumbre del paraiso": { lat:18.4860, lng:-70.0128, city:"Santo Domingo Oeste" },
+  "las orquideas herrera": { lat:18.4852, lng:-70.0136, city:"Santo Domingo Oeste" },
+  "las orquídeas herrera": { lat:18.4852, lng:-70.0136, city:"Santo Domingo Oeste" },
+  "mr signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "mr. signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "publicitaria mr signs": { lat:18.4860, lng:-70.0082, city:"Santo Domingo Oeste" },
+  "plaza comercial herrera": { lat:18.4895, lng:-70.0030, city:"Santo Domingo Oeste" },
+  "jardines de herrera": { lat:18.4872, lng:-70.0158, city:"Santo Domingo Oeste" },
+  "los jardines de herrera": { lat:18.4872, lng:-70.0158, city:"Santo Domingo Oeste" },
+  "los pinos de herrera": { lat:18.4808, lng:-70.0165, city:"Santo Domingo Oeste" },
+  "villa marina herrera": { lat:18.4868, lng:-70.0175, city:"Santo Domingo Oeste" },
+  "puerta de hierro herrera": { lat:18.4828, lng:-70.0108, city:"Santo Domingo Oeste" },
+  "plaza duarte herrera": { lat:18.4915, lng:-70.0018, city:"Santo Domingo Oeste" },
+  "price smart herrera": { lat:18.5005, lng:-69.9910, city:"Santo Domingo Oeste" },
+  "pricesmart herrera": { lat:18.5005, lng:-69.9910, city:"Santo Domingo Oeste" },
+  "occidental mall": { lat:18.4900, lng:-70.0165, city:"Santo Domingo Oeste" },
+  "hospital marcelino velez": { lat:18.4770, lng:-70.0107, city:"Santo Domingo Oeste" },
+  "marcelino velez": { lat:18.4770, lng:-70.0107, city:"Santo Domingo Oeste" },
+
+  // Caobas / Bayona / Manoguayabo / Engombe
+  "residencial las caobas": { lat:18.5020, lng:-70.0180, city:"Santo Domingo Oeste" },
+  "urbanizacion las caobas": { lat:18.5025, lng:-70.0175, city:"Santo Domingo Oeste" },
+  "la isabela sdo": { lat:18.5500, lng:-70.0900, city:"Santo Domingo Oeste" },
+  "arroyo bonito sdo": { lat:18.5050, lng:-70.0250, city:"Santo Domingo Oeste" },
+  "arroyo bonito manoguayabo": { lat:18.5120, lng:-70.0365, city:"Santo Domingo Oeste" },
+  "villa linda sdo": { lat:18.5150, lng:-70.0380, city:"Santo Domingo Oeste" },
+  "villa linda manoguayabo": { lat:18.5150, lng:-70.0380, city:"Santo Domingo Oeste" },
+  "los rieles manoguayabo": { lat:18.5175, lng:-70.0420, city:"Santo Domingo Oeste" },
+  "la ciénaga manoguayabo": { lat:18.5220, lng:-70.0470, city:"Santo Domingo Oeste" },
+  "la cienaga manoguayabo": { lat:18.5220, lng:-70.0470, city:"Santo Domingo Oeste" },
+  "hato nuevo manoguayabo": { lat:18.5350, lng:-70.0750, city:"Santo Domingo Oeste" },
+  "batey bienvenido manoguayabo": { lat:18.5400, lng:-70.0800, city:"Santo Domingo Oeste" },
+};
+Object.assign(SDO_ANCHORS, RD_SDO_EXTRA_ANCHORS);
+
 const RD_LOCATION_ALIASES = [
-  [/kms*9/gi, "kilometro 9 autopista duarte"],
-  [/aut.?s*duarte/gi, "autopista duarte"],
-  [/autop.?s*duarte/gi, "autopista duarte"],
-  [/rep.?s*des*colombia/gi, "avenida republica de colombia"],
-  [/rev.?s*colombia/gi, "avenida republica de colombia"],
-  [/res.?s*/gi, "residencial "],
-  [/urb.?s*/gi, "urbanizacion "],
-  [/prol.?s*/gi, "prolongacion "],
-  [/cll?e?.?s*/gi, "calle "],
-  [/av.?s*/gi, "avenida "],
-  [/no.?s*/gi, "numero "],
-  [/frentes+a/gi, "frente a"],
-  [/als+lados+de/gi, "cerca de"],
+  [/\bkm\s*9\b/gi, "kilometro 9 autopista duarte"],
+  [/\bkm\s*1?4\b/gi, "km 14 autopista duarte"],
+  [/\bkm\s*1?7\b/gi, "km 17 autopista duarte"],
+  [/\baut\.?\s*duarte\b/gi, "autopista duarte"],
+  [/\bautop\.?\s*duarte\b/gi, "autopista duarte"],
+  [/\bres\.?\s+/gi, "residencial "],
+  [/\burb\.?\s+/gi, "urbanizacion "],
+  [/\bprol\.?\s+/gi, "prolongacion "],
+  [/\bc\/?\s+(?=[a-z0-9])/gi, "calle "],
+  [/\bcll?e?\.?\s+/gi, "calle "],
+  [/\bav\.?\s+/gi, "avenida "],
+  [/\bave\.?\s+/gi, "avenida "],
+  [/\bno\.?\s*/gi, "numero "],
+  [/\bfrente\s+a\b/gi, "frente a"],
+  [/\bal\s+lado\s+de\b/gi, "cerca de"],
+  [/\bcerca\s+del\b/gi, "cerca de"],
+  [/\blos\s+alcarrizo\b/gi, "los alcarrizos"],
+  [/\balcarrizo\b/gi, "los alcarrizos"],
+  [/\bpalmar\s+herrera\b/gi, "palmar de herrera"],
+  [/\bcolinas\s+norte\b/gi, "colinas del norte"],
+  [/\bcumbre\s+paraiso\b/gi, "cumbre del paraiso"],
+  [/\bmr\s*signs?\b/gi, "mr signs"],
+  [/\bvinicio\s+calbenti\b/gi, "vinicio calventi"],
+  [/\bmarcelino\s+velez\b/gi, "marcelino velez"],
 ];
+
+const rdFold = (value="") => String(value || "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9+\s.-]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const rdReferenceHints = (value="") => {
+  const t = String(value || "");
+  const hints = [];
+  const patterns = [
+    /(?:frente\s+a(?:l)?|al\s+lado\s+de(?:l)?|cerca\s+de(?:l)?|detr[aá]s\s+de(?:l)?|pr[oó]ximo\s+a(?:l)?|por\s+el)\s+([^,;.]+)/gi,
+    /(?:colegio|escuela|liceo|colmado|supermercado|plaza|iglesia|farmacia|bomba|ferreter[ií]a|repuesto|taller|residencial|urbanizaci[oó]n)\s+([^,;.]+)/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(t))) {
+      const v = (m[0] || m[1] || "").trim();
+      if (v && v.length > 3) hints.push(v);
+    }
+  }
+  return [...new Set(hints)].slice(0, 4);
+};
 
 const rdSmartExpandLocationContext = (value="") => {
   let out = String(value || "");
   RD_LOCATION_ALIASES.forEach(([re, rep]) => { out = out.replace(re, rep); });
-  out = out.replace(/s+/g, " ").trim();
-  const norm = out.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/\s+/g, " ").trim();
+  const norm = rdFold(out);
   const matches = Object.keys(SDO_ANCHORS)
-    .filter(k => norm.includes(k.normalize("NFD").replace(/[̀-ͯ]/g, "")))
+    .filter(k => norm.includes(rdFold(k)))
     .sort((a,b) => b.length - a.length)
-    .slice(0, 2);
+    .slice(0, 4);
+  const refs = rdReferenceHints(out).filter(x => !matches.some(m => rdFold(x).includes(rdFold(m))));
   if (matches.length) {
     const cities = [...new Set(matches.map(k => SDO_ANCHORS[k]?.city).filter(Boolean))];
-    const ctx = [...matches, ...cities, "Republica Dominicana"].join(", ");
+    const ctx = [...matches, ...refs, ...cities, "Republica Dominicana"].join(", ");
     if (!norm.includes("republica dominicana")) out = out + ", " + ctx;
+  } else if (refs.length && !norm.includes("republica dominicana")) {
+    out = out + ", " + refs.join(", ") + ", Santo Domingo Oeste, Republica Dominicana";
   }
   return out;
 };
 
 const rdAnchorCandidatesFromText = (value="") => {
-  const t = String(value || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const t = rdFold(value);
   return Object.keys(SDO_ANCHORS)
-    .map(k => ({ key:k, norm:k.normalize("NFD").replace(/[̀-ͯ]/g, ""), anchor:SDO_ANCHORS[k] }))
+    .map(k => ({ key:k, norm:rdFold(k), anchor:{ ...SDO_ANCHORS[k], key:k } }))
     .filter(x => t.includes(x.norm))
     .sort((a,b) => b.norm.length - a.norm.length)
-    .slice(0, 5);
+    .slice(0, 7);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8445,14 +8496,12 @@ const learnGeoCorrection = (rawAddress, lat, lng, display) => {
 // Detectar el anchor más relevante para una dirección dada
 // Retorna { lat, lng } o null
 const findAnchor = (rawAddress) => {
-  const t = rawAddress.toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "") // quitar acentos para comparar
-    .replace(/\s+/g, " ").trim();
+  const t = rdFold(rawAddress);
   // Buscar de más específico a más general (mayor longitud de clave = más específico)
   const keys = Object.keys(SDO_ANCHORS).sort((a, b) => b.length - a.length);
   for (const k of keys) {
-    const kn = k.normalize("NFD").replace(/[̀-ͯ]/g, "");
-    if (t.includes(kn)) return SDO_ANCHORS[k];
+    const kn = rdFold(k);
+    if (t.includes(kn)) return { ...SDO_ANCHORS[k], key:k };
   }
   return null;
 };
@@ -8488,7 +8537,7 @@ const searchWithPlaces = async (rawAddress) => {
     expandRDAddress(rawAddress) + ", República Dominicana",
     rawAddress + ", Santo Domingo, República Dominicana",
     rawAddress.split(",")[0].trim() + ", Santo Domingo",
-  ].filter(Boolean))].slice(0, 10);
+  ].filter(Boolean))].slice(0, 18);
 
   for (const query of queries) {
     try {
@@ -8506,39 +8555,47 @@ const searchWithPlaces = async (rawAddress) => {
       });
 
       if (valid.length > 0) {
-        const top = valid[0];
-        const loc = top.geometry.location;
-        const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
-        const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+        const anchor = findAnchor(rawAddress);
+        const ranked = valid.map(place => {
+          const loc = place.geometry.location;
+          const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+          const types = place.types || [];
+          let score = 62;
+          if (types.includes("street_address") || types.includes("premise")) score = 88;
+          else if (types.includes("establishment") || types.includes("point_of_interest")) score = 78;
+          else if (types.includes("neighborhood") || types.includes("sublocality")) score = 68;
+          else if (types.includes("locality")) score = 60;
+          const nameLow = (place.name || "").toLowerCase();
+          const rawLow  = rawAddress.toLowerCase();
+          if (rawLow.split(" ").some(w => w.length > 3 && nameLow.includes(w))) score = Math.min(score + 8, 96);
+          if (anchor) {
+            const d = hav({lat,lng}, anchor);
+            if (anchor.city === "Santo Domingo Oeste" && d > (String(anchor.key||"").length >= 9 ? 4.5 : 7.0)) score -= 60;
+            else if (d <= 1.2) score += 14;
+            else if (d <= 3) score += 8;
+            else if (d > 10) score -= 28;
+          }
+          return { place, lat, lng, score: Math.max(1, Math.min(99, score)) };
+        }).sort((a,b) => b.score - a.score);
+
+        const best = ranked[0];
+        if (!best || best.score < 35) continue;
+        const top = best.place;
         const types = top.types || [];
-
-        // Scoring por tipo de Place
-        let conf = 62;
-        if (types.includes("street_address") || types.includes("premise"))         conf = 88;
-        else if (types.includes("establishment") || types.includes("point_of_interest")) conf = 76;
-        else if (types.includes("neighborhood") || types.includes("sublocality"))  conf = 68;
-        else if (types.includes("locality"))                                        conf = 60;
-
-        // Bonus si el nombre coincide parcialmente
-        const nameLow = (top.name || "").toLowerCase();
-        const rawLow  = rawAddress.toLowerCase();
-        if (rawLow.split(" ").some(w => w.length > 3 && nameLow.includes(w))) conf = Math.min(conf + 6, 94);
+        const conf = best.score;
 
         return {
-          ok: true, lat, lng,
+          ok: true, lat: best.lat, lng: best.lng,
           display: top.formatted_address || top.name,
           confidence: conf,
           types,
           source: "places_text_search",
-          allResults: valid.slice(0, 3).map(r => {
-            const l = r.geometry.location;
-            return {
-              display: r.formatted_address || r.name,
-              lat: typeof l.lat === "function" ? l.lat() : l.lat,
-              lng: typeof l.lng === "function" ? l.lng() : l.lng,
-              confidence: 60,
-            };
-          }),
+          allResults: ranked.slice(0, 5).map(r => ({
+            display: r.place.formatted_address || r.place.name,
+            lat: r.lat, lng: r.lng,
+            confidence: r.score,
+          })),
         };
       }
     } catch { /* try next query */ }
@@ -8547,7 +8604,7 @@ const searchWithPlaces = async (rawAddress) => {
 };
 
 // --- GEOCODER (Google Maps Geocoding API + Places Text Search + Nominatim) ----
-// V28: Circuit Mode Full Enterprise UI. Rediseño visual completo de upload, columnas, revisión y ruta; geolocalización intacta.
+// V32: SDO Location Engine Plus. Más sectores/referencias SDO + corrector Google light; rutas/Firebase intactos.
 const CircuitEngine = () => {
   const [phase, setPhase]         = useState("upload");
   const [rawRows, setRawRows]     = useState([]);
@@ -9455,13 +9512,6 @@ const CircuitEngine = () => {
                         sentAt: new Date().toISOString(),
                         read: false,
                       });
-                      // Push nativa tipo app: aparece aunque el mensajero tenga Rap Drive en segundo plano.
-                      sendPushToDriver(driverId, {
-                        title: "Nueva ruta asignada",
-                        body: `${routeName} · ${confirmed.length} paradas · ${km} km`,
-                        icon: "/rapdrive-icon-192.png", badge: "/rapdrive-badge-72.png", tag: `route-${route.routeId}`,
-                        data: { type: "route_assigned", routeId: route.routeId, driverId, officeId: RD.officeId() || "", url: "/?open=driver-route&routeId=" + encodeURIComponent(route.routeId) },
-                      });
 
                       // Chat automático
                       if (!window.__rdChatStore) window.__rdChatStore = {};
@@ -9743,12 +9793,6 @@ const AdminRoutesV5 = ({ routes }) => {
     const clean = { ...r, isActive:false, resentAt:new Date().toISOString(), sentAt:new Date().toISOString() };
     delete clean.isActive;
     await FB.set(RD.path(`routes/${r.driverId}`), clean);
-    sendPushToDriver(r.driverId, {
-      title:'Nueva ruta asignada',
-      body:`${r.routeName||'Ruta'} fue reenviada · ${(r.stops||[]).length} paradas`,
-      icon:'/rapdrive-icon-192.png', badge:'/rapdrive-badge-72.png', tag:`route-${r.routeId||Date.now()}`,
-      data:{ type:'route_assigned', routeId:r.routeId||'', driverId:r.driverId, officeId:RD.officeId()||'', url:'/?open=driver-route&routeId='+encodeURIComponent(r.routeId||'') }
-    });
     _memStore.routes[r.driverId] = clean;
     if (typeof window !== 'undefined') window.__rdRouteStore = { ...(window.__rdRouteStore||{}), [r.driverId]: clean };
     setRouteToast({ title:'Ruta reenviada', message:`${r.routeName||'Ruta'} fue enviada nuevamente al mensajero.` });
@@ -9761,12 +9805,6 @@ const AdminRoutesV5 = ({ routes }) => {
     const key=r.routeId||`${r.driverId}_${r.sentAt}`;
     if(r.isActive && r.driverId){
       await FB.remove(RD.path(`routes/${r.driverId}`));
-      sendPushToDriver(r.driverId, {
-        title:'Ruta eliminada',
-        body:`${r.routeName||'La ruta activa'} fue eliminada por el admin.`,
-        icon:'/rapdrive-icon-192.png', badge:'/rapdrive-badge-72.png', tag:`route-deleted-${r.routeId||Date.now()}`,
-        data:{ type:'route_deleted', routeId:r.routeId||'', driverId:r.driverId, officeId:RD.officeId()||'', url:'/?open=driver-home' }
-      });
       delete _memStore.routes[r.driverId];
       if (typeof window !== 'undefined' && window.__rdRouteStore) delete window.__rdRouteStore[r.driverId];
     }
@@ -9835,16 +9873,10 @@ export default function RapDrive() {
       setMensajeros(arr);
       _memStore.mens = arr;
       window.__rdMensajeros = arr;
-      // Seguridad V31: NO reescribir mensajeros al entrar. Evita borrar datos si Firebase responde vacío.
-      if (false) FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
+      // Si Firebase tenía mezcla array+objeto, se corrige una sola vez al entrar.
+      FB.set(`oficinas/${currentUser.officeId}/mensajeros`, mensajerosToMap(arr));
     });
   }, [currentUser?.officeId]);
-
-  // Push nativa para mensajeros: guarda el token FCM en Firebase por oficina/mensajero.
-  useEffect(() => {
-    if (!currentUser || currentUser.role !== "driver") return;
-    requestRapDrivePushToken(currentUser);
-  }, [currentUser?.id, currentUser?.driverId, currentUser?.officeId, currentUser?.role]);
 
   // -- Datos persistentes entre navegaciones --
   const [drivers,      setDrivers]      = useState(DRIVERS);
@@ -10238,22 +10270,6 @@ export default function RapDrive() {
       {modalOpen && <ModalNewDelivery onClose={()=>setModalOpen(false)} onCreated={handleCreated}/>}
 
 
-
-      {/* PUSH V2: botón manual para registrar el celular del mensajero.
-          Es importante porque algunos navegadores móviles solo muestran permiso de notificación
-          cuando el usuario toca un botón real. */}
-      {currentUser?.role === "driver" && typeof Notification !== "undefined" && Notification.permission !== "granted" && (
-        <div style={{position:"fixed",left:14,right:14,bottom:92,zIndex:9000,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
-          <div style={{width:"min(460px,100%)",background:"linear-gradient(135deg,#0b1626,#08111e)",border:"1px solid rgba(59,130,246,.35)",borderRadius:18,padding:"14px 15px",boxShadow:"0 18px 50px rgba(0,0,0,.55)",display:"flex",alignItems:"center",gap:12,pointerEvents:"auto"}}>
-            <div style={{width:42,height:42,borderRadius:14,background:"rgba(59,130,246,.15)",display:"grid",placeItems:"center",fontSize:20}}>🔔</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"#eaf2ff"}}>Activar notificaciones</div>
-              <div style={{fontSize:11,color:"#7c8fa8",marginTop:3}}>Recibe aviso cuando te asignen o eliminen una ruta.</div>
-            </div>
-            <button onClick={() => requestRapDrivePushToken(currentUser)} style={{border:"none",borderRadius:12,padding:"10px 13px",background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"white",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer",boxShadow:"0 8px 22px rgba(59,130,246,.35)"}}>Activar</button>
-          </div>
-        </div>
-      )}
 
       {/* Toast stack */}
       <div style={{position:"fixed",top:64,right:12,display:"flex",flexDirection:"column",gap:8,zIndex:3000,pointerEvents:"none",alignItems:"flex-end"}}>
