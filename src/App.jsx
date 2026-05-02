@@ -6708,19 +6708,47 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const acRef    = useRef(null);
   const [saving,  setSaving]  = useState(false);
   const [found,   setFound]   = useState(null);  // { display, lat, lng, confidence }
+  const [options, setOptions] = useState([]);    // alternativas Google / motor
   const [errMsg,  setErrMsg]  = useState("");
+  const [query,   setQuery]   = useState("");
 
-  // Inject light-mode pac-container styles
+  const currentText = stop.displayAddr || stop.rawAddr || "";
+  const sectorHint = [stop.sector, stop.city || stop.ciudad, "República Dominicana"].filter(Boolean).join(", ");
+
+  const buildGoogleMapsQuery = () => {
+    const txt = (inputRef.current?.value || query || currentText || "").trim();
+    return txt || currentText || "Santo Domingo Oeste";
+  };
+
+  const openGoogleMaps = () => {
+    const q = encodeURIComponent(buildGoogleMapsQuery());
+    if (q) window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
+  };
+
+  const applyFound = (candidate) => {
+    if (!candidate) return;
+    const clean = {
+      display: candidate.display,
+      lat: Number(candidate.lat),
+      lng: Number(candidate.lng),
+      confidence: candidate.confidence || 92,
+    };
+    setFound(clean);
+    setErrMsg("");
+  };
+
+  // Estilo claro para Google Places. La barra NO queda dark.
   useEffect(() => {
-    const id = "pac-light-style";
+    const id = "pac-light-style-pro";
     if (!document.getElementById(id)) {
       const s = document.createElement("style");
       s.id = id;
       s.textContent = `
-        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #d1d5db!important; border-radius:12px!important; box-shadow:0 8px 32px rgba(0,0,0,0.15)!important; margin-top:4px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; }
-        .pac-item { background:transparent!important; color:#374151!important; padding:10px 14px!important; cursor:pointer!important; border-top:1px solid #f3f4f6!important; font-size:13px!important; }
+        .pac-container { z-index:99999!important; background:#fff!important; border:1px solid #dbeafe!important; border-radius:16px!important; box-shadow:0 18px 46px rgba(15,23,42,0.16)!important; margin-top:8px!important; font-family:'Inter',sans-serif!important; overflow:hidden!important; padding:6px!important; }
+        .pac-item { background:#fff!important; color:#334155!important; padding:12px 14px!important; cursor:pointer!important; border-top:1px solid #eff6ff!important; font-size:13px!important; border-radius:10px!important; }
+        .pac-item:first-child { border-top:0!important; }
         .pac-item:hover,.pac-item-selected { background:#eff6ff!important; }
-        .pac-item-query { color:#111827!important; font-size:13px!important; font-weight:600!important; }
+        .pac-item-query { color:#0f172a!important; font-size:13px!important; font-weight:800!important; }
         .pac-matched { color:#2563eb!important; }
         .pac-icon { display:none!important; }
         .pac-logo:after { display:none!important; }
@@ -6737,12 +6765,17 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
       acRef.current.addListener("place_changed", () => {
         const place = acRef.current.getPlace();
         if (place?.geometry?.location) {
-          const result = { display: place.formatted_address || place.name, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), confidence: 97 };
-          setFound(result);
-          setErrMsg("");
+          const result = {
+            display: place.formatted_address || place.name,
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng(),
+            confidence: 98,
+          };
+          applyFound(result);
+          setOptions([result]);
         }
       });
-      setTimeout(() => inputRef.current?.focus(), 60);
+      setTimeout(() => inputRef.current?.focus(), 80);
     });
     return () => { if (acRef.current) { window.google?.maps?.event?.clearInstanceListeners(acRef.current); acRef.current = null; } };
   }, []);
@@ -6750,117 +6783,188 @@ const AddressEditModal = ({ stop, onSave, onCancel }) => {
   const handleSearch = async () => {
     const text = inputRef.current?.value?.trim();
     if (!text) return;
-    setFound(null); setErrMsg(""); setSaving(true);
-    // Coords? (18.xxx, -69.xxx)
+    setFound(null); setOptions([]); setErrMsg(""); setSaving(true);
+
     const coords = detectCoords(text);
     if (coords) {
-      setFound({ display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 });
-      setSaving(false); return;
+      const result = { display: `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`, lat: coords.lat, lng: coords.lng, confidence: 99 };
+      applyFound(result); setOptions([result]); setSaving(false); return;
     }
-    // Plus Code?
+
     if (isPlusCode(text)) {
       const r = await decodePlusCodeGoogle(text);
-      if (r.ok) { setFound({ display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 }); setSaving(false); return; }
+      if (r.ok) {
+        const result = { display: r.display || text, lat: r.lat, lng: r.lng, confidence: 99 };
+        applyFound(result); setOptions([result]); setSaving(false); return;
+      }
     }
-    // Google geocoder
+
     const r = await geocodeWithGoogle(text);
     setSaving(false);
-    if (r.ok) { setFound({ display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence }); }
-    else { setErrMsg("No encontrada. Prueba con otro formato o selecciona una sugerencia de la lista."); }
+    if (r.ok) {
+      const main = { display: r.display, lat: r.lat, lng: r.lng, confidence: r.confidence || 92 };
+      const alternatives = (r.allResults || [])
+        .filter(x => x && x.lat && x.lng && x.display)
+        .map(x => ({ display: x.display, lat: x.lat, lng: x.lng, confidence: x.confidence || 80 }));
+      const merged = [main, ...alternatives].filter((x, idx, arr) =>
+        idx === arr.findIndex(y => String(y.display).toLowerCase() === String(x.display).toLowerCase())
+      ).slice(0, 8);
+      applyFound(main);
+      setOptions(merged);
+    } else {
+      setErrMsg("No encontrada. Prueba con sector + referencia, coordenadas, Plus Code o abre Google Maps para copiar la ubicación exacta.");
+    }
+  };
+
+  const quickFill = (text) => {
+    const value = text.trim();
+    if (inputRef.current) inputRef.current.value = value;
+    setQuery(value);
+    setTimeout(() => inputRef.current?.focus(), 20);
   };
 
   const handleConfirm = () => { if (found) onSave(found); };
 
+  const quickChips = [
+    sectorHint && `Buscar en ${sectorHint}`,
+    currentText && `${currentText}, ${sectorHint}`,
+    stop.address2 && `${stop.address2}, ${sectorHint}`,
+    "Pegar coordenadas 18.x, -70.x",
+  ].filter(Boolean).slice(0, 4);
+
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.5)", backdropFilter:"blur(4px)" }}
+    <div style={{ position:"fixed", inset:0, zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(15,23,42,0.48)", backdropFilter:"blur(8px)" }}
       onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
 
-      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+      <style>{`@keyframes addrPop{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      <div style={{ width:520, background:"#ffffff", borderRadius:20, boxShadow:"0 24px 64px rgba(0,0,0,0.2)", overflow:"hidden", animation:"addrPop .2s cubic-bezier(.4,0,.2,1)" }}>
+      <div style={{ width:620, maxWidth:"94vw", background:"#ffffff", borderRadius:24, boxShadow:"0 30px 90px rgba(15,23,42,0.28)", overflow:"hidden", animation:"addrPop .22s cubic-bezier(.4,0,.2,1)", border:"1px solid rgba(219,234,254,0.9)" }}>
 
-        {/* ── HEADER ── */}
-        <div style={{ background:"#1d4ed8", padding:"18px 22px 16px", display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        {/* HEADER PREMIUM LIGHT */}
+        <div style={{ background:"linear-gradient(135deg,#2563eb 0%,#1d4ed8 48%,#0f172a 100%)", padding:"20px 24px", display:"flex", alignItems:"center", gap:14, position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", right:-50, top:-50, width:150, height:150, borderRadius:"50%", background:"rgba(255,255,255,0.11)" }}/>
+          <div style={{ width:44,height:44,borderRadius:14,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0, boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.25)" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"white" }}>Corregir dirección</div>
-            <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-              {stop.client} · Parada #{stop.stopNum || "?"}
+          <div style={{ flex:1, minWidth:0, position:"relative" }}>
+            <div style={{ fontSize:20,fontFamily:"'Syne',sans-serif",fontWeight:900,color:"white",letterSpacing:"-.3px" }}>Corregir ubicación</div>
+            <div style={{ fontSize:12,color:"rgba(255,255,255,0.78)",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+              {stop.client} · Parada #{stop.stopNum || "?"} · usa Google, coordenadas o referencia local
             </div>
           </div>
-          <button onClick={onCancel} style={{ width:30,height:30,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
+          <button onClick={onCancel} style={{ width:36,height:36,borderRadius:12,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.12)",color:"white",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0, position:"relative" }}>✕</button>
         </div>
 
-        <div style={{ padding:"20px 22px 22px" }}>
+        <div style={{ padding:"22px 24px 24px", background:"linear-gradient(180deg,#ffffff 0%,#f8fbff 100%)" }}>
 
-          {/* ── DIRECCIÓN ACTUAL ── */}
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:10,color:"#6b7280",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:5 }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
-            <div style={{ background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 14px",display:"flex",gap:8,alignItems:"flex-start" }}>
-              <span style={{ fontSize:16,flexShrink:0,marginTop:1 }}>📍</span>
-              <div>
-                <div style={{ fontSize:13,color:"#111827",fontWeight:500,lineHeight:1.4 }}>{stop.displayAddr || stop.rawAddr || "Sin dirección"}</div>
-                {stop.lat && <div style={{ fontSize:10,color:"#9ca3af",marginTop:3,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
+          {/* DIRECCIÓN ACTUAL */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10, marginBottom:16 }}>
+            <div style={{ fontSize:10,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.2px" }}>DIRECCIÓN ACTUAL EN EL SISTEMA</div>
+            <div style={{ background:"#ffffff",border:"1px solid #e2e8f0",borderRadius:16,padding:"14px 15px",display:"flex",gap:11,alignItems:"flex-start",boxShadow:"0 10px 26px rgba(15,23,42,0.04)" }}>
+              <div style={{ width:34,height:34,borderRadius:11,background:"#eff6ff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>📍</div>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:14,color:"#0f172a",fontWeight:700,lineHeight:1.45 }}>{currentText || "Sin dirección"}</div>
+                {stop.lat && <div style={{ fontSize:11,color:"#94a3b8",marginTop:4,fontFamily:"monospace" }}>{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</div>}
               </div>
             </div>
           </div>
 
-          {/* ── NUEVA DIRECCIÓN ── */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>NUEVA DIRECCIÓN, COORDENADAS O PLUS CODE</div>
-            <div style={{ display:"flex",gap:8 }}>
-              <input
-                ref={inputRef}
-                defaultValue=""
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
-                placeholder="Escribe como en Google Maps: calle + sector + referencia, coordenadas o Plus Code"
-                autoComplete="off"
-                style={{ flex:1, background:"#ffffff", border:"2px solid #2563eb", borderRadius:10, padding:"12px 14px", color:"#111827", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"0 0 0 4px rgba(37,99,235,0.1)" }}
-              />
-              <button onClick={handleSearch} disabled={saving}
-                style={{ padding:"11px 16px",borderRadius:10,border:"none",background:"#2563eb",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,opacity:saving?0.7:1,transition:"all .15s" }}>
-                {saving ? <div style={{ width:13,height:13,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
-                {saving ? "..." : "Buscar"}
+          {/* BUSCADOR CLARO */}
+          <div style={{ marginBottom:14, background:"#ffffff", border:"1px solid #dbeafe", borderRadius:18, padding:14, boxShadow:"0 18px 40px rgba(37,99,235,0.08)" }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10 }}>
+              <div>
+                <div style={{ fontSize:11,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1px" }}>NUEVA DIRECCIÓN</div>
+                <div style={{ fontSize:11,color:"#64748b",marginTop:3 }}>Busca como en Google Maps. Puedes usar calle, sector, negocio, Plus Code o coordenadas.</div>
+              </div>
+              <button onClick={openGoogleMaps}
+                style={{ border:"1px solid #bfdbfe", background:"linear-gradient(180deg,#eff6ff,#dbeafe)", color:"#1d4ed8", borderRadius:12, padding:"9px 11px", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:900, cursor:"pointer", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
+                <span>🗺️</span> Google Maps
               </button>
             </div>
-            <div style={{ fontSize:11,color:"#6b7280",marginTop:6,display:"flex",gap:12,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap" }}>
-              <span>💡 Selecciona una sugerencia o escribe y pulsa Buscar. El motor usará sector + referencia.</span>
-              <button onClick={() => { const q = encodeURIComponent(inputRef.current?.value?.trim() || stop.rawAddr || stop.displayAddr || ""); if(q) window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank"); }}
-                style={{ border:"1px solid #bfdbfe", background:"#eff6ff", color:"#1d4ed8", borderRadius:8, padding:"6px 9px", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>Abrir Google Maps</button>
+
+            <div style={{ display:"flex",gap:10,alignItems:"stretch" }}>
+              <div style={{ flex:1, position:"relative" }}>
+                <svg style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }} width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input
+                  ref={inputRef}
+                  defaultValue=""
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } if (e.key === "Escape") onCancel(); }}
+                  placeholder="Ej: Colinas del Norte C F 16, Pantoja / Plus Code / 18.51,-70.00"
+                  autoComplete="off"
+                  style={{ width:"100%", boxSizing:"border-box", background:"#ffffff", border:"2px solid #bfdbfe", borderRadius:14, padding:"14px 15px 14px 44px", color:"#0f172a", fontSize:14, fontFamily:"'Inter',sans-serif", outline:"none", caretColor:"#2563eb", colorScheme:"light", boxShadow:"0 0 0 4px rgba(37,99,235,0.06)" }}
+                />
+              </div>
+              <button onClick={handleSearch} disabled={saving}
+                style={{ padding:"0 18px",borderRadius:14,border:"none",background:"linear-gradient(135deg,#2563eb,#1d4ed8)",color:"white",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:saving?"not-allowed":"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:7,opacity:saving?0.75:1,boxShadow:"0 12px 28px rgba(37,99,235,0.28)" }}>
+                {saving ? <div style={{ width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",animation:"spin .8s linear infinite" }}/> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>}
+                {saving ? "Buscando" : "Buscar"}
+              </button>
+            </div>
+
+            <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:10 }}>
+              {quickChips.map((chip, idx) => (
+                <button key={idx} onClick={() => quickFill(chip)}
+                  style={{ border:"1px solid #e0e7ff", background:idx===0?"#eff6ff":"#fff", color:"#1e40af", borderRadius:999, padding:"6px 10px", fontSize:10.5, fontFamily:"'Syne',sans-serif", fontWeight:800, cursor:"pointer" }}>
+                  {idx===0 ? "📌 " : idx===1 ? "➕ " : idx===2 ? "🏷️ " : "🌐 "}{chip.length > 58 ? chip.slice(0,58)+"..." : chip}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* ── RESULTADO ENCONTRADO ── */}
-          {found && (
-            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"12px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
-              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
-              <div style={{ fontSize:13,color:"#111827",fontWeight:600,marginBottom:3 }}>{found.display}</div>
-              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>
-                {found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}
-                <span style={{ marginLeft:10,background:"#dcfce7",color:"#16a34a",padding:"1px 7px",borderRadius:6,fontSize:10,fontWeight:700,fontFamily:"sans-serif" }}>{found.confidence}% confianza</span>
+          {/* OPCIONES / RESULTADOS */}
+          {options.length > 0 && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8 }}>
+                <div style={{ fontSize:10,color:"#64748b",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1px" }}>OPCIONES ENCONTRADAS</div>
+                <div style={{ fontSize:10,color:"#2563eb",fontFamily:"'Syne',sans-serif",fontWeight:800 }}>{options.length} resultado{options.length!==1?"s":""}</div>
+              </div>
+              <div style={{ display:"grid", gap:8, maxHeight:190, overflow:"auto", paddingRight:2 }}>
+                {options.map((opt, idx) => {
+                  const active = found && Math.abs(found.lat-opt.lat)<0.000001 && Math.abs(found.lng-opt.lng)<0.000001;
+                  return (
+                    <button key={`${opt.display}-${idx}`} onClick={() => applyFound(opt)}
+                      style={{ textAlign:"left", border:active?"2px solid #2563eb":"1px solid #e2e8f0", background:active?"#eff6ff":"#ffffff", borderRadius:14, padding:"11px 12px", cursor:"pointer", boxShadow:active?"0 10px 24px rgba(37,99,235,0.10)":"0 6px 18px rgba(15,23,42,0.04)", display:"flex", gap:10, alignItems:"flex-start" }}>
+                      <div style={{ width:30,height:30,borderRadius:10,background:active?"#2563eb":"#f1f5f9",color:active?"white":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,flexShrink:0 }}>{idx+1}</div>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <div style={{ fontSize:12.5,color:"#0f172a",fontWeight:800,lineHeight:1.35 }}>{opt.display}</div>
+                        <div style={{ marginTop:4,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
+                          <span style={{ fontSize:10,color:"#64748b",fontFamily:"monospace" }}>{Number(opt.lat).toFixed(5)}, {Number(opt.lng).toFixed(5)}</span>
+                          <span style={{ fontSize:10,color:opt.confidence>=80?"#16a34a":"#f59e0b",background:opt.confidence>=80?"#dcfce7":"#fef3c7",padding:"2px 7px",borderRadius:999,fontFamily:"'Syne',sans-serif",fontWeight:900 }}>{opt.confidence}%</span>
+                        </div>
+                      </div>
+                      {active && <div style={{ color:"#2563eb",fontWeight:900 }}>✓</div>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* ── ERROR ── */}
-          {errMsg && (
-            <div style={{ background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626" }}>
-              ⚠ {errMsg}
+          {found && options.length === 0 && (
+            <div style={{ background:"#f0fdf4",border:"1px solid #86efac",borderRadius:14,padding:"13px 14px",marginBottom:14,animation:"addrPop .2s ease" }}>
+              <div style={{ fontSize:10,color:"#16a34a",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1px",marginBottom:6 }}>✓ DIRECCIÓN ENCONTRADA</div>
+              <div style={{ fontSize:13,color:"#111827",fontWeight:700,marginBottom:3 }}>{found.display}</div>
+              <div style={{ fontSize:11,color:"#4b5563",fontFamily:"monospace" }}>{found.lat?.toFixed(5)}, {found.lng?.toFixed(5)}</div>
             </div>
           )}
 
-          {/* ── ACTIONS ── */}
-          <div style={{ display:"flex",gap:8,marginTop:4 }}>
+          {errMsg && (
+            <div style={{ background:"#fff7ed",border:"1px solid #fdba74",borderRadius:14,padding:"12px 14px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.45 }}>
+              ⚠ {errMsg}
+              <div style={{ marginTop:8 }}><button onClick={openGoogleMaps} style={{ border:"1px solid #fed7aa",background:"white",color:"#ea580c",borderRadius:10,padding:"7px 10px",fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer" }}>Abrir búsqueda en Google Maps</button></div>
+            </div>
+          )}
+
+          <div style={{ display:"flex",gap:10,marginTop:4 }}>
             <button onClick={onCancel}
-              style={{ flex:1,padding:"11px",borderRadius:10,border:"1px solid #d1d5db",background:"white",color:"#6b7280",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:"pointer" }}>
+              style={{ flex:1,padding:"12px",borderRadius:14,border:"1px solid #dbe3ef",background:"#ffffff",color:"#64748b",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer" }}>
               Cancelar
             </button>
             <button onClick={handleConfirm} disabled={!found}
-              style={{ flex:2,padding:"11px",borderRadius:10,border:"none",background:found?"#16a34a":"#e5e7eb",color:found?"white":"#9ca3af",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:700,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .15s",boxShadow:found?"0 4px 16px rgba(22,163,74,0.3)":"none" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-              {found ? "Guardar esta dirección" : "Busca primero una dirección"}
+              style={{ flex:2,padding:"12px",borderRadius:14,border:"none",background:found?"linear-gradient(135deg,#16a34a,#059669)":"#e5e7eb",color:found?"white":"#94a3b8",fontSize:12,fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:found?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .15s",boxShadow:found?"0 12px 30px rgba(22,163,74,0.26)":"none" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7"><path d="M20 6L9 17l-5-5"/></svg>
+              {found ? "Guardar ubicación seleccionada" : "Selecciona o busca una ubicación"}
             </button>
           </div>
         </div>
