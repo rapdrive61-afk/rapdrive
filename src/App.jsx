@@ -3425,7 +3425,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       `}</style>
 
       {/* ══ HEADER PREMIUM ══ */}
-      <div style={{ flexShrink:0, position:"relative", background:"linear-gradient(180deg,#08111f 0%,#050914 100%)", borderBottom:"1px solid rgba(96,165,250,0.14)", height:78, display:"flex", alignItems:"center", paddingLeft:14, paddingRight:14, gap:12, zIndex:100, overflow:"hidden", boxShadow:"0 10px 30px rgba(0,0,0,.28)" }}>
+      <div style={{ flexShrink:0, position:"relative", background:"linear-gradient(180deg,#08111f 0%,#050914 100%)", borderBottom:"1px solid rgba(96,165,250,0.14)", height:78, display:"flex", alignItems:"center", paddingLeft:14, paddingRight:14, gap:12, zIndex:100, overflow:"visible", boxShadow:"0 10px 30px rgba(0,0,0,.28)" }}>
         <div style={{ position:"absolute", top:-30, left:-20, width:120, height:80, borderRadius:"50%", background:"radial-gradient(ellipse,rgba(59,130,246,0.18) 0%,transparent 70%)", pointerEvents:"none" }}/>
 
         {/* Menu button */}
@@ -3502,7 +3502,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         </div>
 
         {/* Anillo de progreso */}
-        {stops.length > 0 && (
+        {stops.length > 0 && tab === "route" && (
           <div style={{ flexShrink:0, position:"relative", width:38, height:38, cursor:"pointer" }} onClick={()=>setTab("route")}>
             <svg width="38" height="38" viewBox="0 0 38 38" style={{ transform:"rotate(-90deg)" }}>
               <circle cx="19" cy="19" r="14" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3"/>
@@ -3519,16 +3519,61 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         {/* Botón mapa */}
         <button onClick={()=>setTab(t=>t==="mapa"?"route":"mapa")} className="rd-btn"
           style={{ width:46, height:46, borderRadius:15, border:`1px solid ${tab==="mapa"?"rgba(59,130,246,0.48)":"rgba(255,255,255,0.09)"}`, background:tab==="mapa"?"linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))":"rgba(255,255,255,0.045)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, transition:"all .15s", boxShadow:tab==="mapa"?"0 8px 24px rgba(37,99,235,.22)":"none" }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={tab==="mapa"?"#60a5fa":"rgba(255,255,255,0.45)"} strokeWidth="1.8">
-            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-            <line x1="8" y1="2" x2="8" y2="18"/>
-            <line x1="16" y1="6" x2="16" y2="22"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tab==="mapa"?"#60a5fa":"rgba(255,255,255,0.45)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 21s7-4.7 7-11a7 7 0 1 0-14 0c0 6.3 7 11 7 11Z"/>
+            <circle cx="12" cy="10" r="2.4"/>
           </svg>
         </button>
       </div>
 
-      {/* ══ DRIVER COMMAND STRIP — resumen ejecutivo del turno ══ */}
-      <div style={{ flexShrink:0, padding:"10px 12px", background:"linear-gradient(180deg,rgba(5,9,20,.98),rgba(7,17,31,.94))", borderBottom:"1px solid rgba(96,165,250,.10)", display:"grid", gridTemplateColumns:stops.length?"1.4fr .8fr .8fr":"1fr", gap:8 }}>
+      {/* ══ DRAWER RESTAURADO ══ */}
+      {menuOpen && (
+        <div style={{ position:"fixed", inset:0, zIndex:9000, pointerEvents:"auto" }}>
+          <div onClick={()=>setMenuOpen(false)} style={{ position:"absolute", inset:0, background:"rgba(2,6,23,.62)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }}/>
+          <aside style={{ position:"absolute", top:0, left:0, bottom:0, width:"min(318px,86vw)", background:"linear-gradient(180deg,#07111f,#040814)", borderRight:"1px solid rgba(96,165,250,.18)", boxShadow:"28px 0 80px rgba(0,0,0,.62)", padding:"18px 14px", animation:"slideLeft .22s ease", display:"flex", flexDirection:"column", gap:14 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"4px 2px 10px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                <div style={{ width:42, height:42, borderRadius:15, background:"linear-gradient(135deg,#1d4ed8,#38bdf8)", display:"grid", placeItems:"center", color:"white", fontWeight:950, boxShadow:"0 12px 32px rgba(37,99,235,.28)" }}>{(driver.avatar||(driver.name||"RD").slice(0,2)).toUpperCase()}</div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:14, color:"#f8fafc", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{driver.name||"Mensajero"}</div>
+                  <div style={{ fontSize:10.5, color:"rgba(148,163,184,.62)", marginTop:2 }}>Panel de mensajero</div>
+                </div>
+              </div>
+              <button onClick={()=>setMenuOpen(false)} className="rd-btn" style={{ width:34, height:34, borderRadius:12, border:"1px solid rgba(148,163,184,.12)", background:"rgba(255,255,255,.045)", color:"rgba(226,232,240,.72)", cursor:"pointer", display:"grid", placeItems:"center" }}>✕</button>
+            </div>
+
+            {[
+              ["route","Ruta","M8 6h8M8 12h8M8 18h5"],
+              ["mapa","Mapa","M12 21s7-4.7 7-11a7 7 0 1 0-14 0c0 6.3 7 11 7 11Z"],
+              ["history","Historial","M8 7h8M8 12h8M8 17h5"],
+            ].map(([id,label,path]) => {
+              const active = tab === id;
+              return (
+                <button key={id} onClick={()=>{ setTab(id); setMenuOpen(false); }} className="rd-menu-item" style={{ width:"100%", border:"1px solid rgba(148,163,184,.10)", background:active?"linear-gradient(135deg,rgba(37,99,235,.22),rgba(14,165,233,.10))":"rgba(255,255,255,.035)", color:active?"#dbeafe":"rgba(226,232,240,.72)", borderRadius:16, padding:"13px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:850, fontSize:13 }}>
+                  <span style={{ width:34, height:34, borderRadius:12, display:"grid", placeItems:"center", background:active?"rgba(59,130,246,.18)":"rgba(255,255,255,.045)", color:active?"#93c5fd":"rgba(226,232,240,.48)", flexShrink:0 }}>
+                    {id === "mapa" ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={path}/><circle cx="12" cy="10" r="2.4"/></svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d={path}/></svg>
+                    )}
+                  </span>
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+
+            <div style={{ marginTop:"auto", paddingTop:12, borderTop:"1px solid rgba(148,163,184,.10)" }}>
+              <button onClick={()=>{ setMenuOpen(false); setLogoutConf(true); }} className="rd-btn" style={{ width:"100%", border:"1px solid rgba(239,68,68,.18)", background:"rgba(239,68,68,.08)", color:"#fca5a5", borderRadius:16, padding:"13px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:850, fontSize:13 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg>
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* ══ DRIVER COMMAND STRIP — solo en Rutas ══ */}
+      <div style={{ flexShrink:0, padding: tab === "route" ? "10px 12px" : 0, height: tab === "route" ? "auto" : 0, background:"linear-gradient(180deg,rgba(5,9,20,.98),rgba(7,17,31,.94))", borderBottom: tab === "route" ? "1px solid rgba(96,165,250,.10)" : "none", display: tab === "route" ? "grid" : "none", gridTemplateColumns:stops.length?"1.4fr .8fr .8fr":"1fr", gap:8 }}>
         {stops.length > 0 ? (
           <>
             <div style={{ borderRadius:16, padding:"10px 12px", background:"linear-gradient(135deg,rgba(37,99,235,.18),rgba(8,16,30,.88))", border:"1px solid rgba(96,165,250,.18)", minWidth:0 }}>
@@ -3705,7 +3750,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         )}
 
         {/* Route complete banner */}
-        {showCompletedBanner && tab!=="chat" && tab!=="pending" && (
+        {showCompletedBanner && tab === "route" && (
           <div style={{ position:"absolute",bottom:14,left:14,right:14,background:"rgba(6,12,20,0.98)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:16,padding:"16px",textAlign:"center",backdropFilter:"blur(20px)",boxShadow:"0 8px 32px rgba(0,0,0,0.8)",animation:"popIn .3s cubic-bezier(.4,0,.2,1)",zIndex:50 }}>
             <button onClick={()=>setShowCompletedBanner(false)} style={{ position:"absolute",top:8,right:10,background:"none",border:"none",color:"rgba(255,255,255,0.3)",fontSize:16,cursor:"pointer",lineHeight:1,padding:4 }}>✕</button>
             <div style={{ fontSize:30,marginBottom:6 }}>🎉</div>
@@ -3876,21 +3921,21 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                   margin:"6px 10px",
                   borderRadius:16,
                   background: isExp
-                    ? "rgba(30,50,90,0.55)"
+                    ? "rgba(255,255,255,0.045)"
                     : isCur
-                    ? "rgba(20,35,70,0.45)"
+                    ? "rgba(255,255,255,0.04)"
                     : isDone
                     ? "rgba(10,20,14,0.5)"
                     : isProb
                     ? "rgba(30,10,10,0.5)"
                     : "rgba(255,255,255,0.03)",
                   border: `1px solid ${
-                    isExp ? "rgba(59,130,246,0.35)"
-                    : isCur ? "rgba(59,130,246,0.2)"
+                    isExp ? "rgba(255,255,255,0.10)"
+                    : isCur ? "rgba(255,255,255,0.08)"
                     : isDone ? "rgba(16,185,129,0.15)"
                     : isProb ? "rgba(239,68,68,0.18)"
                     : "rgba(255,255,255,0.06)"}`,
-                  boxShadow: isCur ? "0 4px 20px rgba(59,130,246,0.12)" : isExp ? "0 6px 24px rgba(0,0,0,0.4)" : "none",
+                  boxShadow: "none",
                   transition:"all .18s cubic-bezier(.4,0,.2,1)",
                   animation:`slideInRow .22s ${Math.min(i,8)*18}ms ease both`,
                   overflow:"hidden",
@@ -3921,7 +3966,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                         :isCur?"rgba(93,161,255,0.6)"
                         :"rgba(255,255,255,0.1)"}`,
                       display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow: isCur ? "0 2px 12px rgba(59,130,246,0.35)" : isDone ? "0 0 10px rgba(16,185,129,0.15)" : "none",
+                      boxShadow: isDone ? "0 0 10px rgba(16,185,129,0.10)" : "none",
                       position:"relative",
                     }}>
                       {isDone ? (
@@ -4165,7 +4210,6 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                         <div style={{ fontSize:11, color:"rgba(148,163,184,.68)", marginTop:4 }}>{when}</div>
                         <div style={{ display:"flex", gap:8, marginTop:9 }}>
                           <span style={{ fontSize:10.5, color:"#86efac", background:"rgba(34,197,94,.10)", border:"1px solid rgba(34,197,94,.18)", borderRadius:999, padding:"4px 8px", fontWeight:800 }}>✓ {done} visitadas</span>
-                          <span style={{ fontSize:10.5, color:"#93c5fd", background:"rgba(59,130,246,.10)", border:"1px solid rgba(59,130,246,.18)", borderRadius:999, padding:"4px 8px", fontWeight:800 }}>{total} total</span>
                         </div>
                       </div>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(148,163,184,.55)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
@@ -4181,9 +4225,9 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       {/* ══ BOTTOM NAV PREMIUM ══ */}
       <div style={{ flexShrink:0, background:"linear-gradient(180deg,rgba(3,7,18,.94),rgba(2,6,23,.99))", borderTop:"1px solid rgba(148,163,184,.14)", display:"grid", gridTemplateColumns:"repeat(3,1fr)", zIndex:200, boxShadow:"0 -18px 44px rgba(0,0,0,.38)", backdropFilter:"blur(22px)", WebkitBackdropFilter:"blur(22px)", padding:"7px 8px calc(10px + env(safe-area-inset-bottom))" }}>
         {[
-          { id:"route", label:"Ruta", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18.5c3.8-5.6 7.1-5.6 11-2.4 1.6 1.3 3.1 1.6 5 .2"/><path d="M6.7 4.7h5.1l5.5 5.5v6.1"/><path d="M6.7 4.7v12.6"/><circle cx="8" cy="18" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg> },
-          { id:"mapa", label:"Mapa", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15M15 6v15"/><path d="M12 10.2c1.6-2.3 4.8-.9 4.8 1.5 0 2.7-4.8 6.1-4.8 6.1s-4.8-3.4-4.8-6.1c0-2.4 3.2-3.8 4.8-1.5Z"/></svg> },
-          { id:"history", label:"Historial", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5v5h5"/><path d="M5.8 10A7.5 7.5 0 1 0 8 5.1"/><path d="M12 8v4l3 2"/></svg> },
+          { id:"route", label:"Ruta", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 9h8M8 13h5M8 17h7"/></svg> },
+          { id:"mapa", label:"Mapa", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-4.7 7-11a7 7 0 1 0-14 0c0 6.3 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg> },
+          { id:"history", label:"Historial", icon:<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="5" width="16" height="15" rx="4"/><path d="M8 3v4M16 3v4M8 11h8M8 15h5"/></svg> },
         ].map(item=>{
           const active = tab===item.id;
           return (
