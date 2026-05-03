@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V37 CIRCUIT ROUTE UX: panel lateral más ancho, cards legibles y botones rediseñados sin tocar lógica.
+// V39 DRIVER APP ENTERPRISE UX: rediseño premium del panel mensajero sin tocar lógica, rutas, GPS ni foto.
 
 const DELIVERIES = [];
 
@@ -3390,6 +3390,13 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         .rd-driver-shell{background:linear-gradient(180deg,#050914,#07111f)!important}
         .rd-glass{background:rgba(8,16,30,.86)!important;border:1px solid rgba(148,163,184,.12)!important;box-shadow:0 16px 45px rgba(0,0,0,.34)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
         .rd-soft-card{background:linear-gradient(145deg,rgba(15,30,55,.92),rgba(8,16,30,.95))!important;border:1px solid rgba(96,165,250,.16)!important;box-shadow:0 12px 34px rgba(2,6,23,.4)!important}
+        .rd-enterprise-card{background:linear-gradient(145deg,rgba(18,34,62,.96),rgba(6,12,23,.98))!important;border:1px solid rgba(96,165,250,.18)!important;box-shadow:0 18px 54px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.035)!important}
+        .rd-enterprise-glow:before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:radial-gradient(circle at 18% 12%,rgba(96,165,250,.25),transparent 38%),radial-gradient(circle at 92% 24%,rgba(16,185,129,.16),transparent 34%);pointer-events:none}
+        .rd-bottom-pill{transition:transform .16s ease, background .16s ease, border-color .16s ease}
+        .rd-bottom-pill:active{transform:scale(.94)}
+        .rd-action-sheen{position:relative;overflow:hidden}
+        .rd-action-sheen:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,.16) 45%,transparent 60%);transform:translateX(-120%);animation:rdSheen 3.2s ease-in-out infinite}
+        @keyframes rdSheen{0%,55%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
       `}</style>
 
       {/* ══ HEADER PREMIUM ══ */}
@@ -3495,27 +3502,50 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         </button>
       </div>
 
-      {/* ══ DRIVER COMMAND STRIP — resumen ejecutivo del turno ══ */}
-      <div style={{ flexShrink:0, padding:"10px 12px", background:"linear-gradient(180deg,rgba(5,9,20,.98),rgba(7,17,31,.94))", borderBottom:"1px solid rgba(96,165,250,.10)", display:"grid", gridTemplateColumns:stops.length?"1.4fr .8fr .8fr":"1fr", gap:8 }}>
+      {/* ══ DRIVER COMMAND CENTER — premium enterprise ══ */}
+      <div style={{ flexShrink:0, padding:"12px 12px 13px", background:"linear-gradient(180deg,rgba(5,9,20,.99),rgba(7,17,31,.96))", borderBottom:"1px solid rgba(96,165,250,.12)", position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute", inset:0, background:"radial-gradient(circle at 12% 0%,rgba(37,99,235,.20),transparent 34%), radial-gradient(circle at 94% 20%,rgba(34,197,94,.10),transparent 30%)", pointerEvents:"none" }}/>
         {stops.length > 0 ? (
-          <>
-            <div style={{ borderRadius:16, padding:"10px 12px", background:"linear-gradient(135deg,rgba(37,99,235,.18),rgba(8,16,30,.88))", border:"1px solid rgba(96,165,250,.18)", minWidth:0 }}>
-              <div style={{ fontSize:9, color:"rgba(147,197,253,.72)", fontWeight:900, letterSpacing:"1.4px", textTransform:"uppercase", marginBottom:4 }}>Ruta activa</div>
-              <div style={{ fontSize:14, color:"#f8fafc", fontWeight:900, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{myRoute?.routeName || "Ruta del día"}</div>
+          <div style={{ position:"relative", zIndex:1, display:"grid", gridTemplateColumns:"1.35fr .75fr .75fr", gap:9 }}>
+            <div className="rd-enterprise-card rd-enterprise-glow" style={{ position:"relative", borderRadius:18, padding:"13px 14px", minWidth:0, overflow:"hidden" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:38, height:38, borderRadius:14, display:"grid", placeItems:"center", background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", boxShadow:"0 12px 28px rgba(37,99,235,.35)", flexShrink:0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11l4 4v6H3z"/><path d="M14 7v4h4"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+                </div>
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:9, color:"rgba(147,197,253,.72)", fontWeight:1000, letterSpacing:"1.5px", textTransform:"uppercase" }}>Ruta activa</div>
+                  <div style={{ fontSize:15, color:"#f8fafc", fontWeight:1000, letterSpacing:"-.25px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:3 }}>{myRoute?.routeName || "Ruta del día"}</div>
+                  <div style={{ display:"flex", gap:8, marginTop:7, alignItems:"center", flexWrap:"wrap" }}>
+                    <span style={{ fontSize:10, color:"rgba(226,232,240,.46)", fontWeight:800 }}>{visited.length}/{stops.length} visitadas</span>
+                    <span style={{ width:4, height:4, borderRadius:"50%", background:"rgba(148,163,184,.35)" }}/>
+                    <span style={{ fontSize:10, color:"rgba(226,232,240,.46)", fontWeight:800 }}>{routeKm || "—"} km</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
-              <div style={{ fontSize:18, color:"#60a5fa", fontWeight:1000, lineHeight:1 }}>{pct}%</div>
-              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PROGRESO</div>
+
+            <div className="rd-enterprise-card" style={{ borderRadius:18, padding:"13px 10px", textAlign:"center", position:"relative", overflow:"hidden" }}>
+              <div style={{ width:46, height:46, borderRadius:"50%", margin:"0 auto 5px", display:"grid", placeItems:"center", background:`conic-gradient(${pct===100?"#10b981":"#3b82f6"} ${pct*3.6}deg, rgba(255,255,255,.08) 0deg)` }}>
+                <div style={{ width:34, height:34, borderRadius:"50%", background:"#07111f", display:"grid", placeItems:"center", fontSize:12, fontWeight:1000, color:pct===100?"#34d399":"#93c5fd", fontFamily:"'DM Mono',monospace" }}>{pct}%</div>
+              </div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.65)", fontWeight:1000, letterSpacing:".9px" }}>PROGRESO</div>
             </div>
-            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
-              <div style={{ fontSize:18, color:locationStatus==="active"?"#22c55e":"#f59e0b", fontWeight:1000, lineHeight:1 }}>{pending.length}</div>
-              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PENDIENTES</div>
+
+            <div className="rd-enterprise-card" style={{ borderRadius:18, padding:"13px 10px", textAlign:"center" }}>
+              <div style={{ fontSize:24, color:pending.length?"#f59e0b":"#22c55e", fontWeight:1000, lineHeight:1, fontFamily:"'DM Mono',monospace" }}>{pending.length}</div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.65)", fontWeight:1000, letterSpacing:".9px", marginTop:7 }}>PENDIENTES</div>
+              <div style={{ fontSize:10, color:"rgba(226,232,240,.38)", fontWeight:800, marginTop:5 }}>{estFinish()?`ETA ${estFinish()}`:"Listo"}</div>
             </div>
-          </>
+          </div>
         ) : (
-          <div style={{ borderRadius:16, padding:"12px 14px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 12px #22c55e70":"none" }}/>
-            <div style={{ fontSize:13, color:"rgba(226,232,240,.82)", fontWeight:800 }}>Esperando asignación de ruta</div>
+          <div className="rd-enterprise-card" style={{ position:"relative", zIndex:1, borderRadius:18, padding:"14px", display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:40, height:40, borderRadius:14, background:"rgba(59,130,246,.14)", border:"1px solid rgba(96,165,250,.22)", display:"grid", placeItems:"center", color:"#60a5fa" }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/></svg>
+            </div>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:14, color:"rgba(248,250,252,.92)", fontWeight:1000 }}>Esperando asignación</div>
+              <div style={{ fontSize:11, color:"rgba(148,163,184,.56)", marginTop:3 }}>GPS {locationStatus==="active"?"activo y listo":"en preparación"}</div>
+            </div>
           </div>
         )}
       </div>
@@ -3697,20 +3727,20 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
 
 
-          {/* ── PARADA ACTUAL card ── */}
+          {/* ── PARADA ACTUAL card — rediseño enterprise ── */}
           {currentStop && (
             <div style={{ padding:"8px 14px 0", flexShrink:0 }}>
               <div style={{
-                background:"linear-gradient(135deg,rgba(10,22,50,0.95),rgba(8,18,40,0.95))",
-                border:"1px solid rgba(59,130,246,0.3)",
-                borderRadius:16,
+                background:"linear-gradient(145deg,rgba(18,42,78,0.98),rgba(6,14,28,0.98))",
+                border:"1px solid rgba(96,165,250,0.34)",
+                borderRadius:22,
                 overflow:"hidden",
-                boxShadow:"0 4px 20px rgba(59,130,246,0.12)",
+                boxShadow:"0 18px 55px rgba(2,6,23,.55), 0 0 0 1px rgba(255,255,255,.03)",
               }}>
                 {/* Accent top bar */}
                 <div style={{ height:2, background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#1d4ed8)", backgroundSize:"200% 100%", animation:"shimmer 2s linear infinite" }}/>
 
-                <div style={{ padding:"12px 14px 14px" }}>
+                <div style={{ padding:"15px 15px 16px" }}>
                   {/* Row 1: stop number + label + status badge */}
                   <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                     <div style={{
@@ -3731,7 +3761,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                   </div>
 
                   {/* Client name */}
-                  <div style={{ fontSize:18, fontWeight:800, color:"#f8fafc", letterSpacing:"-0.4px", lineHeight:1.2, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  <div style={{ fontSize:20, fontWeight:1000, color:"#f8fafc", letterSpacing:"-0.4px", lineHeight:1.2, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {currentStop.client || `Parada ${currentStop.stopNum}`}
                   </div>
 
@@ -3789,13 +3819,13 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                   ref={searchInputRef}
                   value={search}
                   onChange={e=>setSearch(e.target.value)}
-                  placeholder="Buscar paradas..."
+                  placeholder="Buscar cliente, SP, teléfono o dirección..."
                   onFocus={()=>{
                     setTimeout(()=>{
                       searchInputRef.current?.scrollIntoView({behavior:"smooth",block:"start",inline:"nearest"});
                     }, 320);
                   }}
-                  style={{ width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"9px 32px 9px 30px",color:"#f1f5f9",fontSize:13,outline:"none",caretColor:"#3b82f6" }}/>
+                  style={{ width:"100%",background:"rgba(255,255,255,0.085)",border:"1px solid rgba(96,165,250,0.20)",borderRadius:14,padding:"12px 34px 12px 32px",color:"#f8fafc",fontSize:14,outline:"none",caretColor:"#3b82f6" }}/>
                 {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:15,lineHeight:1 }}>✕</button>}
               </div>
             </div>
@@ -4369,27 +4399,30 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           </div>
         )}
 
-      {/* ══ BOTTOM NAV ══ */}
-      <div style={{ flexShrink:0,background:"rgba(5,9,20,.98)",borderTop:"1px solid rgba(96,165,250,0.14)",display:"flex",zIndex:200,boxShadow:"0 -12px 34px rgba(0,0,0,.34)", backdropFilter:"blur(18px)", WebkitBackdropFilter:"blur(18px)" }}>
+      {/* ══ BOTTOM NAV — enterprise dock ══ */}
+      <div style={{ flexShrink:0, padding:"8px 10px calc(10px + env(safe-area-inset-bottom))", background:"linear-gradient(180deg,rgba(5,9,20,.88),rgba(3,7,14,.99))", borderTop:"1px solid rgba(96,165,250,0.16)", zIndex:200, boxShadow:"0 -18px 45px rgba(0,0,0,.46)", backdropFilter:"blur(22px)", WebkitBackdropFilter:"blur(22px)" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, maxWidth:560, margin:"0 auto" }}>
         {[
-          { id:"route", label:"Ruta",
-            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
+          { id:"route", label:"Ruta", sub:pending.length?`${pending.length} pendientes`:"Lista",
+            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
 
-          { id:"mapa", label:"Mapa",
-            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
-          { id:"history", label:"Historial",
-            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+          { id:"mapa", label:"Mapa", sub:"GPS vivo",
+            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
+          { id:"history", label:"Historial", sub:`${routeHistory.length} rutas`,
+            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
-          <button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn"
-            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"12px 0 18px",border:"none",background:tab===item.id?"rgba(59,130,246,0.08)":"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.35)",cursor:"pointer",position:"relative",transition:"all .15s" }}>
-            {item.badge>0 && tab!==item.id && (
-              <div style={{ position:"absolute",top:8,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:"50%",background:"#3b82f6",border:"2px solid #080f18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontWeight:800,padding:"0 3px" }}>{item.badge>9?"9+":item.badge}</div>
-            )}
-            {item.icon}
-            <span style={{ fontSize:10,fontWeight:tab===item.id?700:500,letterSpacing:"0.2px" }}>{item.label}</span>
-            {tab===item.id && <div style={{ position:"absolute",top:0,left:"25%",right:"25%",height:2,background:"#3b82f6",borderRadius:"0 0 3px 3px" }}/>}
+          <button key={item.id} onClick={()=>setTab(item.id)} className="rd-bottom-pill"
+            style={{ minHeight:58, borderRadius:18, border:`1px solid ${tab===item.id?"rgba(96,165,250,.42)":"rgba(148,163,184,.10)"}`, background:tab===item.id?"linear-gradient(145deg,rgba(37,99,235,.24),rgba(10,22,45,.94))":"rgba(255,255,255,.035)", color:tab===item.id?"#93c5fd":"rgba(226,232,240,.48)", cursor:"pointer", position:"relative", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center", gap:9, boxShadow:tab===item.id?"0 12px 34px rgba(37,99,235,.18), inset 0 1px 0 rgba(255,255,255,.04)":"none" }}>
+            {tab===item.id && <div style={{ position:"absolute", inset:0, background:"radial-gradient(circle at 50% 0%,rgba(96,165,250,.24),transparent 56%)", pointerEvents:"none" }}/>} 
+            <div style={{ position:"relative", zIndex:1, display:"grid", placeItems:"center", width:30, height:30, borderRadius:12, background:tab===item.id?"rgba(96,165,250,.16)":"rgba(255,255,255,.045)", border:`1px solid ${tab===item.id?"rgba(96,165,250,.24)":"rgba(255,255,255,.06)"}` }}>{item.icon}</div>
+            <div style={{ position:"relative", zIndex:1, textAlign:"left", minWidth:0 }}>
+              <div style={{ fontSize:12, fontWeight:1000, letterSpacing:"-.1px" }}>{item.label}</div>
+              <div style={{ fontSize:9, fontWeight:800, color:tab===item.id?"rgba(191,219,254,.68)":"rgba(148,163,184,.42)", marginTop:2 }}>{item.sub}</div>
+            </div>
+            {tab===item.id && <div style={{ position:"absolute", left:18, right:18, bottom:0, height:3, borderRadius:"3px 3px 0 0", background:"linear-gradient(90deg,#2563eb,#60a5fa)" }}/>} 
           </button>
         ))}
+        </div>
       </div>
 
       {/* -- Agregar nota modal -- */}
