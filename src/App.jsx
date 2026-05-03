@@ -3016,8 +3016,9 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       gMapRef.current.addListener("idle", () => {
         window.setTimeout(() => { mapUserInteractingRef.current = false; }, 1200);
       });
+      setTimeout(() => { try { window.google.maps.event.trigger(gMapRef.current, "resize"); } catch(e){} }, 120);
     });
-  }, []);
+  }, [tab]);
 
   // -- Re-render markers after map becomes ready --------------------------------
   const [mapReady, setMapReady] = useState(false);
@@ -3030,6 +3031,15 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       setTimeout(() => clearInterval(check), 5000);
     });
   }, []);
+
+
+  useEffect(() => {
+    if (tab !== "mapa" || !gMapRef.current || !window.google) return;
+    const t = setTimeout(() => {
+      try { window.google.maps.event.trigger(gMapRef.current, "resize"); } catch(e){}
+    }, 180);
+    return () => clearTimeout(t);
+  }, [tab, stops.length]);
 
   // -- Actualizar marcadores cuando cambian paradas ------------------------------
   useEffect(() => {
@@ -3182,6 +3192,12 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
   const pending     = stops.filter(s=>s.navStatus!=="visited");
   const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.navStatus!=="visited");
   const pct         = stops.length>0 ? Math.round((visited.length/stops.length)*100) : 0;
+  const cleanSP = (value) => {
+    const raw = String(value || "").trim().toUpperCase().replace(/^#+/, "").replace(/\s+/g, "");
+    if (!raw) return "";
+    const noPrefix = raw.replace(/^(SP[-:]*)+/i, "");
+    return noPrefix ? `SP${noPrefix}` : raw;
+  };
 
   const filteredStops = stops.filter(s => {
     if (!search.trim()) return true;
@@ -3398,7 +3414,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
           <div style={{ position:"relative", flexShrink:0 }}>
             <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display:"none" }}/>
-            <button onClick={()=>setPhotoMenuOpen(o=>!o)} className="rd-btn" style={{ width:50, height:50, borderRadius:18, overflow:"hidden", border:"1px solid rgba(96,165,250,.24)", background:"linear-gradient(135deg,#1e3a8a,#2563eb 58%,#38bdf8)", color:"white", display:"grid", placeItems:"center", fontWeight:900, fontSize:14, cursor:"pointer", boxShadow:"0 15px 34px rgba(37,99,235,.30)", position:"relative" }}>
+            <button onClick={()=>setPhotoMenuOpen(o=>!o)} className="rd-btn" style={{ width:58, height:58, borderRadius:20, overflow:"hidden", border:"1px solid rgba(96,165,250,.24)", background:"linear-gradient(135deg,#1e3a8a,#2563eb 58%,#38bdf8)", color:"white", display:"grid", placeItems:"center", fontWeight:900, fontSize:14, cursor:"pointer", boxShadow:"0 15px 34px rgba(37,99,235,.30)", position:"relative" }}>
               {profilePhoto ? <img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : (driver.avatar||(driver.name||"MD").slice(0,2)).toUpperCase()}
               <span style={{ position:"absolute", right:3, bottom:3, width:15, height:15, borderRadius:999, background:locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":locationStatus==="denied"?"#ef4444":"#475569", border:"2px solid #06101d", boxShadow:locationStatus==="active"?"0 0 12px rgba(34,197,94,.8)":"none" }}/>
             </button>
@@ -3412,11 +3428,11 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:3 }}>
-              <span style={{ fontSize:10, letterSpacing:"1.7px", color:"#60a5fa", fontWeight:900, textTransform:"uppercase" }}>Field App</span>
+              <span style={{ fontSize:10, letterSpacing:"1.7px", color:"#60a5fa", fontWeight:900, textTransform:"uppercase" }}>Rap Drive</span>
               <span style={{ width:5, height:5, borderRadius:999, background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 10px #22c55e":"none" }}/>
             </div>
             <div style={{ fontSize:18, lineHeight:1.05, fontWeight:950, color:"#fff", letterSpacing:"-.65px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{(driver.name||"Mensajero").split(" ").slice(0,2).join(" ")}</div>
-            <div style={{ marginTop:4, fontSize:11, color:"rgba(226,232,240,.48)", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{myRoute?.routeName || "Esperando ruta asignada"}</div>
+            <div style={{ marginTop:4, fontSize:11, color:locationStatus==="active"?"#86efac":"rgba(226,232,240,.48)", fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{locationStatus==="active"?"GPS activo en tiempo real":"Listo para recibir ruta"}</div>
           </div>
 
           {stops.length > 0 && <button onClick={()=>setTab("route")} className="rd-btn" style={{ width:52, height:52, borderRadius:18, border:"1px solid rgba(59,130,246,.26)", background:"rgba(37,99,235,.13)", color:pct===100?"#22c55e":"#93c5fd", display:"grid", placeItems:"center", cursor:"pointer", flexShrink:0, position:"relative" }}>
@@ -3438,37 +3454,38 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           <section style={{ height:"100%", overflow:"auto", WebkitOverflowScrolling:"touch", padding:"14px 12px 92px" }}>
             {showCompletedBanner && <div style={{ borderRadius:22, padding:18, marginBottom:12, background:"linear-gradient(135deg,rgba(34,197,94,.18),rgba(16,185,129,.06))", border:"1px solid rgba(34,197,94,.22)", boxShadow:"0 20px 55px rgba(0,0,0,.28)" }}><div style={{ fontSize:20, fontWeight:950 }}>Ruta completada</div><div style={{ marginTop:4, color:"#a7f3d0", fontSize:13 }}>Buen trabajo. La ruta pasó al historial.</div></div>}
 
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:9, marginBottom:12 }}>
-              {[["Visitadas",visited.length,"#22c55e"],["Pendientes",pending.length,"#f59e0b"],["Total",stops.length,"#60a5fa"]].map(([l,v,c])=><div key={l} className="rd-glass" style={{ borderRadius:18, padding:"12px 10px", minHeight:74 }}><div style={{ fontSize:10, color:"rgba(226,232,240,.44)", fontWeight:900, letterSpacing:".9px", textTransform:"uppercase" }}>{l}</div><div style={{ marginTop:5, fontSize:24, fontWeight:950, color:c, fontFamily:"'DM Mono',monospace" }}>{v}</div></div>)}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+              {[["Visitadas",visited.length,"#22c55e","M20 6 9 17l-5-5"],["Pendientes",pending.length,"#f59e0b","M12 6v6l4 2 M21 12a9 9 0 1 1-9-9"],["Total",stops.length,"#60a5fa","M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1 1 18 0z"]].map(([l,v,c,ic])=><div key={l} className="rd-glass" style={{ borderRadius:16, padding:"9px 9px", minHeight:58, display:"flex", alignItems:"center", gap:8 }}><div style={{ width:27, height:27, borderRadius:10, background:`${c}16`, color:c, display:"grid", placeItems:"center", flexShrink:0 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d={ic}/></svg></div><div><div style={{ fontSize:8.5, color:"rgba(226,232,240,.44)", fontWeight:900, letterSpacing:".6px", textTransform:"uppercase" }}>{l}</div><div style={{ marginTop:2, fontSize:15, fontWeight:950, color:c, fontFamily:"'DM Mono',monospace" }}>{v}</div></div></div>)}
             </div>
+            {stops.length > 0 && <button onClick={finalizeCurrentRoute} className="rd-btn" style={{ width:"100%", marginBottom:10, border:"1px solid rgba(239,68,68,.28)", borderRadius:15, padding:"10px 12px", background:"rgba(239,68,68,.10)", color:"#fecaca", fontSize:12, fontWeight:950, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Finalizar ruta</button>}
 
             {currentStop && (
-              <div className="rd-soft-card" style={{ borderRadius:26, padding:16, marginBottom:13, position:"relative", overflow:"hidden" }}>
+              <div className="rd-soft-card" style={{ borderRadius:20, padding:12, marginBottom:10, position:"relative", overflow:"hidden" }}>
                 <div style={{ position:"absolute", right:-40, top:-40, width:130, height:130, borderRadius:999, background:"radial-gradient(circle,rgba(59,130,246,.24),transparent 70%)" }}/>
                 <div style={{ display:"flex", alignItems:"flex-start", gap:13, position:"relative" }}>
-                  <div style={{ width:54, height:54, borderRadius:18, background:"linear-gradient(145deg,#2563eb,#38bdf8)", display:"grid", placeItems:"center", color:"white", fontSize:19, fontWeight:950, fontFamily:"'DM Mono',monospace", boxShadow:"0 14px 35px rgba(37,99,235,.34)", flexShrink:0 }}>{currentStop.stopNum||"?"}</div>
+                  <div style={{ width:44, height:44, borderRadius:15, background:"linear-gradient(145deg,#2563eb,#38bdf8)", display:"grid", placeItems:"center", color:"white", fontSize:15, fontWeight:950, fontFamily:"'DM Mono',monospace", boxShadow:"0 14px 35px rgba(37,99,235,.34)", flexShrink:0 }}>{currentStop.stopNum||"?"}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:10, color:"#93c5fd", fontWeight:950, letterSpacing:"1.6px", textTransform:"uppercase" }}>Parada actual</div>
-                    <div style={{ marginTop:4, fontSize:18, color:"#fff", fontWeight:950, letterSpacing:"-.45px", lineHeight:1.1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{currentStop.client || `Parada ${currentStop.stopNum}`}</div>
-                    <div style={{ marginTop:7, color:"rgba(226,232,240,.62)", fontSize:13, lineHeight:1.35 }}>{currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}</div>
+                    <div style={{ marginTop:4, fontSize:15, color:"#fff", fontWeight:950, letterSpacing:"-.45px", lineHeight:1.1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{currentStop.client || `Parada ${currentStop.stopNum}`}</div>
+                    <div style={{ marginTop:7, color:"rgba(226,232,240,.62)", fontSize:11.5, lineHeight:1.32 }}>{currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}</div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:9 }}>
-                      {currentStop.tracking && <span style={{ fontSize:10, fontWeight:900, color:"#93c5fd", background:"rgba(59,130,246,.12)", border:"1px solid rgba(59,130,246,.22)", borderRadius:999, padding:"5px 9px" }}>SP {currentStop.tracking}</span>}
+                      {currentStop.tracking && <span style={{ fontSize:10, fontWeight:900, color:"#93c5fd", background:"rgba(59,130,246,.12)", border:"1px solid rgba(59,130,246,.22)", borderRadius:999, padding:"5px 9px" }}>{cleanSP(currentStop.tracking)}</span>}
                       {currentStop.phone && <span style={{ fontSize:10, fontWeight:900, color:"rgba(226,232,240,.62)", background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.08)", borderRadius:999, padding:"5px 9px" }}>{currentStop.phone}</span>}
                     </div>
                   </div>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr 1fr", gap:9, marginTop:15 }}>
-                  <button onClick={(e)=>{e.stopPropagation(); markStopVisited(currentStop);}} className="rd-btn" style={{ border:0, borderRadius:16, padding:"13px 9px", background:"linear-gradient(135deg,#16a34a,#22c55e)", color:"white", fontWeight:950, cursor:"pointer", boxShadow:"0 13px 30px rgba(34,197,94,.24)" }}>Visitado</button>
-                  {currentStop.lat && currentStop.lng && <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`} target="_blank" rel="noreferrer" className="rd-btn" style={{ borderRadius:16, padding:"13px 9px", background:"rgba(59,130,246,.12)", color:"#93c5fd", border:"1px solid rgba(59,130,246,.24)", textDecoration:"none", textAlign:"center", fontWeight:950 }}>Waze</a>}
-                  {currentStop.phone && <a href={`https://wa.me/1${String(currentStop.phone||'').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="rd-btn" style={{ borderRadius:16, padding:"13px 9px", background:"rgba(34,197,94,.10)", color:"#86efac", border:"1px solid rgba(34,197,94,.22)", textDecoration:"none", textAlign:"center", fontWeight:950 }}>WhatsApp</a>}
+                <div style={{ display:"grid", gridTemplateColumns:"1.05fr 1fr 1fr", gap:7, marginTop:10 }}>
+                  <button onClick={(e)=>{e.stopPropagation(); markStopVisited(currentStop);}} className="rd-btn" style={{ border:0, borderRadius:16, padding:"10px 7px", background:"linear-gradient(135deg,#16a34a,#22c55e)", color:"white", fontWeight:950, cursor:"pointer", boxShadow:"0 13px 30px rgba(34,197,94,.24)" }}>Visitado</button>
+                  {currentStop.lat && currentStop.lng && <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`} target="_blank" rel="noreferrer" className="rd-btn" style={{ borderRadius:16, padding:"10px 7px", background:"rgba(59,130,246,.12)", color:"#93c5fd", border:"1px solid rgba(59,130,246,.24)", textDecoration:"none", textAlign:"center", fontWeight:950 }}>Waze</a>}
+                  {currentStop.phone && <a href={`https://wa.me/1${String(currentStop.phone||'').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="rd-btn" style={{ borderRadius:16, padding:"10px 7px", background:"rgba(34,197,94,.10)", color:"#86efac", border:"1px solid rgba(34,197,94,.22)", textDecoration:"none", textAlign:"center", fontWeight:950 }}>WhatsApp</a>}
                 </div>
               </div>
             )}
 
-            <div className="rd-glass" style={{ borderRadius:22, padding:12, marginBottom:12 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, background:"rgba(2,6,23,.64)", border:"1px solid rgba(148,163,184,.12)", borderRadius:17, padding:"12px 13px" }}>
+            <div className="rd-glass" style={{ borderRadius:18, padding:8, marginBottom:9 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"rgba(2,6,23,.64)", border:"1px solid rgba(148,163,184,.12)", borderRadius:14, padding:"9px 11px" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input ref={searchInputRef} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar cliente, teléfono, SP o dirección..." style={{ flex:1, minWidth:0, background:"transparent", border:0, outline:0, color:"#eaf2ff", fontSize:14, fontWeight:700, caretColor:"#38bdf8" }}/>
+                <input ref={searchInputRef} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar cliente, teléfono, SP o dirección..." style={{ flex:1, minWidth:0, background:"transparent", border:0, outline:0, color:"#eaf2ff", fontSize:13, fontWeight:700, caretColor:"#38bdf8" }}/>
                 {search && <button onClick={()=>setSearch("")} style={{ width:26, height:26, border:0, borderRadius:999, background:"rgba(255,255,255,.06)", color:"#94a3b8", cursor:"pointer" }}>×</button>}
               </div>
             </div>
@@ -3476,26 +3493,26 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
             {!myRoute && <div className="rd-glass" style={{ borderRadius:26, padding:"48px 24px", textAlign:"center" }}><div style={{ width:76, height:76, margin:"0 auto 17px", borderRadius:26, display:"grid", placeItems:"center", background:"rgba(59,130,246,.10)", border:"1px solid rgba(59,130,246,.18)", fontSize:34 }}>📭</div><div style={{ fontSize:20, fontWeight:950 }}>Sin ruta asignada</div><div style={{ marginTop:8, color:"rgba(226,232,240,.50)", lineHeight:1.5 }}>Cuando el admin envíe una ruta aparecerá aquí lista para trabajar.</div></div>}
             {filteredStops.length===0 && myRoute && <div style={{ padding:30, textAlign:"center", color:"rgba(226,232,240,.42)", fontWeight:800 }}>Sin resultados para “{search}”</div>}
 
-            <div style={{ display:"grid", gap:10 }}>
+            <div style={{ display:"grid", gap:7 }}>
               {filteredStops.map((stop,i)=>{
                 const isDone = stop.navStatus === "visited";
                 const isCur = stop === currentStop || stop.navStatus === "active";
                 const isExp = selStop?.id === stop.id || (!stop.id && selStop?.stopNum === stop.stopNum);
                 const color = isDone?"#22c55e":isCur?"#3b82f6":"#64748b";
                 return (
-                  <article key={stop.id||`${stop.stopNum}-${i}`} className="rd-field-card" onClick={()=>{setSelStop(isExp?null:stop); if(stop.lat&&stop.lng&&tab!=="mapa") setMapPinPopup(stop);}} style={{ borderRadius:23, padding:14, background:isCur?"linear-gradient(145deg,rgba(22,45,86,.88),rgba(8,16,30,.94))":isDone?"linear-gradient(145deg,rgba(12,36,24,.82),rgba(8,16,30,.92))":"linear-gradient(145deg,rgba(15,23,42,.72),rgba(8,16,30,.92))", border:`1px solid ${isCur?"rgba(96,165,250,.30)":isDone?"rgba(34,197,94,.22)":"rgba(148,163,184,.11)"}`, boxShadow:isCur?"0 18px 45px rgba(37,99,235,.18)":"0 10px 30px rgba(0,0,0,.18)", animation:`fadeUp .18s ${Math.min(i,10)*18}ms ease both` }}>
-                    <div style={{ display:"grid", gridTemplateColumns:"48px 1fr auto", gap:12, alignItems:"start" }}>
-                      <div style={{ width:48, height:48, borderRadius:17, display:"grid", placeItems:"center", background:isDone?"rgba(34,197,94,.14)":isCur?"rgba(59,130,246,.18)":"rgba(148,163,184,.08)", border:`1px solid ${isDone?"rgba(34,197,94,.28)":isCur?"rgba(59,130,246,.32)":"rgba(148,163,184,.12)"}`, color, fontFamily:"'DM Mono',monospace", fontSize:18, fontWeight:950 }}>{stop.stopNum||i+1}</div>
+                  <article key={stop.id||`${stop.stopNum}-${i}`} className="rd-field-card" onClick={()=>{setSelStop(isExp?null:stop); if(stop.lat&&stop.lng&&tab!=="mapa") setMapPinPopup(stop);}} style={{ borderRadius:16, padding:"8px 9px", background:isCur?"linear-gradient(145deg,rgba(22,45,86,.88),rgba(8,16,30,.94))":isDone?"linear-gradient(145deg,rgba(12,36,24,.82),rgba(8,16,30,.92))":"linear-gradient(145deg,rgba(15,23,42,.72),rgba(8,16,30,.92))", border:`1px solid ${isCur?"rgba(96,165,250,.30)":isDone?"rgba(34,197,94,.22)":"rgba(148,163,184,.11)"}`, boxShadow:isCur?"0 18px 45px rgba(37,99,235,.18)":"0 10px 30px rgba(0,0,0,.18)", animation:`fadeUp .18s ${Math.min(i,10)*18}ms ease both` }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"36px 1fr auto", gap:8, alignItems:"start" }}>
+                      <div style={{ width:36, height:36, borderRadius:12, display:"grid", placeItems:"center", background:isDone?"rgba(34,197,94,.14)":isCur?"rgba(59,130,246,.18)":"rgba(148,163,184,.08)", border:`1px solid ${isDone?"rgba(34,197,94,.28)":isCur?"rgba(59,130,246,.32)":"rgba(148,163,184,.12)"}`, color, fontFamily:"'DM Mono',monospace", fontSize:13, fontWeight:950 }}>{stop.stopNum||i+1}</div>
                       <div style={{ minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:4 }}><span style={{ fontSize:10, color, fontWeight:950, letterSpacing:"1.2px", textTransform:"uppercase" }}>{isDone?"Visitado":isCur?"Actual":"Pendiente"}</span>{stop.visitedAt && <span style={{ fontSize:10, color:"rgba(226,232,240,.38)", fontFamily:"'DM Mono',monospace" }}>{stop.visitedAt}</span>}</div>
-                        <div style={{ fontSize:16, fontWeight:950, color:"#fff", letterSpacing:"-.35px", lineHeight:1.14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{stop.client||"Sin cliente"}</div>
-                        <div style={{ marginTop:6, fontSize:13, color:"rgba(226,232,240,.58)", lineHeight:1.35 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</div>
-                        <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginTop:9 }}>
-                          {stop.tracking && <span style={{ fontSize:10, fontWeight:900, color:"#93c5fd", background:"rgba(59,130,246,.10)", border:"1px solid rgba(59,130,246,.20)", borderRadius:999, padding:"5px 8px" }}>SP {stop.tracking}</span>}
+                        <div style={{ fontSize:13.2, fontWeight:900, color:"#fff", letterSpacing:"-.35px", lineHeight:1.14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{stop.client||"Sin cliente"}</div>
+                        <div style={{ marginTop:3, fontSize:11, color:"rgba(226,232,240,.60)", lineHeight:1.25 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</div>
+                        <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginTop:5 }}>
+                          {stop.tracking && <span style={{ fontSize:9, fontWeight:900, color:"#93c5fd", background:"rgba(59,130,246,.10)", border:"1px solid rgba(59,130,246,.20)", borderRadius:999, padding:"3px 6px" }}>{cleanSP(stop.tracking)}</span>}
                           {stop.phone && <span style={{ fontSize:10, fontWeight:900, color:"rgba(226,232,240,.55)", background:"rgba(255,255,255,.045)", border:"1px solid rgba(255,255,255,.07)", borderRadius:999, padding:"5px 8px" }}>{stop.phone}</span>}
                         </div>
                       </div>
-                      <button onClick={(e)=>{e.stopPropagation(); setSelStop(isExp?null:stop);}} className="rd-btn" style={{ width:34, height:34, borderRadius:13, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:"rgba(226,232,240,.58)", display:"grid", placeItems:"center", cursor:"pointer" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform:isExp?"rotate(180deg)":"none", transition:"transform .14s" }}><path d="m6 9 6 6 6-6"/></svg></button>
+                      <button onClick={(e)=>{e.stopPropagation(); setSelStop(isExp?null:stop);}} className="rd-btn" style={{ width:28, height:28, borderRadius:10, border:"1px solid rgba(255,255,255,.08)", background:"rgba(255,255,255,.04)", color:"rgba(226,232,240,.58)", display:"grid", placeItems:"center", cursor:"pointer" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform:isExp?"rotate(180deg)":"none", transition:"transform .14s" }}><path d="m6 9 6 6 6-6"/></svg></button>
                     </div>
                     {isExp && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginTop:14, paddingTop:13, borderTop:"1px solid rgba(255,255,255,.07)" }}>
                       {!isDone && <button onClick={(e)=>{e.stopPropagation(); markStopVisited(stop);}} className="rd-btn" style={{ border:0, borderRadius:14, padding:"11px 7px", background:"linear-gradient(135deg,#16a34a,#22c55e)", color:"white", fontWeight:950, cursor:"pointer" }}>Visitado</button>}
@@ -3513,14 +3530,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         {tab === "mapa" && (
           <section className="rd-map-shell" style={{ position:"absolute", inset:0, paddingBottom:80 }}>
             <div ref={mapRef} style={{ position:"absolute", inset:0 }}/>
-            <div style={{ position:"absolute", left:12, right:12, top:12, zIndex:50 }}>
-              <div className="rd-glass" style={{ borderRadius:24, padding:13 }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-                  <div style={{ minWidth:0 }}><div style={{ fontSize:16, fontWeight:950, color:"#fff", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{myRoute?.routeName||"Mapa de ruta"}</div><div style={{ marginTop:4, fontSize:12, color:"rgba(226,232,240,.55)" }}>{visited.length}/{stops.length} visitadas · {pending.length} pendientes</div></div>
-                  <button onClick={()=>setTab("route")} className="rd-btn" style={{ border:0, borderRadius:15, padding:"11px 13px", background:"rgba(59,130,246,.14)", color:"#93c5fd", fontWeight:950, cursor:"pointer" }}>Lista</button>
-                </div>
-              </div>
-            </div>
+            <button onClick={()=>setTab("route")} className="rd-btn" style={{ position:"absolute", top:"max(12px,env(safe-area-inset-top))", left:12, zIndex:70, width:46, height:46, borderRadius:16, border:"1px solid rgba(15,23,42,.16)", background:"rgba(255,255,255,.92)", color:"#0f172a", display:"grid", placeItems:"center", boxShadow:"0 10px 30px rgba(0,0,0,.18)", cursor:"pointer" }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
             {mapPinPopup && <div style={{ position:"absolute", left:12, right:12, bottom:92, zIndex:60 }}><div className="rd-glass" style={{ borderRadius:24, padding:14 }}><div style={{ display:"flex", gap:12, alignItems:"start" }}><div style={{ width:46, height:46, borderRadius:16, display:"grid", placeItems:"center", background:"rgba(59,130,246,.16)", color:"#93c5fd", fontWeight:950, fontFamily:"'DM Mono',monospace" }}>{mapPinPopup.stopNum||"?"}</div><div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:15, fontWeight:950, color:"#fff" }}>{mapPinPopup.client||"Parada"}</div><div style={{ marginTop:5, fontSize:12, color:"rgba(226,232,240,.58)" }}>{mapPinPopup.displayAddr||mapPinPopup.rawAddr||"Sin dirección"}</div></div><button onClick={()=>setMapPinPopup(null)} style={{ width:30, height:30, border:0, borderRadius:999, background:"rgba(255,255,255,.06)", color:"#94a3b8", cursor:"pointer" }}>×</button></div></div></div>}
           </section>
         )}
@@ -3534,14 +3544,14 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       </main>
 
       {menuOpen && <div style={{ position:"fixed", inset:0, zIndex:8000 }}><div onClick={()=>setMenuOpen(false)} style={{ position:"absolute", inset:0, background:"rgba(0,0,0,.62)", backdropFilter:"blur(8px)" }}/><aside style={{ position:"absolute", left:0, top:0, bottom:0, width:"min(88vw,360px)", background:"linear-gradient(180deg,#07111f,#050814)", borderRight:"1px solid rgba(96,165,250,.16)", boxShadow:"35px 0 90px rgba(0,0,0,.62)", animation:"drawerIn .22s ease", padding:"max(18px,env(safe-area-inset-top)) 16px 18px", display:"flex", flexDirection:"column" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:13, marginBottom:18 }}><div style={{ width:62, height:62, borderRadius:23, overflow:"hidden", display:"grid", placeItems:"center", background:"linear-gradient(135deg,#1d4ed8,#38bdf8)", color:"white", fontWeight:950, fontSize:18 }}>{profilePhoto?<img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>:((driver.avatar||(driver.name||"MD").slice(0,2)).toUpperCase())}</div><div style={{ minWidth:0 }}><div style={{ color:"#fff", fontSize:18, fontWeight:950, lineHeight:1.1 }}>{driver.name||"Mensajero"}</div><div style={{ marginTop:5, color:"rgba(226,232,240,.48)", fontSize:12 }}>Rap Drive Field</div></div></div>
+        <div style={{ display:"flex", alignItems:"center", gap:13, marginBottom:18 }}><div style={{ width:62, height:62, borderRadius:23, overflow:"hidden", display:"grid", placeItems:"center", background:"linear-gradient(135deg,#1d4ed8,#38bdf8)", color:"white", fontWeight:950, fontSize:18 }}>{profilePhoto?<img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>:((driver.avatar||(driver.name||"MD").slice(0,2)).toUpperCase())}</div><div style={{ minWidth:0 }}><div style={{ color:"#fff", fontSize:18, fontWeight:950, lineHeight:1.1 }}>{driver.name||"Mensajero"}</div><div style={{ marginTop:5, color:"rgba(226,232,240,.48)", fontSize:12 }}>Operación móvil</div></div></div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginBottom:16 }}><div className="rd-glass" style={{ borderRadius:18, padding:12 }}><div style={{ fontSize:10, color:"#94a3b8", fontWeight:900 }}>PROGRESO</div><div style={{ marginTop:5, fontSize:24, fontWeight:950 }}>{pct}%</div></div><div className="rd-glass" style={{ borderRadius:18, padding:12 }}><div style={{ fontSize:10, color:"#94a3b8", fontWeight:900 }}>PENDIENTES</div><div style={{ marginTop:5, fontSize:24, fontWeight:950 }}>{pending.length}</div></div></div>
-        <nav style={{ display:"grid", gap:7 }}>{[["route","Ruta activa","Paradas del día"],["mapa","Mapa operativo","Navegación y pines"],["history","Historial","Rutas completadas"]].map(([id,label,sub])=><button key={id} onClick={()=>{setTab(id);setMenuOpen(false);}} className="rd-menu-item" style={{ border:0, borderRadius:18, background:tab===id?"rgba(59,130,246,.14)":"transparent", color:tab===id?"#fff":"rgba(226,232,240,.66)", padding:"14px 13px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", textAlign:"left" }}><span><strong style={{ display:"block", fontSize:14 }}>{label}</strong><small style={{ display:"block", marginTop:3, color:"rgba(226,232,240,.38)", fontSize:11 }}>{sub}</small></span><span style={{ color:"#60a5fa" }}>›</span></button>)}</nav>
-        <div style={{ flex:1 }}/><button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn" style={{ border:0, borderRadius:18, padding:"15px", background:"rgba(239,68,68,.10)", color:"#fca5a5", fontWeight:950, cursor:"pointer" }}>Cerrar sesión</button>
+        <nav style={{ display:"grid", gap:7 }}>{[["route","Ruta activa","Paradas del día","M9 18l6-6-6-6 M5 19h14"],["mapa","Mapa completo","Navegación y pines","M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3z"],["history","Historial","Rutas completadas","M12 8v5l3 2 M21 12a9 9 0 1 1-9-9"]].map(([id,label,sub,ic])=><button key={id} onClick={()=>{setTab(id);setMenuOpen(false);}} className="rd-menu-item" style={{ border:0, borderRadius:18, background:tab===id?"rgba(59,130,246,.14)":"transparent", color:tab===id?"#fff":"rgba(226,232,240,.66)", padding:"12px 12px", display:"grid", gridTemplateColumns:"38px 1fr 16px", alignItems:"center", gap:10, cursor:"pointer", textAlign:"left" }}><span style={{ width:38, height:38, borderRadius:14, background:tab===id?"rgba(96,165,250,.18)":"rgba(255,255,255,.045)", color:tab===id?"#93c5fd":"rgba(226,232,240,.54)", display:"grid", placeItems:"center" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={ic}/></svg></span><span><strong style={{ display:"block", fontSize:14 }}>{label}</strong><small style={{ display:"block", marginTop:3, color:"rgba(226,232,240,.38)", fontSize:11 }}>{sub}</small></span><span style={{ color:"#60a5fa" }}>›</span></button>)}</nav>
+        <div style={{ height:14 }}/><button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn" style={{ border:0, borderRadius:18, padding:"15px", background:"rgba(239,68,68,.10)", color:"#fca5a5", fontWeight:950, cursor:"pointer" }}>Cerrar sesión</button>
       </aside></div>}
 
       <nav style={{ flexShrink:0, height:78, paddingBottom:"env(safe-area-inset-bottom)", display:"grid", gridTemplateColumns:"repeat(3,1fr)", background:"rgba(5,9,20,.96)", borderTop:"1px solid rgba(96,165,250,.14)", boxShadow:"0 -20px 55px rgba(0,0,0,.38)", backdropFilter:"blur(18px)", zIndex:300 }}>
-        {[{id:"route",label:"Ruta",icon:"M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"},{id:"mapa",label:"Mapa",icon:"M1 6l7-4 8 4 7-4v16l-7 4-8-4-7 4V6z"},{id:"history",label:"Historial",icon:"M12 8v5l3 2 M21 12a9 9 0 1 1-9-9"}].map(item=><button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn" style={{ border:0, background:tab===item.id?"rgba(59,130,246,.09)":"transparent", color:tab===item.id?"#60a5fa":"rgba(226,232,240,.42)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:5, cursor:"pointer", position:"relative", fontWeight:900 }}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg><span style={{ fontSize:11 }}>{item.label}</span>{tab===item.id && <span style={{ position:"absolute", top:0, width:42, height:3, borderRadius:"0 0 999px 999px", background:"linear-gradient(90deg,#2563eb,#38bdf8)" }}/>}</button>)}
+        {[{id:"route",label:"Ruta",icon:"M5 12h14 M13 5l7 7-7 7 M5 19h4"},{id:"mapa",label:"Mapa",icon:"M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3z"},{id:"history",label:"Historial",icon:"M12 8v5l3 2 M21 12a9 9 0 1 1-9-9"}].map(item=><button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn" style={{ border:0, background:tab===item.id?"rgba(59,130,246,.09)":"transparent", color:tab===item.id?"#60a5fa":"rgba(226,232,240,.42)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:5, cursor:"pointer", position:"relative", fontWeight:900 }}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg><span style={{ fontSize:11 }}>{item.label}</span>{tab===item.id && <span style={{ position:"absolute", top:0, width:42, height:3, borderRadius:"0 0 999px 999px", background:"linear-gradient(90deg,#2563eb,#38bdf8)" }}/>}</button>)}
       </nav>
 
       {logoutConf && <div style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(0,0,0,.78)", backdropFilter:"blur(10px)", display:"grid", placeItems:"center", padding:18 }}><div className="rd-glass" style={{ width:340, maxWidth:"100%", borderRadius:26, padding:24, animation:"popIn .18s ease" }}><div style={{ width:58, height:58, borderRadius:21, margin:"0 auto 14px", background:"rgba(239,68,68,.12)", color:"#fca5a5", display:"grid", placeItems:"center" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div><div style={{ textAlign:"center", fontSize:20, fontWeight:950 }}>¿Cerrar sesión?</div><div style={{ textAlign:"center", color:"rgba(226,232,240,.50)", marginTop:7, fontSize:13 }}>{driver.name}</div><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:22 }}><button onClick={()=>setLogoutConf(false)} className="rd-btn" style={{ border:"1px solid rgba(255,255,255,.10)", borderRadius:16, padding:14, background:"transparent", color:"#cbd5e1", fontWeight:900, cursor:"pointer" }}>Cancelar</button><button onClick={onLogout} className="rd-btn" style={{ border:0, borderRadius:16, padding:14, background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"white", fontWeight:950, cursor:"pointer" }}>Salir</button></div></div></div>}
@@ -4278,7 +4288,7 @@ const LoginScreen = ({ onLogin }) => {
                   ? "linear-gradient(135deg,#2563eb,#3b82f6)"
                   : "rgba(255,255,255,0.05)",
               color: !loading&&email&&password ? "white" : "rgba(255,255,255,0.15)",
-              fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+              fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
               cursor:!loading&&email&&password?"pointer":"not-allowed",
               transition:"all .3s cubic-bezier(.4,0,.2,1)",
               display:"flex", alignItems:"center", justifyContent:"center", gap:8,
