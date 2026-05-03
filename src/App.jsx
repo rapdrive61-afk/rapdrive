@@ -8840,8 +8840,14 @@ const CircuitEngine = () => {
   const [addrEditStop, setAddrEditStop] = useState(null); // stop being edited in modal
   const [routeSentModal, setRouteSentModal] = useState(null);
   const [sendingRoute, setSendingRoute] = useState(false);
+  const [addStopModal, setAddStopModal] = useState(false);
+  const [addStopSaving, setAddStopSaving] = useState(false);
+  const [addStopForm, setAddStopForm] = useState({ client:"", tracking:"", phone:"", address:"" });
+  const [addStopPreview, setAddStopPreview] = useState(null);
 
   const fileRef = useRef(null);
+  const addStopInputRef = useRef(null);
+  const addStopPlaceRef = useRef(null);
 
   // -- RUTA DE PRUEBA - para testear el puente admin→mensajero sin subir archivo -
   const loadDemoRoute = () => {
@@ -8862,6 +8868,30 @@ const CircuitEngine = () => {
     loadGoogleMaps().then(() => setMapsReady(true));
     loadSheetJS();
   }, []);
+
+  useEffect(() => {
+    if (!addStopModal) return;
+    let cancelled = false;
+    loadGoogleMaps().then(() => {
+      if (cancelled || !window.google || !addStopInputRef.current) return;
+      const ac = new window.google.maps.places.Autocomplete(addStopInputRef.current, {
+        componentRestrictions: { country: "DO" },
+        fields: ["formatted_address", "geometry", "name", "plus_code"],
+      });
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        if (!place?.geometry?.location) return;
+        const loc = place.geometry.location;
+        const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+        const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+        const display = place.formatted_address || place.name || addStopInputRef.current?.value || "";
+        addStopPlaceRef.current = { lat, lng, display, confidence: 98, source: "google_autocomplete" };
+        setAddStopForm(f => ({ ...f, address: display }));
+        setAddStopPreview({ lat, lng, display, confidence: 98 });
+      });
+    });
+    return () => { cancelled = true; addStopPlaceRef.current = null; };
+  }, [addStopModal]);
 
   // -- STATS ------------------------------------------------------------------
   const statsOk      = stops.filter(s => s.status === "ok").length;
@@ -9106,6 +9136,73 @@ const CircuitEngine = () => {
   const deleteStop = (stopId) => {
     setStops(prev => optimizeRoute(prev.filter(s => s.id !== stopId)));
     if (selectedId === stopId) setSelectedId(null);
+  };
+
+  const openAddStopModal = () => {
+    setAddStopForm({ client:"", tracking:"", phone:"", address:"" });
+    setAddStopPreview(null);
+    addStopPlaceRef.current = null;
+    setAddStopModal(true);
+    setTimeout(() => addStopInputRef.current?.focus(), 120);
+  };
+
+  const handleAddStopSave = async () => {
+    const client = addStopForm.client.trim();
+    const tracking = addStopForm.tracking.trim();
+    const phone = addStopForm.phone.trim();
+    const address = addStopForm.address.trim();
+    if (!client || !tracking || !phone || !address || addStopSaving) return;
+
+    setAddStopSaving(true);
+    try {
+      let place = addStopPlaceRef.current || addStopPreview;
+      if (!place?.lat || !place?.lng) {
+        const r = await geocodeWithGoogle(address);
+        if (r?.ok) place = { lat:r.lat, lng:r.lng, display:r.display || address, confidence:r.confidence || 90, source:r.source || "google_geocode" };
+      }
+      if (!place?.lat || !place?.lng) {
+        setRoutesOptStatus("No se encontró esa dirección. Elige una sugerencia de Google o escribe más detalles.");
+        setTimeout(() => setRoutesOptStatus(""), 4200);
+        return;
+      }
+
+      const newStopId = `S-MANUAL-${Date.now()}`;
+      setStops(prev => {
+        const current = Array.isArray(prev) ? prev : [];
+        const nextNum = Math.max(0, ...current.map(s => Number(s.stopNum || 0))) + 1;
+        const newStop = {
+          id: newStopId,
+          stopNum: nextNum,
+          rawAddr: address,
+          excelRawAddr: address,
+          displayAddr: place.display || address,
+          client,
+          phone,
+          notes: "Agregada manualmente",
+          tracking,
+          codigo: tracking,
+          code: tracking,
+          sector: "", ciudad: "", provincia: "", cp: "", addr2: "",
+          lat: place.lat, lng: place.lng,
+          confidence: place.confidence || 97,
+          status: "ok",
+          driverStatus: "pending",
+          navStatus: "pending",
+          allResults: [],
+          issue: null,
+          source: place.source || "manual_google",
+          addedManual: true,
+        };
+        return optimizeRoute([...current, newStop]);
+      });
+      setSelectedId(newStopId);
+      setClientSearch("");
+      setAddStopModal(false);
+      setRoutesOptStatus(`✓ Parada agregada: ${client}`);
+      setTimeout(() => setRoutesOptStatus(""), 3000);
+    } finally {
+      setAddStopSaving(false);
+    }
   };
 
   const handleModalSave = (stopId, placeResult, rawText) => {
@@ -9666,6 +9763,73 @@ const CircuitEngine = () => {
           </div>
         )}
 
+        {addStopModal && (
+          <div style={{position:"fixed",inset:0,zIndex:99999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(2,6,13,.74)",backdropFilter:"blur(12px)",padding:18}}>
+            <div style={{width:"min(560px,94vw)",background:"linear-gradient(145deg,#081427,#06101d)",border:"1px solid rgba(96,165,250,.28)",borderRadius:26,boxShadow:"0 32px 120px rgba(0,0,0,.70)",overflow:"hidden",color:"#eaf2ff"}}>
+              <div style={{height:7,background:"linear-gradient(90deg,#22c55e,#3b82f6,#6366f1)"}} />
+              <div style={{padding:"22px 24px 20px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,marginBottom:18}}>
+                  <div style={{display:"flex",gap:13,alignItems:"center"}}>
+                    <div style={{width:54,height:54,borderRadius:18,display:"grid",placeItems:"center",background:"linear-gradient(135deg,rgba(34,197,94,.20),rgba(59,130,246,.20))",border:"1px solid rgba(96,165,250,.28)",boxShadow:"0 0 34px rgba(59,130,246,.18)"}}>
+                      <svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="#86efac" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/><path d="M3 18h4l3-8h7l3 8h1" stroke="#60a5fa"/></svg>
+                    </div>
+                    <div>
+                      <div style={{fontSize:21,fontFamily:"'Syne',sans-serif",fontWeight:1000,letterSpacing:"-.4px"}}>Agregar parada a la ruta</div>
+                      <div style={{fontSize:12,color:"#93a4bd",marginTop:5,lineHeight:1.45}}>Se agregará como parada #{Math.max(0, ...stops.map(s => Number(s.stopNum || 0))) + 1} y quedará lista para enviarla al mensajero.</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>setAddStopModal(false)} style={{width:38,height:38,borderRadius:13,border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.04)",color:"#9fb2cc",cursor:"pointer",display:"grid",placeItems:"center",fontSize:20}}>×</button>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <label style={{display:"grid",gap:6}}>
+                    <span style={{fontSize:10,color:"#6f88a6",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>Nombre del cliente</span>
+                    <input value={addStopForm.client} onChange={e=>setAddStopForm(f=>({...f,client:e.target.value}))} placeholder="Ej: Ana Pérez" style={{background:"#f8fbff",border:"1px solid #c9dbf2",borderRadius:14,padding:"13px 14px",color:"#0f172a",fontSize:14,fontWeight:700,outline:"none",width:"100%"}} />
+                  </label>
+                  <label style={{display:"grid",gap:6}}>
+                    <span style={{fontSize:10,color:"#6f88a6",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>Código SP</span>
+                    <input value={addStopForm.tracking} onChange={e=>setAddStopForm(f=>({...f,tracking:e.target.value}))} placeholder="SP070..." style={{background:"#f8fbff",border:"1px solid #c9dbf2",borderRadius:14,padding:"13px 14px",color:"#0f172a",fontSize:14,fontWeight:800,outline:"none",width:"100%"}} />
+                  </label>
+                  <label style={{display:"grid",gap:6}}>
+                    <span style={{fontSize:10,color:"#6f88a6",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>Teléfono</span>
+                    <input value={addStopForm.phone} onChange={e=>setAddStopForm(f=>({...f,phone:e.target.value}))} placeholder="8090000000" style={{background:"#f8fbff",border:"1px solid #c9dbf2",borderRadius:14,padding:"13px 14px",color:"#0f172a",fontSize:14,fontWeight:700,outline:"none",width:"100%"}} />
+                  </label>
+                  <div style={{display:"grid",gap:6}}>
+                    <span style={{fontSize:10,color:"#6f88a6",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>Ubicación Google</span>
+                    <div style={{height:46,borderRadius:14,border:"1px solid rgba(34,197,94,.26)",background:"rgba(16,185,129,.08)",display:"flex",alignItems:"center",gap:9,padding:"0 12px",color:"#86efac",fontSize:12,fontWeight:800}}>
+                      <span style={{width:9,height:9,borderRadius:"50%",background:addStopPreview?"#22c55e":"#64748b",boxShadow:addStopPreview?"0 0 10px #22c55e":"none"}} />
+                      {addStopPreview ? "Dirección ubicada" : "Pendiente de selección"}
+                    </div>
+                  </div>
+                </div>
+
+                <label style={{display:"grid",gap:6,marginTop:13}}>
+                  <span style={{fontSize:10,color:"#6f88a6",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase"}}>Dirección con Google Autocomplete</span>
+                  <div style={{display:"flex",alignItems:"center",gap:10,background:"#f8fbff",border:"1px solid #c9dbf2",borderRadius:16,padding:"0 13px",boxShadow:"0 10px 30px rgba(15,23,42,.10)"}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <input ref={addStopInputRef} value={addStopForm.address} onChange={e=>{addStopPlaceRef.current=null;setAddStopPreview(null);setAddStopForm(f=>({...f,address:e.target.value}));}} placeholder="Escribe la dirección como en Google Maps..." style={{flex:1,background:"transparent",border:0,outline:0,color:"#0f172a",fontSize:14,fontWeight:700,padding:"14px 0",width:"100%"}} />
+                  </div>
+                </label>
+
+                {addStopPreview && (
+                  <div style={{marginTop:12,border:"1px solid rgba(96,165,250,.18)",background:"rgba(59,130,246,.08)",borderRadius:16,padding:"12px 13px"}}>
+                    <div style={{fontSize:10,color:"#93c5fd",fontWeight:900,letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Vista previa</div>
+                    <div style={{fontSize:13,color:"#eaf2ff",fontWeight:800,lineHeight:1.35}}>{addStopPreview.display}</div>
+                    <div style={{fontSize:11,color:"#8aa2bd",marginTop:5}}>{Number(addStopPreview.lat).toFixed(5)}, {Number(addStopPreview.lng).toFixed(5)}</div>
+                  </div>
+                )}
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12,marginTop:18}}>
+                  <button onClick={()=>setAddStopModal(false)} style={{border:"1px solid rgba(148,163,184,.22)",borderRadius:15,padding:"13px 16px",background:"rgba(255,255,255,.04)",color:"#cbd5e1",fontFamily:"'Syne',sans-serif",fontWeight:900,cursor:"pointer"}}>Cancelar</button>
+                  <button onClick={handleAddStopSave} disabled={addStopSaving || !addStopForm.client.trim() || !addStopForm.tracking.trim() || !addStopForm.phone.trim() || !addStopForm.address.trim()} style={{border:0,borderRadius:15,padding:"13px 16px",background:"linear-gradient(135deg,#16a34a,#2563eb)",color:"white",fontFamily:"'Syne',sans-serif",fontWeight:1000,cursor:"pointer",opacity:(addStopSaving || !addStopForm.client.trim() || !addStopForm.tracking.trim() || !addStopForm.phone.trim() || !addStopForm.address.trim()) ? .75 : 1,boxShadow:"0 18px 45px rgba(37,99,235,.25)"}}>
+                    {addStopSaving ? "Agregando..." : "Agregar a la ruta"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ════ REVIEW + ROUTE ════ */}
         {(phase === "review" || phase === "route") && (
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -9710,6 +9874,16 @@ const CircuitEngine = () => {
                 {phase === "review" && (statsWarn > 0 || statsError > 0) && <button onClick={() => setClientSearch("__LOW__")} style={{ flex: 1, padding: "7px", borderRadius: 8, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", color: "#fca5a5", fontSize: 11, fontFamily: "'Syne',sans-serif", fontWeight: 800, cursor: "pointer", minWidth: 118 }}>
                   Ver problemas
                 </button>}
+                {phase === "route" && (
+                  <button
+                    onClick={openAddStopModal}
+                    className="route-action-pro"
+                    style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid rgba(34,197,94,.36)", background: "linear-gradient(135deg,rgba(16,185,129,.16),rgba(5,150,105,.10))", color: "#86efac", fontSize: 12, fontFamily: "'Syne',sans-serif", fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, minWidth: 150, boxShadow:"0 4px 20px rgba(16,185,129,.12)", letterSpacing:"0.2px" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7"><path d="M12 5v14M5 12h14"/></svg>
+                    Agregar parada
+                  </button>
+                )}
                   {phase === "route" && (
                   <button
                     onClick={async () => {
