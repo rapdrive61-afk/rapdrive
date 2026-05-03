@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // --- DATA ---------------------------------------------------------------------
-// V39 DRIVER APP ENTERPRISE UX: rediseño premium del panel mensajero sin tocar lógica, rutas, GPS ni foto.
+// V40 DRIVER FULL ENTERPRISE UX: rediseño completo del panel mensajero sin tocar lógica ni funciones.
 
 const DELIVERIES = [];
 
@@ -3370,7 +3370,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       onTouchEnd={handleSheetDragEnd}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&family=DM+Mono:wght@500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&family=DM+Mono:wght@500;700&family=Space+Grotesk:wght@600;700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#1e2d3d transparent}
         *::-webkit-scrollbar{width:2px}*::-webkit-scrollbar-thumb{background:#1e2d3d;border-radius:2px}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -3390,22 +3390,20 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         .rd-driver-shell{background:linear-gradient(180deg,#050914,#07111f)!important}
         .rd-glass{background:rgba(8,16,30,.86)!important;border:1px solid rgba(148,163,184,.12)!important;box-shadow:0 16px 45px rgba(0,0,0,.34)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
         .rd-soft-card{background:linear-gradient(145deg,rgba(15,30,55,.92),rgba(8,16,30,.95))!important;border:1px solid rgba(96,165,250,.16)!important;box-shadow:0 12px 34px rgba(2,6,23,.4)!important}
-        .rd-enterprise-card{background:linear-gradient(145deg,rgba(18,34,62,.96),rgba(6,12,23,.98))!important;border:1px solid rgba(96,165,250,.18)!important;box-shadow:0 18px 54px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.035)!important}
-        .rd-enterprise-glow:before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:radial-gradient(circle at 18% 12%,rgba(96,165,250,.25),transparent 38%),radial-gradient(circle at 92% 24%,rgba(16,185,129,.16),transparent 34%);pointer-events:none}
-        .rd-bottom-pill{transition:transform .16s ease, background .16s ease, border-color .16s ease}
-        .rd-bottom-pill:active{transform:scale(.94)}
-        .rd-action-sheen{position:relative;overflow:hidden}
-        .rd-action-sheen:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,.16) 45%,transparent 60%);transform:translateX(-120%);animation:rdSheen 3.2s ease-in-out infinite}
-        @keyframes rdSheen{0%,55%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+        .rd-field-title{font-family:'Space Grotesk','DM Sans',sans-serif!important}
+        .rd-premium-stop{background:linear-gradient(145deg,rgba(9,20,39,.98),rgba(6,13,25,.98))!important;border:1px solid rgba(96,165,250,.14)!important;box-shadow:0 14px 38px rgba(2,6,23,.34)!important}
+        .rd-premium-stop:active{transform:scale(.992)!important}
+        .rd-nav-pill{border-radius:18px!important}
+        @supports(padding:max(0px)){.rd-safe-bottom{padding-bottom:max(16px,env(safe-area-inset-bottom))!important}}
       `}</style>
 
       {/* ══ HEADER PREMIUM ══ */}
-      <div style={{ flexShrink:0, position:"relative", background:"linear-gradient(180deg,#08111f 0%,#050914 100%)", borderBottom:"1px solid rgba(96,165,250,0.14)", height:78, display:"flex", alignItems:"center", paddingLeft:14, paddingRight:14, gap:12, zIndex:100, overflow:"hidden", boxShadow:"0 10px 30px rgba(0,0,0,.28)" }}>
+      <div style={{ flexShrink:0, position:"relative", background:"linear-gradient(135deg,#07152a 0%,#050914 58%,#07101e 100%)", borderBottom:"1px solid rgba(96,165,250,0.20)", height:92, display:"flex", alignItems:"center", paddingLeft:16, paddingRight:16, gap:13, zIndex:100, overflow:"hidden", boxShadow:"0 10px 30px rgba(0,0,0,.28)" }}>
         <div style={{ position:"absolute", top:-30, left:-20, width:120, height:80, borderRadius:"50%", background:"radial-gradient(ellipse,rgba(59,130,246,0.18) 0%,transparent 70%)", pointerEvents:"none" }}/>
 
         {/* Menu button */}
         <button onClick={()=>setMenuOpen(o=>!o)} className="rd-btn"
-          style={{ width:46, height:46, borderRadius:15, flexShrink:0, cursor:"pointer", border:"none", background:"transparent", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+          style={{ width:50, height:50, borderRadius:17, flexShrink:0, cursor:"pointer", border:"none", background:"transparent", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
           <div style={{ position:"absolute", inset:0, borderRadius:13, background:menuOpen?"rgba(59,130,246,0.18)":"rgba(255,255,255,0.05)", border:`1px solid ${menuOpen?"rgba(59,130,246,0.4)":"rgba(255,255,255,0.09)"}`, transition:"all .18s" }}/>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ position:"relative", zIndex:1, overflow:"visible" }}>
             <line x1="2" y1={menuOpen?9:5} x2="16" y2={menuOpen?9:5}
@@ -3425,7 +3423,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           <input ref={photoInputRef} type="file" accept="image/*"
             onChange={handlePhotoUpload} style={{ display:"none" }}/>
           <div onClick={() => setPhotoMenuOpen(o => !o)} style={{
-            width:48, height:48, borderRadius:16, overflow:"hidden", cursor:"pointer",
+            width:54, height:54, borderRadius:18, overflow:"hidden", cursor:"pointer",
             background:"linear-gradient(135deg,#1e3a6e 0%,#1d4ed8 55%,#3b82f6 100%)",
             display:"flex", alignItems:"center", justifyContent:"center",
             fontSize:14, fontWeight:900, color:"white", letterSpacing:"-0.5px",
@@ -3493,7 +3491,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
         {/* Botón mapa */}
         <button onClick={()=>setTab(t=>t==="mapa"?"route":"mapa")} className="rd-btn"
-          style={{ width:46, height:46, borderRadius:15, border:`1px solid ${tab==="mapa"?"rgba(59,130,246,0.48)":"rgba(255,255,255,0.09)"}`, background:tab==="mapa"?"linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))":"rgba(255,255,255,0.045)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, transition:"all .15s", boxShadow:tab==="mapa"?"0 8px 24px rgba(37,99,235,.22)":"none" }}>
+          style={{ width:50, height:50, borderRadius:17, border:`1px solid ${tab==="mapa"?"rgba(59,130,246,0.48)":"rgba(255,255,255,0.09)"}`, background:tab==="mapa"?"linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))":"rgba(255,255,255,0.045)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, transition:"all .15s", boxShadow:tab==="mapa"?"0 8px 24px rgba(37,99,235,.22)":"none" }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={tab==="mapa"?"#60a5fa":"rgba(255,255,255,0.45)"} strokeWidth="1.8">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
             <line x1="8" y1="2" x2="8" y2="18"/>
@@ -3502,50 +3500,27 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         </button>
       </div>
 
-      {/* ══ DRIVER COMMAND CENTER — premium enterprise ══ */}
-      <div style={{ flexShrink:0, padding:"12px 12px 13px", background:"linear-gradient(180deg,rgba(5,9,20,.99),rgba(7,17,31,.96))", borderBottom:"1px solid rgba(96,165,250,.12)", position:"relative", overflow:"hidden" }}>
-        <div style={{ position:"absolute", inset:0, background:"radial-gradient(circle at 12% 0%,rgba(37,99,235,.20),transparent 34%), radial-gradient(circle at 94% 20%,rgba(34,197,94,.10),transparent 30%)", pointerEvents:"none" }}/>
+      {/* ══ DRIVER COMMAND STRIP — resumen ejecutivo del turno ══ */}
+      <div style={{ flexShrink:0, padding:"10px 12px", background:"linear-gradient(180deg,rgba(5,9,20,.98),rgba(7,17,31,.94))", borderBottom:"1px solid rgba(96,165,250,.10)", display:"grid", gridTemplateColumns:stops.length?"1.4fr .8fr .8fr":"1fr", gap:8 }}>
         {stops.length > 0 ? (
-          <div style={{ position:"relative", zIndex:1, display:"grid", gridTemplateColumns:"1.35fr .75fr .75fr", gap:9 }}>
-            <div className="rd-enterprise-card rd-enterprise-glow" style={{ position:"relative", borderRadius:18, padding:"13px 14px", minWidth:0, overflow:"hidden" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:38, height:38, borderRadius:14, display:"grid", placeItems:"center", background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", boxShadow:"0 12px 28px rgba(37,99,235,.35)", flexShrink:0 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11l4 4v6H3z"/><path d="M14 7v4h4"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
-                </div>
-                <div style={{ minWidth:0, flex:1 }}>
-                  <div style={{ fontSize:9, color:"rgba(147,197,253,.72)", fontWeight:1000, letterSpacing:"1.5px", textTransform:"uppercase" }}>Ruta activa</div>
-                  <div style={{ fontSize:15, color:"#f8fafc", fontWeight:1000, letterSpacing:"-.25px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:3 }}>{myRoute?.routeName || "Ruta del día"}</div>
-                  <div style={{ display:"flex", gap:8, marginTop:7, alignItems:"center", flexWrap:"wrap" }}>
-                    <span style={{ fontSize:10, color:"rgba(226,232,240,.46)", fontWeight:800 }}>{visited.length}/{stops.length} visitadas</span>
-                    <span style={{ width:4, height:4, borderRadius:"50%", background:"rgba(148,163,184,.35)" }}/>
-                    <span style={{ fontSize:10, color:"rgba(226,232,240,.46)", fontWeight:800 }}>{routeKm || "—"} km</span>
-                  </div>
-                </div>
-              </div>
+          <>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"linear-gradient(135deg,rgba(37,99,235,.18),rgba(8,16,30,.88))", border:"1px solid rgba(96,165,250,.18)", minWidth:0 }}>
+              <div style={{ fontSize:9, color:"rgba(147,197,253,.72)", fontWeight:900, letterSpacing:"1.4px", textTransform:"uppercase", marginBottom:4 }}>Ruta activa</div>
+              <div style={{ fontSize:14, color:"#f8fafc", fontWeight:900, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{myRoute?.routeName || "Ruta del día"}</div>
             </div>
-
-            <div className="rd-enterprise-card" style={{ borderRadius:18, padding:"13px 10px", textAlign:"center", position:"relative", overflow:"hidden" }}>
-              <div style={{ width:46, height:46, borderRadius:"50%", margin:"0 auto 5px", display:"grid", placeItems:"center", background:`conic-gradient(${pct===100?"#10b981":"#3b82f6"} ${pct*3.6}deg, rgba(255,255,255,.08) 0deg)` }}>
-                <div style={{ width:34, height:34, borderRadius:"50%", background:"#07111f", display:"grid", placeItems:"center", fontSize:12, fontWeight:1000, color:pct===100?"#34d399":"#93c5fd", fontFamily:"'DM Mono',monospace" }}>{pct}%</div>
-              </div>
-              <div style={{ fontSize:9, color:"rgba(148,163,184,.65)", fontWeight:1000, letterSpacing:".9px" }}>PROGRESO</div>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
+              <div style={{ fontSize:18, color:"#60a5fa", fontWeight:1000, lineHeight:1 }}>{pct}%</div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PROGRESO</div>
             </div>
-
-            <div className="rd-enterprise-card" style={{ borderRadius:18, padding:"13px 10px", textAlign:"center" }}>
-              <div style={{ fontSize:24, color:pending.length?"#f59e0b":"#22c55e", fontWeight:1000, lineHeight:1, fontFamily:"'DM Mono',monospace" }}>{pending.length}</div>
-              <div style={{ fontSize:9, color:"rgba(148,163,184,.65)", fontWeight:1000, letterSpacing:".9px", marginTop:7 }}>PENDIENTES</div>
-              <div style={{ fontSize:10, color:"rgba(226,232,240,.38)", fontWeight:800, marginTop:5 }}>{estFinish()?`ETA ${estFinish()}`:"Listo"}</div>
+            <div style={{ borderRadius:16, padding:"10px 12px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", textAlign:"center" }}>
+              <div style={{ fontSize:18, color:locationStatus==="active"?"#22c55e":"#f59e0b", fontWeight:1000, lineHeight:1 }}>{pending.length}</div>
+              <div style={{ fontSize:9, color:"rgba(148,163,184,.62)", fontWeight:800, letterSpacing:".8px", marginTop:3 }}>PENDIENTES</div>
             </div>
-          </div>
+          </>
         ) : (
-          <div className="rd-enterprise-card" style={{ position:"relative", zIndex:1, borderRadius:18, padding:"14px", display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:40, height:40, borderRadius:14, background:"rgba(59,130,246,.14)", border:"1px solid rgba(96,165,250,.22)", display:"grid", placeItems:"center", color:"#60a5fa" }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/></svg>
-            </div>
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:14, color:"rgba(248,250,252,.92)", fontWeight:1000 }}>Esperando asignación</div>
-              <div style={{ fontSize:11, color:"rgba(148,163,184,.56)", marginTop:3 }}>GPS {locationStatus==="active"?"activo y listo":"en preparación"}</div>
-            </div>
+          <div style={{ borderRadius:16, padding:"12px 14px", background:"rgba(15,23,42,.74)", border:"1px solid rgba(148,163,184,.10)", display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 12px #22c55e70":"none" }}/>
+            <div style={{ fontSize:13, color:"rgba(226,232,240,.82)", fontWeight:800 }}>Esperando asignación de ruta</div>
           </div>
         )}
       </div>
@@ -3727,70 +3702,37 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
 
 
-          {/* ── PARADA ACTUAL card — rediseño enterprise ── */}
+          {/* ── MISIÓN ACTUAL — Enterprise compact ── */}
           {currentStop && (
-            <div style={{ padding:"8px 14px 0", flexShrink:0 }}>
-              <div style={{
-                background:"linear-gradient(145deg,rgba(18,42,78,0.98),rgba(6,14,28,0.98))",
-                border:"1px solid rgba(96,165,250,0.34)",
-                borderRadius:22,
-                overflow:"hidden",
-                boxShadow:"0 18px 55px rgba(2,6,23,.55), 0 0 0 1px rgba(255,255,255,.03)",
-              }}>
-                {/* Accent top bar */}
-                <div style={{ height:2, background:"linear-gradient(90deg,#1d4ed8,#3b82f6,#1d4ed8)", backgroundSize:"200% 100%", animation:"shimmer 2s linear infinite" }}/>
-
-                <div style={{ padding:"15px 15px 16px" }}>
-                  {/* Row 1: stop number + label + status badge */}
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                    <div style={{
-                      width:38, height:38, borderRadius:12,
-                      background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      flexShrink:0, boxShadow:"0 4px 14px rgba(59,130,246,0.4)",
-                    }}>
-                      <span style={{ fontSize:15, fontWeight:900, color:"white", fontFamily:"'DM Mono',monospace" }}>{currentStop.stopNum||"?"}</span>
+            <div style={{ padding:"10px 14px 2px", flexShrink:0 }}>
+              <div className="rd-premium-stop" style={{ borderRadius:22, overflow:"hidden", position:"relative" }}>
+                <div style={{ position:"absolute", inset:0, background:"radial-gradient(circle at 12% 0%,rgba(59,130,246,.22),transparent 32%),radial-gradient(circle at 100% 0%,rgba(16,185,129,.13),transparent 32%)", pointerEvents:"none" }}/>
+                <div style={{ position:"relative", padding:"14px 15px 15px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:12 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:11, minWidth:0 }}>
+                      <div style={{ width:44, height:44, borderRadius:16, background:"linear-gradient(135deg,#2563eb,#60a5fa)", display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontFamily:"'DM Mono',monospace", fontSize:15, fontWeight:900, boxShadow:"0 10px 24px rgba(37,99,235,.38)", flexShrink:0 }}>
+                        {currentStop.stopNum||"?"}
+                      </div>
+                      <div style={{ minWidth:0 }}>
+                        <div className="rd-field-title" style={{ fontSize:10, color:"#60a5fa", letterSpacing:"1.8px", fontWeight:900, textTransform:"uppercase" }}>Parada en ejecución</div>
+                        <div style={{ fontSize:19, color:"#f8fafc", fontWeight:900, letterSpacing:"-.45px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.1 }}>{currentStop.client || `Parada ${currentStop.stopNum}`}</div>
+                      </div>
                     </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:9, fontWeight:700, color:"rgba(96,165,250,0.6)", letterSpacing:"1.2px", marginBottom:2 }}>PARADA ACTUAL</div>
-                    </div>
-                    <div style={{ display:"inline-flex", alignItems:"center", gap:5, background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.3)", borderRadius:20, padding:"4px 10px", flexShrink:0 }}>
-                      <div style={{ width:5, height:5, borderRadius:"50%", background:"#3b82f6", boxShadow:"0 0 6px #3b82f6", animation:"pulse 1.5s infinite" }}/>
-                      <span style={{ fontSize:10, fontWeight:700, color:"#60a5fa" }}>En camino</span>
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:999, background:"rgba(59,130,246,.13)", border:"1px solid rgba(96,165,250,.24)", flexShrink:0 }}>
+                      <span style={{ width:7, height:7, borderRadius:"50%", background:"#60a5fa", boxShadow:"0 0 10px #60a5fa", animation:"pulse 1.7s infinite" }}/>
+                      <span style={{ fontSize:10, color:"#93c5fd", fontWeight:900, letterSpacing:".5px" }}>EN CAMINO</span>
                     </div>
                   </div>
 
-                  {/* Client name */}
-                  <div style={{ fontSize:20, fontWeight:1000, color:"#f8fafc", letterSpacing:"-0.4px", lineHeight:1.2, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {currentStop.client || `Parada ${currentStop.stopNum}`}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:9, padding:"10px 11px", borderRadius:15, background:"rgba(255,255,255,.035)", border:"1px solid rgba(148,163,184,.08)", marginBottom:12 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="2" style={{ flexShrink:0, marginTop:1 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <div style={{ fontSize:12.5, color:"rgba(226,232,240,.78)", lineHeight:1.42, fontWeight:600 }}>{currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}{currentStop.notes ? <span style={{ color:"rgba(148,163,184,.72)" }}> · {currentStop.notes}</span> : null}</div>
                   </div>
 
-                  {/* Address */}
-                  <div style={{ fontSize:11.5, color:"rgba(255,255,255,0.4)", lineHeight:1.45, marginBottom:10 }}>
-                    {currentStop.displayAddr || currentStop.rawAddr || "Sin dirección"}
-                    {currentStop.notes ? <span style={{ color:"rgba(255,255,255,0.25)" }}> · {currentStop.notes}</span> : null}
-                  </div>
-
-                  {/* ── Action buttons ── */}
-                  <div style={{ display:"flex", gap:7 }}>
-                    <button onClick={(e)=>{ e.stopPropagation(); markStopVisited(currentStop); }}
-                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:11, background:"linear-gradient(135deg,#059669,#10b981)", border:"1px solid rgba(16,185,129,0.35)", color:"white", fontSize:13, fontWeight:800, cursor:"pointer", boxShadow:"0 3px 12px rgba(16,185,129,0.25)", fontFamily:"'DM Sans',sans-serif" }}>
-                      ✓ Visitado
-                    </button>
-                    {/* Waze */}
-                    <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
-                      target="_blank" rel="noreferrer"
-                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:11, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 3px 12px rgba(59,130,246,0.3)", transition:"all .12s" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>Waze</span>
-                    </a>
-                    {/* WhatsApp */}
-                    <a href={`https://wa.me/1${String(currentStop.phone||'').replace(/\D/g,'')}`}
-                      target="_blank" rel="noreferrer"
-                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:11, background:"linear-gradient(135deg,#047857,#22c55e)", textDecoration:"none", boxShadow:"0 3px 12px rgba(34,197,94,0.25)", transition:"all .12s" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.2A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 8.8c.3 2.8 2.1 4.9 5 6 .6.2 1.3-.3 1.6-.9l.3-.7"/></svg>
-                      <span style={{ fontSize:13, fontWeight:700, color:"white" }}>WhatsApp</span>
-                    </a>
+                  <div style={{ display:"grid", gridTemplateColumns:"1.1fr .9fr .9fr", gap:8 }}>
+                    <button onClick={(e)=>{ e.stopPropagation(); markStopVisited(currentStop); }} className="rd-btn" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"12px 8px", borderRadius:15, background:"linear-gradient(135deg,#059669,#10b981)", border:"1px solid rgba(16,185,129,.38)", color:"white", fontSize:13, fontWeight:900, cursor:"pointer", boxShadow:"0 10px 20px rgba(16,185,129,.22)" }}>✓ Visitado</button>
+                    <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`} target="_blank" rel="noreferrer" className="rd-btn" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"12px 8px", borderRadius:15, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", color:"white", textDecoration:"none", fontSize:13, fontWeight:900, boxShadow:"0 10px 20px rgba(59,130,246,.22)" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Waze</a>
+                    <a href={`https://wa.me/1${String(currentStop.phone||'').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="rd-btn" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"12px 8px", borderRadius:15, background:"rgba(34,197,94,.10)", border:"1px solid rgba(34,197,94,.28)", color:"#22c55e", textDecoration:"none", fontSize:13, fontWeight:900 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a>
                   </div>
                 </div>
               </div>
@@ -3819,13 +3761,13 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                   ref={searchInputRef}
                   value={search}
                   onChange={e=>setSearch(e.target.value)}
-                  placeholder="Buscar cliente, SP, teléfono o dirección..."
+                  placeholder="Buscar paradas..."
                   onFocus={()=>{
                     setTimeout(()=>{
                       searchInputRef.current?.scrollIntoView({behavior:"smooth",block:"start",inline:"nearest"});
                     }, 320);
                   }}
-                  style={{ width:"100%",background:"rgba(255,255,255,0.085)",border:"1px solid rgba(96,165,250,0.20)",borderRadius:14,padding:"12px 34px 12px 32px",color:"#f8fafc",fontSize:14,outline:"none",caretColor:"#3b82f6" }}/>
+                  style={{ width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"9px 32px 9px 30px",color:"#f1f5f9",fontSize:13,outline:"none",caretColor:"#3b82f6" }}/>
                 {search && <button onClick={()=>setSearch("")} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:15,lineHeight:1 }}>✕</button>}
               </div>
             </div>
@@ -3849,193 +3791,43 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                 <div style={{ fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.3)" }}>Sin resultados</div>
               </div>
             )}
-
-            {/* ── Stop list — premium redesign ── */}
+            {/* ── Stop list — Enterprise timeline redesign ── */}
             {filteredStops.map((stop,i) => {
               const isDone = stop.navStatus==="visited";
-              const isProb = false;
               const isEnR  = stop.navStatus==="active";
               const isCur  = stop===currentStop;
               const isExp  = selStop?.id===stop.id;
-
-              const dotColor = isDone?"#10b981":isProb?"#ef4444":isCur||isEnR?"#3b82f6":"#374151";
-              const statusLabel= isDone?"VISITADO":isEnR?"EN CAMINO":"PENDIENTE";
-              const statusColor= isDone?"#10b981":isEnR?"#60a5fa":"rgba(255,255,255,0.3)";
-              const statusBg   = isDone?"rgba(16,185,129,0.1)":isEnR?"rgba(59,130,246,0.1)":"transparent";
-
-              // Distancia desde DEPOT (estimada por stopNum)
-              const distKm = stop.stopNum ? (stop.stopNum * 0.6).toFixed(1) : null;
-
+              const accent = isDone ? "#10b981" : isCur || isEnR ? "#60a5fa" : "#334155";
+              const label  = isDone ? "VISITADO" : isCur || isEnR ? "EN CAMINO" : "PENDIENTE";
               return (
-                <div key={stop.id} style={{
-                  margin:"6px 10px",
-                  borderRadius:16,
-                  background: isExp
-                    ? "rgba(30,50,90,0.55)"
-                    : isCur
-                    ? "rgba(20,35,70,0.45)"
-                    : isDone
-                    ? "rgba(10,20,14,0.5)"
-                    : isProb
-                    ? "rgba(30,10,10,0.5)"
-                    : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${
-                    isExp ? "rgba(59,130,246,0.35)"
-                    : isCur ? "rgba(59,130,246,0.2)"
-                    : isDone ? "rgba(16,185,129,0.15)"
-                    : isProb ? "rgba(239,68,68,0.18)"
-                    : "rgba(255,255,255,0.06)"}`,
-                  boxShadow: isCur ? "0 4px 20px rgba(59,130,246,0.12)" : isExp ? "0 6px 24px rgba(0,0,0,0.4)" : "none",
-                  transition:"all .18s cubic-bezier(.4,0,.2,1)",
-                  animation:`slideInRow .22s ${Math.min(i,8)*18}ms ease both`,
-                  overflow:"hidden",
-                }}>
-
-                  {/* Accent line top — solo parada activa */}
-                  {isCur && !isDone && !isProb && (
-                    <div style={{ height:2, background:"linear-gradient(90deg,#3b82f6,#60a5fa,transparent)", borderRadius:"2px 2px 0 0" }}/>
-                  )}
-
-                  {/* ── ROW principal ── */}
-                  <div onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }}
-                    style={{ display:"flex", alignItems:"center", padding:"11px 13px", cursor:"pointer", gap:12 }}>
-
-                    {/* Badge número — cuadrado redondeado */}
-                    <div style={{
-                      width:38, height:38, borderRadius:12, flexShrink:0,
-                      background: isDone
-                        ? "rgba(16,185,129,0.14)"
-                        : isProb
-                        ? "rgba(239,68,68,0.14)"
-                        : isCur
-                        ? "linear-gradient(135deg,rgba(29,78,216,0.9),rgba(59,130,246,0.9))"
-                        : "rgba(255,255,255,0.06)",
-                      border:`1.5px solid ${
-                        isDone?"rgba(16,185,129,0.35)"
-                        :isProb?"rgba(239,68,68,0.35)"
-                        :isCur?"rgba(93,161,255,0.6)"
-                        :"rgba(255,255,255,0.1)"}`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow: isCur ? "0 2px 12px rgba(59,130,246,0.35)" : isDone ? "0 0 10px rgba(16,185,129,0.15)" : "none",
-                      position:"relative",
-                    }}>
-                      {isDone ? (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      ) : isProb ? (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      ) : (
-                        <span style={{ fontSize: String(stop.stopNum||"?").length > 2 ? 9 : 12, fontWeight:900, color:isCur?"white":"rgba(255,255,255,0.55)", fontFamily:"'DM Mono',monospace", letterSpacing:"-0.5px" }}>
-                          {stop.stopNum||"?"}
-                        </span>
-                      )}
+                <div key={stop.id || i} className="rd-premium-stop" style={{ margin:"9px 12px", borderRadius:20, overflow:"hidden", transition:"all .18s", animation:`fadeUp .20s ${Math.min(i,10)*20}ms ease both`, position:"relative", borderColor:isCur?"rgba(96,165,250,.35)":isDone?"rgba(16,185,129,.22)":"rgba(96,165,250,.12)" }}>
+                  <div style={{ position:"absolute", left:0, top:0, bottom:0, width:4, background:isCur?"linear-gradient(180deg,#60a5fa,#2563eb)":isDone?"linear-gradient(180deg,#10b981,#047857)":"rgba(148,163,184,.12)" }}/>
+                  <div onClick={()=>{ setSelStop(isExp?null:stop); if(!isExp&&gMapRef.current&&stop.lat&&stop.lng){gMapRef.current.panTo({lat:stop.lat,lng:stop.lng});gMapRef.current.setZoom(16);} }} style={{ display:"flex", gap:12, padding:"14px 14px 13px 18px", cursor:"pointer", alignItems:"flex-start" }}>
+                    <div style={{ width:44, height:44, borderRadius:15, background:isDone?"rgba(16,185,129,.13)":isCur?"linear-gradient(135deg,#1d4ed8,#60a5fa)":"rgba(15,23,42,.84)", border:`1px solid ${isDone?"rgba(16,185,129,.32)":isCur?"rgba(147,197,253,.55)":"rgba(148,163,184,.14)"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:isCur?"0 10px 22px rgba(37,99,235,.30)":"none" }}>
+                      {isDone ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> : <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:900, color:isCur?"white":"#93a4bd", fontSize:String(stop.stopNum||"?").length>2?10:14 }}>{stop.stopNum||"?"}</span>}
                     </div>
-
-                    {/* Content */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      {/* Nombre cliente */}
-                      <div style={{ fontSize:13.5, fontWeight:700, color: isDone?"rgba(255,255,255,0.35)":isCur?"#ffffff":"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:"-0.2px", lineHeight:1.2 }}>
-                        {stop.client||`Parada ${stop.stopNum}`}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:5 }}>
+                        <div style={{ fontSize:15.5, fontWeight:900, color:isDone?"rgba(226,232,240,.50)":"#f8fafc", letterSpacing:"-.25px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.15 }}>{stop.client||`Parada ${stop.stopNum}`}</div>
+                        <div style={{ flexShrink:0, borderRadius:999, padding:"4px 8px", background:isDone?"rgba(16,185,129,.10)":isCur?"rgba(59,130,246,.12)":"rgba(148,163,184,.06)", border:`1px solid ${accent}35`, color:accent, fontSize:9, fontWeight:900, letterSpacing:".7px" }}>{label}</div>
                       </div>
-                      {/* Dirección */}
-                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.25)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:3, lineHeight:1 }}>
-                        {stop.displayAddr||stop.rawAddr||"Sin dirección"}
+                      <div style={{ fontSize:12.5, color:"rgba(203,213,225,.66)", lineHeight:1.35, fontWeight:600, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginTop:9 }}>
+                        {stop.tracking && <span style={{ fontSize:11, color:"#93c5fd", fontFamily:"'DM Mono',monospace", background:"rgba(59,130,246,.10)", border:"1px solid rgba(96,165,250,.20)", padding:"4px 8px", borderRadius:9, fontWeight:700 }}>{stop.tracking}</span>}
+                        {stop.phone && <span style={{ fontSize:11, color:"#60a5fa", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{stop.phone}</span>}
+                        {isDone && stop.visitedAt && <span style={{ fontSize:11, color:"#10b981", fontFamily:"'DM Mono',monospace" }}>✓ {stop.visitedAt}</span>}
                       </div>
-                      {/* Hora entrega */}
-                      {isDone && stop.visitedAt && (
-                        <div style={{ fontSize:10, color:"#10b981", marginTop:4, fontFamily:"'DM Mono',monospace", display:"flex", alignItems:"center", gap:4 }}>
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                          {stop.visitedAt}
-                        </div>
-                      )}
                     </div>
-
-                    {/* Right: status badge + chevron */}
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
-                      <div style={{ background:statusBg, borderRadius:20, padding:"3px 9px", border:`1px solid ${statusColor}30` }}>
-                        <span style={{ fontSize:9, fontWeight:800, color:statusColor, letterSpacing:"0.8px" }}>{statusLabel}</span>
-                      </div>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2.5"
-                        style={{ transform:isExp?"rotate(180deg)":"rotate(0deg)", transition:"transform .22s cubic-bezier(.4,0,.2,1)" }}>
-                        <path d="M6 9l6 6 6-6"/>
-                      </svg>
-                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.25)" strokeWidth="2.5" style={{ marginTop:12, transform:isExp?"rotate(180deg)":"none", transition:"transform .18s", flexShrink:0 }}><path d="M6 9l6 6 6-6"/></svg>
                   </div>
-
-                  {/* ── PANEL EXPANDIDO ── */}
                   {isExp && (
-                    <div style={{ borderTop:`1px solid ${dotColor}20`, animation:"ceUp .18s ease" }}>
-                      {/* Accent bar */}
-                      <div style={{ height:1, background:`linear-gradient(90deg,${dotColor}55,transparent)` }}/>
-
-                      <div style={{ padding:"14px 13px 13px" }}>
-
-                        {/* SP Code */}
-                        {stop.tracking && (
-                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.14)", borderRadius:10, padding:"8px 11px" }}>
-                            <span style={{ fontSize:9, fontWeight:800, color:"rgba(96,165,250,0.6)", letterSpacing:"1.5px", flexShrink:0 }}>SP</span>
-                            <span style={{ fontSize:12, fontFamily:"'DM Mono',monospace", color:"#93c5fd", letterSpacing:"0.5px", fontWeight:600, flex:1, overflow:"hidden", textOverflow:"ellipsis" }}>{stop.tracking}</span>
-                            <button
-                              onClick={e=>{e.stopPropagation();navigator.clipboard?.writeText(stop.tracking).catch(()=>{});}}
-                              style={{ padding:"3px 9px", borderRadius:7, border:"1px solid rgba(96,165,250,0.2)", background:"rgba(59,130,246,0.1)", color:"#60a5fa", fontSize:10, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:700, flexShrink:0 }}>
-                              Copiar
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Phone */}
-                        {stop.phone && (
-                          <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
-                            <div style={{ width:28, height:28, borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                            </div>
-                            <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
-                              style={{ fontSize:14, color:"#f1f5f9", fontFamily:"'DM Mono',monospace", letterSpacing:"0.4px", textDecoration:"none", fontWeight:600 }}>
-                              {stop.phone}
-                            </a>
-                          </div>
-                        )}
-
-                        {/* Address */}
-                        <div style={{ display:"flex", alignItems:"flex-start", gap:9, marginBottom:14 }}>
-                          <div style={{ width:28, height:28, borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          </div>
-                          <span style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.5, paddingTop:4 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</span>
-                        </div>
-
-                        {/* Action buttons */}
-                        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                          {!isDone && (
-                            <button onClick={e=>{ e.stopPropagation(); markStopVisited(stop); }}
-                              style={{ flex:"1 1 100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"12px 0", borderRadius:12, border:"1px solid rgba(16,185,129,0.28)", background:"linear-gradient(135deg,rgba(5,150,105,0.95),rgba(16,185,129,0.95))", color:"white", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(16,185,129,0.22)" }}>
-                              ✓ Marcar paquete como visitado
-                            </button>
-                          )}
-                          {/* WhatsApp */}
-                          {stop.phone && (
-                            <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(37,211,102,0.25)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .12s" }}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.558 4.122 1.528 5.853L0 24l6.293-1.507A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.848 0-3.587-.504-5.083-1.382l-.363-.218-3.737.895.945-3.629-.237-.375A9.965 9.965 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-                              WhatsApp
-                            </button>
-                          )}
-                          {/* Llamar */}
-                          {stop.phone && (
-                            <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.65)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                              Llamar
-                            </a>
-                          )}
-                          {/* Waze */}
-                          {stop.lat && stop.lng && (
-                            <a href={`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(59,130,246,0.2)", background:"rgba(59,130,246,0.07)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                              Waze
-                            </a>
-                          )}
-                        </div>
+                    <div style={{ padding:"0 14px 14px 18px", animation:"fadeUp .16s ease" }}>
+                      <div style={{ height:1, background:"linear-gradient(90deg,rgba(96,165,250,.20),transparent)", marginBottom:12 }}/>
+                      <div style={{ display:"grid", gridTemplateColumns: stop.phone ? "1fr 1fr 1fr" : "1fr 1fr", gap:8 }}>
+                        {!isDone && <button onClick={e=>{ e.stopPropagation(); markStopVisited(stop); }} className="rd-btn" style={{ gridColumn: stop.phone ? "1 / 4" : "1 / 3", padding:"12px", borderRadius:14, border:"1px solid rgba(16,185,129,.32)", background:"linear-gradient(135deg,#059669,#10b981)", color:"white", fontSize:13, fontWeight:900, cursor:"pointer" }}>✓ Marcar como visitado</button>}
+                        {stop.phone && <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}} className="rd-btn" style={{ padding:"11px", borderRadius:13, border:"1px solid rgba(34,197,94,.28)", background:"rgba(34,197,94,.10)", color:"#22c55e", fontSize:12, fontWeight:900, cursor:"pointer" }}>WhatsApp</button>}
+                        {stop.phone && <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()} className="rd-btn" style={{ padding:"11px", borderRadius:13, border:"1px solid rgba(148,163,184,.13)", background:"rgba(255,255,255,.045)", color:"#cbd5e1", fontSize:12, fontWeight:900, textDecoration:"none", textAlign:"center" }}>Llamar</a>}
+                        {stop.lat && stop.lng && <a href={`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="rd-btn" style={{ padding:"11px", borderRadius:13, border:"1px solid rgba(96,165,250,.22)", background:"rgba(59,130,246,.10)", color:"#60a5fa", fontSize:12, fontWeight:900, textDecoration:"none", textAlign:"center" }}>Waze</a>}
                       </div>
                     </div>
                   )}
@@ -4090,14 +3882,14 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
       {/* ══ TAB: HISTORIAL ══ */}
       {tab === "history" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#060c14", paddingBottom:60 }}>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"linear-gradient(180deg,#07111f,#050914)", paddingBottom:78 }}>
           <div style={{ padding:"13px 16px", borderBottom:"1px solid #0d1a26", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <button onClick={()=>setTab("route")} style={{ width:32,height:32,borderRadius:10,border:"1px solid #1a2d40",background:"rgba(255,255,255,0.03)",color:"rgba(255,255,255,0.4)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:"#f1f5f9" }}>Mi historial</div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>{routeHistory.length} ruta{routeHistory.length!==1?"s":""} completada{routeHistory.length!==1?"s":""}</div>
+              <div style={{ fontSize:14, fontWeight:700, color:"#f1f5f9" }}>Historial operativo</div>
+              <div style={{ fontSize:11, color:"rgba(147,197,253,.55)", fontWeight:600 }}>{routeHistory.length} ruta{routeHistory.length!==1?"s":""} completada{routeHistory.length!==1?"s":""}</div>
             </div>
           </div>
 
@@ -4218,7 +4010,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                 const timeStr = r.completedAt ? new Date(r.completedAt).toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"}) : "";
                 return (
                   <div key={r.histId||i} onClick={()=>setHistSelRoute(r)}
-                    style={{ margin:"10px 14px", borderRadius:14, background:"#0a1420", border:"1px solid #1a2d40", overflow:"hidden", cursor:"pointer", transition:"border-color .15s", animation:`fadeUp .2s ${i*30}ms ease both` }}>
+                    style={{ margin:"10px 14px", borderRadius:14, background:"linear-gradient(145deg,rgba(9,20,39,.98),rgba(6,13,25,.98))", border:"1px solid rgba(96,165,250,.14)", overflow:"hidden", cursor:"pointer", boxShadow:"0 14px 38px rgba(2,6,23,.32)", transition:"border-color .15s", animation:`fadeUp .2s ${i*30}ms ease both` }}>
                     {/* Top strip */}
                     <div style={{ background:"rgba(255,255,255,0.02)", borderBottom:"1px solid #0d1a26", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                       <div>
@@ -4268,7 +4060,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           <div onClick={()=>setMenuOpen(false)}
             style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,0.55)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)" }}>
             <div onClick={e=>e.stopPropagation()}
-              style={{ position:"absolute", top:0, left:0, width:300, height:"100%", display:"flex", flexDirection:"column", overflow:"hidden", animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)" }}>
+              style={{ position:"absolute", top:0, left:0, width:"min(88vw,360px)", height:"100%", display:"flex", flexDirection:"column", overflow:"hidden", animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)" }}>
 
               {/* ── Glass background layer ── */}
               <div style={{ position:"absolute", inset:0, background:"rgba(8,11,18,0.97)", backdropFilter:"blur(32px)", WebkitBackdropFilter:"blur(32px)", borderRight:"1px solid rgba(255,255,255,0.07)" }}/>
@@ -4384,7 +4176,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                 <div style={{ padding:"10px 14px 48px" }}>
                   {/* Version */}
                   <div style={{ textAlign:"center", marginBottom:10 }}>
-                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.1)", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>RAP DRIVE FIELD</span>
+                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.1)", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>RAP DRIVE ENTERPRISE FIELD</span>
                   </div>
                   {/* Logout */}
                   <button onClick={()=>{setMenuOpen(false);setLogoutConf(true);}} className="rd-btn"
@@ -4399,30 +4191,27 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           </div>
         )}
 
-      {/* ══ BOTTOM NAV — enterprise dock ══ */}
-      <div style={{ flexShrink:0, padding:"8px 10px calc(10px + env(safe-area-inset-bottom))", background:"linear-gradient(180deg,rgba(5,9,20,.88),rgba(3,7,14,.99))", borderTop:"1px solid rgba(96,165,250,0.16)", zIndex:200, boxShadow:"0 -18px 45px rgba(0,0,0,.46)", backdropFilter:"blur(22px)", WebkitBackdropFilter:"blur(22px)" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, maxWidth:560, margin:"0 auto" }}>
+      {/* ══ BOTTOM NAV ══ */}
+      <div style={{ flexShrink:0,background:"rgba(5,9,20,.98)",borderTop:"1px solid rgba(96,165,250,0.22)",display:"flex",zIndex:200,boxShadow:"0 -12px 34px rgba(0,0,0,.34)", backdropFilter:"blur(18px)", WebkitBackdropFilter:"blur(18px)" }}>
         {[
-          { id:"route", label:"Ruta", sub:pending.length?`${pending.length} pendientes`:"Lista",
-            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
+          { id:"route", label:"Ruta",
+            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
 
-          { id:"mapa", label:"Mapa", sub:"GPS vivo",
-            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
-          { id:"history", label:"Historial", sub:`${routeHistory.length} rutas`,
-            icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+          { id:"mapa", label:"Mapa",
+            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> },
+          { id:"history", label:"Historial",
+            icon:<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map(item=>(
-          <button key={item.id} onClick={()=>setTab(item.id)} className="rd-bottom-pill"
-            style={{ minHeight:58, borderRadius:18, border:`1px solid ${tab===item.id?"rgba(96,165,250,.42)":"rgba(148,163,184,.10)"}`, background:tab===item.id?"linear-gradient(145deg,rgba(37,99,235,.24),rgba(10,22,45,.94))":"rgba(255,255,255,.035)", color:tab===item.id?"#93c5fd":"rgba(226,232,240,.48)", cursor:"pointer", position:"relative", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center", gap:9, boxShadow:tab===item.id?"0 12px 34px rgba(37,99,235,.18), inset 0 1px 0 rgba(255,255,255,.04)":"none" }}>
-            {tab===item.id && <div style={{ position:"absolute", inset:0, background:"radial-gradient(circle at 50% 0%,rgba(96,165,250,.24),transparent 56%)", pointerEvents:"none" }}/>} 
-            <div style={{ position:"relative", zIndex:1, display:"grid", placeItems:"center", width:30, height:30, borderRadius:12, background:tab===item.id?"rgba(96,165,250,.16)":"rgba(255,255,255,.045)", border:`1px solid ${tab===item.id?"rgba(96,165,250,.24)":"rgba(255,255,255,.06)"}` }}>{item.icon}</div>
-            <div style={{ position:"relative", zIndex:1, textAlign:"left", minWidth:0 }}>
-              <div style={{ fontSize:12, fontWeight:1000, letterSpacing:"-.1px" }}>{item.label}</div>
-              <div style={{ fontSize:9, fontWeight:800, color:tab===item.id?"rgba(191,219,254,.68)":"rgba(148,163,184,.42)", marginTop:2 }}>{item.sub}</div>
-            </div>
-            {tab===item.id && <div style={{ position:"absolute", left:18, right:18, bottom:0, height:3, borderRadius:"3px 3px 0 0", background:"linear-gradient(90deg,#2563eb,#60a5fa)" }}/>} 
+          <button key={item.id} onClick={()=>setTab(item.id)} className="rd-btn"
+            style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"10px 0 18px",border:"none",background:tab===item.id?"rgba(59,130,246,0.08)":"transparent",color:tab===item.id?"#3b82f6":"rgba(255,255,255,0.35)",cursor:"pointer",position:"relative",transition:"all .15s" }}>
+            {item.badge>0 && tab!==item.id && (
+              <div style={{ position:"absolute",top:8,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:"50%",background:"#3b82f6",border:"2px solid #080f18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",fontWeight:800,padding:"0 3px" }}>{item.badge>9?"9+":item.badge}</div>
+            )}
+            {item.icon}
+            <span style={{ fontSize:10,fontWeight:tab===item.id?700:500,letterSpacing:"0.2px" }}>{item.label}</span>
+            {tab===item.id && <div style={{ position:"absolute",top:0,left:"25%",right:"25%",height:2,background:"#3b82f6",borderRadius:"0 0 3px 3px" }}/>}
           </button>
         ))}
-        </div>
       </div>
 
       {/* -- Agregar nota modal -- */}
