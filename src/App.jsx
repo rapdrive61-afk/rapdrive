@@ -9230,7 +9230,7 @@ const CircuitEngine = () => {
         .rd-circuit-v28 tbody tr:hover td{background:rgba(59,130,246,.075)!important;}
         .rd-circuit-v28 > div:first-of-type{height:76px!important;padding:0 24px!important;}
         .rd-circuit-v28 .rd-chip-pro{background:rgba(96,165,250,.10)!important;border:1px solid rgba(96,165,250,.22)!important;color:#bfdbfe!important;border-radius:999px!important;padding:8px 12px!important;}
-        .rd-circuit-v28 [style*='border: `2px dashed']{border-radius:28px!important;}
+        .rd-circuit-v28 [style*='2px dashed']{border-radius:28px!important;}
         @keyframes rdRadarSweep{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
         @keyframes rdScanPulse{0%,100%{transform:scale(.92);opacity:.72}50%{transform:scale(1.045);opacity:1}}
         @keyframes rdSoftFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
