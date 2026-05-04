@@ -2956,6 +2956,23 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
     };
 
     const activateRoute = (nr) => {
+      // FIX V52: si Firebase no tiene ruta activa, limpiar DE RAÍZ cualquier ruta vieja
+      // guardada en memoria/localStorage. Esto evita que la pantalla legacy o paradas
+      // antiguas se monten encima del nuevo estado "Ya estás al día".
+      if (!nr || nr === null || nr?.stops === null || nr?.stops === undefined) {
+        lastSentAt.current = null;
+        routeFitKeyRef.current = null;
+        routeStopsSigRef.current = "";
+        setStops([]);
+        setSelStop(null);
+        setSearch("");
+        setTab("route");
+        if (window.__rdRouteStore) delete window.__rdRouteStore[myKey];
+        delete _memStore.routes[myKey];
+        onUpdateRoute(myKey, null);
+        try { localStorage.removeItem(LS_KEY); } catch(e) {}
+        return;
+      }
       if (!nr?.stops || writingRef.current) return;
 
       const normalizedStops = Array.isArray(nr.stops) ? nr.stops : Object.values(nr.stops);
@@ -3014,31 +3031,10 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       seen.forEach(id => seenRouteIds.current.add(id));
     } catch(e) {}
 
-    // 2) Cargar ruta local si existe y todavía no está completada.
-    try {
-      const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (saved?.stops && saved?.sentAt) {
-        const savedStops = saved.stops.map((s, i) => ({
-          ...s,
-          stopNum: s.stopNum || i + 1,
-          navStatus: s.navStatus || (i === 0 ? "active" : "pending"),
-        }));
-        const savedRoute = { ...saved, stops: savedStops };
-        const savedAllDone = savedStops.length > 0 && savedStops.every(
-          s => s.navStatus === "visited"
-        );
-        if (savedAllDone) {
-          addToHistoryOnce(savedRoute);
-          clearActiveRouteLocal(savedRoute);
-        } else {
-          lastSentAt.current = savedRoute.sentAt;
-          _memStore.routes[myKey] = savedRoute;
-          if (!window.__rdRouteStore) window.__rdRouteStore = {};
-          window.__rdRouteStore[myKey] = savedRoute;
-          setStops(savedStops);
-        }
-      }
-    } catch(e) {}
+    // 2) V52: no rehidratar ruta local vieja antes de consultar Firebase.
+    // Firebase es la fuente real: si no existe ruta activa, se muestra solo
+    // la pantalla nueva "Ya estás al día" sin que una vista anterior la tape.
+    try { localStorage.removeItem(LS_KEY); } catch(e) {}
 
     const applyChat = (msgs) => {
       if (Array.isArray(msgs)) setChatLog([...msgs]);
@@ -3302,13 +3298,15 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
   }, [selStop]);
 
   // -- Helpers -------------------------------------------------------------------
-  const visited   = stops.filter(s=>s.navStatus==="visited");
-  const problems    = stops.filter(s=>false);
-  const pending     = stops.filter(s=>s.navStatus!=="visited");
-  const currentStop = stops.find(s=>s.navStatus==="active") || stops.find(s=>s.navStatus!=="visited");
-  const pct         = stops.length>0 ? Math.round((visited.length/stops.length)*100) : 0;
+  const hasActiveRoute = !!myRoute && Array.isArray(stops) && stops.length > 0;
+  const routeStops = hasActiveRoute ? stops : [];
+  const visited   = routeStops.filter(s=>s.navStatus==="visited");
+  const problems    = routeStops.filter(s=>false);
+  const pending     = routeStops.filter(s=>s.navStatus!=="visited");
+  const currentStop = routeStops.find(s=>s.navStatus==="active") || routeStops.find(s=>s.navStatus!=="visited");
+  const pct         = routeStops.length>0 ? Math.round((visited.length/routeStops.length)*100) : 0;
 
-  const filteredStops = stops.filter(s => {
+  const filteredStops = routeStops.filter(s => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (s.client||"").toLowerCase().includes(q) ||
@@ -3938,8 +3936,8 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           )}
 
           {/* ── PRÓXIMAS PARADAS header + filter chips ── */}
-          {myRoute && (
-            <div style={{ padding:"6px 12px 0", flexShrink:0, position:"sticky", top:0, background:"rgba(7,13,24,0.97)", backdropFilter:"blur(12px)", zIndex:10 }}>
+          {hasActiveRoute && (
+            <div style={{ padding:"6px 12px 0", flexShrink:0, position:"sticky", top:0, background:"rgba(7,13,24,0.97)", backdropFilter:"blur(12px)", zIndex:10 }}> 
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                 <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", letterSpacing:"1.5px" }}>
                   {currentStop ? "PRÓXIMAS PARADAS" : "PARADAS"}
@@ -3975,7 +3973,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           <div ref={listScrollRef} style={{ flex:1,overflowY:"auto",overflowX:"hidden",paddingBottom:8,marginTop:4,WebkitOverflowScrolling:"touch" }}>
 
             {/* Empty state - no route */}
-            {!myRoute && (
+            {!hasActiveRoute && (
               <div style={{ minHeight:"calc(100vh - 168px)", display:"flex", alignItems:"center", justifyContent:"center", padding:"34px 24px 70px", textAlign:"center" }}>
                 <div style={{ maxWidth:310, width:"100%" }}>
                   <div style={{ width:118, height:118, borderRadius:"50%", margin:"0 auto 22px", display:"grid", placeItems:"center", background:"conic-gradient(from 180deg,#3b82f6 0 72%,rgba(30,41,59,.9) 72% 100%)", boxShadow:"0 24px 70px rgba(37,99,235,.20)", position:"relative" }}>
@@ -3994,7 +3992,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
               </div>
             )}
 
-            {filteredStops.length===0 && myRoute && (
+            {filteredStops.length===0 && hasActiveRoute && (
               <div style={{ textAlign:"center",padding:"32px 24px" }}>
                 <div style={{ fontSize:28,marginBottom:8,opacity:0.3 }}>🔍</div>
                 <div style={{ fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.3)" }}>Sin resultados</div>
