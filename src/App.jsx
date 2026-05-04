@@ -2506,7 +2506,7 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
         .rd-circuit-v28 > div:nth-of-type(2):before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 12% 20%,rgba(59,130,246,.10),transparent 24%),radial-gradient(circle at 88% 82%,rgba(16,185,129,.07),transparent 28%);}
         .rd-circuit-v28 > div:nth-of-type(2) > div{position:relative;z-index:1;}
         .rd-circuit-v28 [style*="width: 320px"], .rd-circuit-v28 [style*="width:320px"]{width:370px!important;background:linear-gradient(180deg,rgba(6,14,26,.98),rgba(4,10,18,.98))!important;border-right:1px solid rgba(96,165,250,.18)!important;box-shadow:18px 0 50px rgba(0,0,0,.25)!important;}
-        .rd-circuit-v28 [style*="borderRight: \"1px solid #0d1420\""]{border-right-color:rgba(96,165,250,.18)!important;}
+        .rd-circuit-v28 [style*="borderRight: "1px solid #0d1420""]{border-right-color:rgba(96,165,250,.18)!important;}
         .rd-circuit-v28 [style*="Configurar ruta"]{letter-spacing:.2px!important;}
         .rd-circuit-v28 select, .rd-circuit-v28 input{box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;}
         .rd-circuit-v28 .enterprise-panel{background:linear-gradient(145deg,rgba(15,30,52,.86),rgba(5,12,22,.92))!important;border:1px solid rgba(96,165,250,.18)!important;border-radius:20px!important;box-shadow:0 18px 50px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.045)!important;}
@@ -7337,7 +7337,7 @@ const ImportModal = ({ onClose, onImported }) => {
                 <button
                   onClick={e=>{
                     e.stopPropagation();
-                    const csv = "Dirección,Cliente,Teléfono,Notas,Prioridad\n\"Calle Mayor 1, Madrid\",Juan García,+34600000001,Portero 2B,normal\n\"Av. Diagonal 100, Barcelona\",María López,+34600000002,,alta";
+                    const csv = `Dirección,Cliente,Teléfono,Notas,Prioridad\n"Calle Mayor 1, Madrid",Juan García,+34600000001,Portero 2B,normal\n"Av. Diagonal 100, Barcelona",María López,+34600000002,,alta`;
                     const blob = new Blob([csv],{type:"text/csv"});
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a"); a.href=url; a.download="plantilla_rapdrive.csv"; a.click();
@@ -7911,7 +7911,7 @@ const AddressIntelligencePanel = ({ onClose }) => {
     "Pza Mayor 3 Madrid",
     "ctra. de la coruña km 15",
     "Cll esperanza 6 bajo A lavapies",
-    "40°25'01\"N 3°41'31\"W",
+    `40°25'01"N 3°41'31"W`,
     "Fuencarral 89 ático",
   ];
 
@@ -9361,231 +9361,240 @@ const CircuitEngine = () => {
 
         {/* ════ MAPPING ════ */}
         {phase === "mapping" && (
-          <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          <div style={{ flex:1, display:"grid", gridTemplateColumns:"430px 1fr", overflow:"hidden", position:"relative", background:"radial-gradient(circle at 18% 8%,rgba(59,130,246,.16),transparent 26%),radial-gradient(circle at 85% 12%,rgba(14,165,233,.10),transparent 24%),linear-gradient(135deg,#030712 0%,#07111f 54%,#030712 100%)" }}>
+            <style>{`
+              @keyframes configGlow{0%,100%{opacity:.55;transform:translateY(0)}50%{opacity:.95;transform:translateY(-6px)}}
+              @keyframes configSweep{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
+              @keyframes configPulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.28)}50%{box-shadow:0 0 0 9px rgba(59,130,246,0)}}
+              .rd-config-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(8,18,32,.94),rgba(3,8,16,.98));border:1px solid rgba(148,163,184,.13);box-shadow:0 24px 70px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.045)}
+              .rd-config-card:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 10% 0%,rgba(96,165,250,.10),transparent 40%);pointer-events:none}
+              .rd-config-card:after{content:"";position:absolute;top:0;bottom:0;width:90px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.055),transparent);animation:configSweep 7s ease-in-out infinite;pointer-events:none}
+              .rd-map-field:hover{transform:translateY(-1px);border-color:rgba(96,165,250,.28)!important;background:linear-gradient(145deg,rgba(15,30,52,.82),rgba(5,12,22,.96))!important}
+              .rd-mapping-table tbody tr:hover td{background:rgba(96,165,250,.065)!important;color:#e5eefb!important}
+              .rd-premium-scroll::-webkit-scrollbar{width:8px;height:8px}.rd-premium-scroll::-webkit-scrollbar-thumb{background:rgba(96,165,250,.18);border-radius:999px}.rd-premium-scroll::-webkit-scrollbar-track{background:rgba(2,6,23,.28)}
+            `}</style>
 
-            {/* LEFT PANEL */}
-            <div style={{ width: 370, borderRight: "1px solid rgba(96,165,250,.18)", padding: "0", overflow: "auto", flexShrink: 0, display: "flex", flexDirection: "column", background:"linear-gradient(180deg,rgba(6,14,26,.98),rgba(4,10,18,.98))", boxShadow:"18px 0 50px rgba(0,0,0,.25)" }}>
-
-              {/* Panel header */}
-              <div className="enterprise-panel" style={{ margin:"14px 14px 12px", padding:"16px", borderBottom:"1px solid rgba(96,165,250,.12)", background:"linear-gradient(145deg,rgba(10,22,40,.95),rgba(5,12,22,.98))" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <div style={{ width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 16px rgba(59,130,246,0.4)",flexShrink:0 }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:13,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#f1f5f9" }}>Centro de configuración</div>
-                    <div style={{ fontSize:11,color:"#374151",marginTop:1 }}>
-                      <span style={{ color:"#3b82f6",fontWeight:700 }}>{rawRows.length}</span> filas detectadas · <span style={{ color:"#10b981",fontWeight:700 }}>{headers.length}</span> columnas
+            {/* LEFT: Premium command center */}
+            <aside className="rd-premium-scroll" style={{ minWidth:0, overflow:"auto", borderRight:"1px solid rgba(96,165,250,.15)", background:"linear-gradient(180deg,rgba(2,6,14,.92),rgba(5,12,22,.96))", boxShadow:"24px 0 70px rgba(0,0,0,.38)", padding:18 }}>
+              <div className="rd-config-card" style={{ borderRadius:30, padding:22, marginBottom:14 }}>
+                <div style={{ position:"relative", zIndex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:14, marginBottom:18 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:13, minWidth:0 }}>
+                      <div style={{ width:54, height:54, borderRadius:20, display:"grid", placeItems:"center", background:"linear-gradient(145deg,#0b1830,#06101f)", border:"1px solid rgba(96,165,250,.22)", boxShadow:"0 18px 45px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08)", animation:"configPulse 2.8s ease-in-out infinite" }}>
+                        <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#dbeafe" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/><path d="M8 6v12"/><path d="M16 6v6"/></svg>
+                      </div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:10, color:"#60a5fa", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.9px", textTransform:"uppercase" }}>Import Control Center</div>
+                        <div style={{ fontSize:22, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:1000, letterSpacing:"-.65px", marginTop:3 }}>Centro inteligente</div>
+                        <div style={{ fontSize:11.5, color:"#64748b", lineHeight:1.45, marginTop:5 }}>Prepara el circuito, valida los campos críticos y despacha la ruta sin ruido visual.</div>
+                      </div>
+                    </div>
+                    <div style={{ display:"grid", placeItems:"center", width:50, height:50, borderRadius:18, background:mapping.address ? "rgba(34,197,94,.10)" : "rgba(245,158,11,.10)", border:mapping.address ? "1px solid rgba(34,197,94,.24)" : "1px solid rgba(245,158,11,.24)", flexShrink:0 }}>
+                      {mapping.address ? (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#86efac" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                      ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+                      )}
                     </div>
                   </div>
-                </div>
 
-                {/* CTA buttons */}
-                <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={() => setPhase("upload")} className="gh"
-                    style={{ flex:1, padding:"8px", borderRadius:8, border:"1px solid #1e2d3d", background:"transparent", color:"#4b5563", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-                    Atrás
-                  </button>
-                  <button onClick={runGeocoding} disabled={!mapping.address}
-                    style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background: mapping.address ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "#131f30", color: mapping.address ? "white" : "#374151", fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700, cursor: mapping.address ? "pointer" : "not-allowed", boxShadow: mapping.address ? "0 4px 16px #3b82f640" : "none", display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"all .15s" }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    {mapping.address ? "Validar y geocodificar →" : "Asigna Dirección primero"}
-                  </button>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:9, marginBottom:16 }}>
+                    {[
+                      ["FILAS", rawRows.length],
+                      ["COLUMNAS", headers.length],
+                      ["MAPEO", Object.values(mapping).filter(Boolean).length],
+                    ].map(([label,value]) => (
+                      <div key={label} style={{ borderRadius:18, padding:"13px 12px", background:"rgba(15,23,42,.56)", border:"1px solid rgba(148,163,184,.11)", boxShadow:"inset 0 1px 0 rgba(255,255,255,.04)" }}>
+                        <div style={{ fontSize:8.5, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.2px" }}>{label}</div>
+                        <div style={{ fontSize:24, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:1000, lineHeight:1, marginTop:5 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1.7fr", gap:9 }}>
+                    <button onClick={() => setPhase("upload")} className="gh" style={{ minHeight:44, borderRadius:15, border:"1px solid rgba(148,163,184,.13)", background:"rgba(15,23,42,.45)", color:"#94a3b8", fontSize:11.5, fontFamily:"'Syne',sans-serif", fontWeight:900, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                      Atrás
+                    </button>
+                    <button onClick={runGeocoding} disabled={!mapping.address} style={{ minHeight:44, borderRadius:15, border:mapping.address ? "1px solid rgba(96,165,250,.38)" : "1px solid rgba(148,163,184,.10)", background:mapping.address ? "linear-gradient(135deg,#1e40af,#2563eb 55%,#38bdf8)" : "rgba(15,23,42,.42)", color:mapping.address ? "#ffffff" : "#475569", fontSize:11.5, fontFamily:"'Syne',sans-serif", fontWeight:950, cursor:mapping.address ? "pointer" : "not-allowed", boxShadow:mapping.address ? "0 18px 44px rgba(37,99,235,.30), inset 0 1px 0 rgba(255,255,255,.16)" : "none", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                      {mapping.address ? "Geocodificar ruta" : "Falta Dirección"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Scrollable content */}
-              <div style={{ flex:1, overflow:"auto", padding:"14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
-
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <div style={{background:"linear-gradient(135deg,rgba(59,130,246,.12),rgba(59,130,246,.03))",border:"1px solid rgba(59,130,246,.20)",borderRadius:14,padding:"11px 12px"}}>
-                    <div style={{fontSize:9,color:"#60a5fa",fontWeight:900,letterSpacing:"1px",fontFamily:"'Syne',sans-serif"}}>FILAS</div>
-                    <div style={{fontSize:20,color:"#f8fafc",fontWeight:1000,fontFamily:"'Syne',sans-serif",marginTop:3}}>{rawRows.length}</div>
+              <div className="rd-config-card" style={{ borderRadius:26, padding:18, marginBottom:14 }}>
+                <div style={{ position:"relative", zIndex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:15 }}>
+                    <div style={{ width:40, height:40, borderRadius:15, display:"grid", placeItems:"center", background:"rgba(96,165,250,.09)", border:"1px solid rgba(96,165,250,.17)" }}>
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#bfdbfe" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-4.6 7-11a7 7 0 1 0-14 0c0 6.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:950 }}>Destino operativo</div>
+                      <div style={{ fontSize:10.5, color:"#64748b", marginTop:2 }}>Mensajero asignado y nombre del circuito</div>
+                    </div>
                   </div>
-                  <div style={{background:"linear-gradient(135deg,rgba(16,185,129,.10),rgba(16,185,129,.025))",border:"1px solid rgba(16,185,129,.18)",borderRadius:14,padding:"11px 12px"}}>
-                    <div style={{fontSize:9,color:"#34d399",fontWeight:900,letterSpacing:"1px",fontFamily:"'Syne',sans-serif"}}>COLUMNAS</div>
-                    <div style={{fontSize:20,color:"#f8fafc",fontWeight:1000,fontFamily:"'Syne',sans-serif",marginTop:3}}>{headers.length}</div>
-                  </div>
-                </div>
-
-                {/* MENSAJERO + RUTA */}
-                <div className="enterprise-panel" style={{ background:"linear-gradient(145deg,rgba(59,130,246,.10),rgba(5,12,22,.96))", border:"1px solid rgba(96,165,250,.18)", borderRadius:18, padding:"15px" }}>
-                  <div style={{ fontSize:9.5,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:8 }}>📦 DESTINO DE LA RUTA</div>
-                  <label style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",display:"block",marginBottom:4 }}>MENSAJERO</label>
-                  <select value={driverName} onChange={e => setDriverName(e.target.value)} style={{ ...sel, marginBottom:10 }}>
+                  <label style={{ fontSize:9, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.2px", display:"block", marginBottom:6 }}>MENSAJERO</label>
+                  <select value={driverName} onChange={e => setDriverName(e.target.value)} style={{ ...sel, marginBottom:12, minHeight:46, borderRadius:15, background:"rgba(2,6,12,.92)", border:"1px solid rgba(148,163,184,.16)", color:"#f8fafc" }}>
                     {(window.__rdMensajeros || DEFAULT_MENSAJEROS).filter(m => m.active).map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
-                  <label style={{ fontSize:10,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"0.8px",display:"block",marginBottom:4 }}>NOMBRE DE RUTA</label>
-                  <input value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="Ej: ADONIS ABRIL 20" style={{ ...inp }} />
+                  <label style={{ fontSize:9, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.2px", display:"block", marginBottom:6 }}>NOMBRE DE RUTA</label>
+                  <input value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="Ej: Nuevo circuito" style={{ ...inp, minHeight:46, borderRadius:15, background:"rgba(2,6,12,.92)", border:"1px solid rgba(148,163,184,.16)", color:"#f8fafc" }} />
                 </div>
+              </div>
 
-                {/* COLUMN MAPPING — Visual Card Style */}
-                <div>
-                  <div style={{ fontSize:9.5,color:"#2d4a60",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.2px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-                      ASIGNACIÓN DE COLUMNAS
+              <div className="rd-config-card" style={{ borderRadius:26, padding:18 }}>
+                <div style={{ position:"relative", zIndex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontSize:13, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:950 }}>Campos principales</div>
+                      <div style={{ fontSize:10.5, color:"#64748b", marginTop:2 }}>Sin chips molestosos; solo controles limpios.</div>
                     </div>
-                    <span style={{ fontSize:9,color:Object.values(mapping).filter(Boolean).length>0?"#10b981":"#374151",fontWeight:700 }}>
-                      {Object.values(mapping).filter(Boolean).length}/{headers.length} mapeadas
-                    </span>
-                  </div>
-
-                  {/* Columnas detectadas — chips scrollables */}
-                  <div className="enterprise-panel" style={{ background:"linear-gradient(145deg,rgba(8,18,34,.92),rgba(5,12,22,.94))",border:"1px solid rgba(96,165,250,.14)",borderRadius:18,padding:"12px",marginBottom:12 }}>
-                    <div style={{ fontSize:9,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1px",marginBottom:7 }}>COLUMNAS EN TU ARCHIVO</div>
-                    <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
-                      {headers.map(h => {
-                        const isMapped = Object.values(mapping).includes(h);
-                        const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
-                        const icons = { address:"📍",address2:"🏠",client:"👤",phone:"📞",tracking:"🏷",sector:"🗺",ciudad:"🏙",provincia:"🌎",cp:"📮",notes:"📝" };
-                        return (
-                          <div key={h} style={{
-                            display:"inline-flex",alignItems:"center",gap:4,
-                            background: isMapped ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.04)",
-                            border: `1px solid ${isMapped ? "rgba(16,185,129,0.3)" : "#1a2d40"}`,
-                            borderRadius:20, padding:"3px 9px", fontSize:10.5,
-                            color: isMapped ? "#10b981" : "#4b5563",
-                            fontFamily:"'Inter',sans-serif", fontWeight:600,
-                            transition:"all .15s",
-                          }}>
-                            {isMapped && <span style={{ fontSize:10 }}>{icons[fieldKey]||"✓"}</span>}
-                            {h}
-                            {isMapped && <span style={{ fontSize:8,opacity:0.7 }}>✓</span>}
-                          </div>
-                        );
-                      })}
+                    <div style={{ fontSize:10, color:mapping.address ? "#86efac" : "#fbbf24", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1px", padding:"7px 10px", borderRadius:999, background:mapping.address ? "rgba(34,197,94,.08)" : "rgba(245,158,11,.08)", border:mapping.address ? "1px solid rgba(34,197,94,.18)" : "1px solid rgba(245,158,11,.18)" }}>
+                      {mapping.address ? "VALIDADO" : "PENDIENTE"}
                     </div>
                   </div>
 
-                  {/* Cards de mapeo — diseño compacto con color */}
-                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
                     {[
-                      { f:"address",   l:"Dirección",          req:true,  icon:"📍", color:"#3b82f6", desc:"Principal campo de entrega" },
-                      { f:"client",    l:"Cliente",            req:false, icon:"👤", color:"#8b5cf6", desc:"Nombre del destinatario" },
-                      { f:"phone",     l:"Teléfono",           req:false, icon:"📞", color:"#10b981", desc:"Para llamar y WhatsApp" },
-                      { f:"tracking",  l:"Código SP",          req:false, icon:"🏷", color:"#f59e0b", desc:"Guía, tracking o referencia" },
-                      { f:"address2",  l:"Dirección 2",        req:false, icon:"🏠", color:"#64748b", desc:"Apt, piso, referencia extra" },
-                      { f:"sector",    l:"Sector",             req:false, icon:"🗺", color:"#64748b", desc:"Sector o barrio" },
-                      { f:"notes",     l:"Notas",              req:false, icon:"📝", color:"#64748b", desc:"Instrucciones especiales" },
-                      { f:"ciudad",    l:"Ciudad",             req:false, icon:"🏙", color:"#64748b", desc:"Municipio / localidad" },
-                      { f:"provincia", l:"Provincia",          req:false, icon:"🌎", color:"#64748b", desc:"Provincia o estado" },
-                      { f:"cp",        l:"Cód. Postal",        req:false, icon:"📮", color:"#64748b", desc:"ZIP o código postal" },
-                    ].map(({ f, l, req, icon, color, desc }) => {
+                      ["address","Dirección","Campo principal de entrega",true,"M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0Z"],
+                      ["client","Cliente","Nombre del destinatario",false,"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"],
+                      ["phone","Teléfono","Contacto para llamada o WhatsApp",false,"M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.45 2.1L8 9.6a16 16 0 0 0 6.4 6.4l1.3-1.25a2 2 0 0 1 2.1-.45c.8.3 1.6.5 2.5.6A2 2 0 0 1 22 16.9Z"],
+                      ["tracking","Código SP","Tracking o código del paquete",false,"M21 8a2 2 0 0 0-1-1.73L13 2.27a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"],
+                      ["sector","Sector","Zona / referencia",false,"M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3Z"],
+                      ["address2","Dirección 2","Detalle adicional",false,"M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"],
+                      ["ciudad","Ciudad","Municipio o ciudad",false,"M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"],
+                      ["cp","CP","Código postal",false,"M4 4h16v16H4z"],
+                      ["provincia","Provincia","Provincia destino",false,"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"],
+                    ].map(([f,l,desc,req,path]) => {
                       const mapped = !!mapping[f];
                       return (
-                        <div key={f} style={{ display:"flex", alignItems:"center", gap:8, padding:"11px 12px", borderRadius:16, background: mapped ? `linear-gradient(135deg,${color}12,rgba(5,12,22,.94))` : "linear-gradient(145deg,rgba(15,30,52,.55),rgba(5,12,22,.92))", border:`1px solid ${mapped ? color+"38" : req ? "rgba(59,130,246,0.24)" : "rgba(96,165,250,.10)"}`, transition:"all .15s", boxShadow: mapped ? `0 10px 28px ${color}10` : "inset 0 1px 0 rgba(255,255,255,.03)" }}>
-                          {/* Icon */}
-                          <div style={{ width:30, height:30, borderRadius:8, background: mapped ? `${color}15` : "rgba(255,255,255,0.04)", border:`1px solid ${mapped ? color+"25" : "#1a2d40"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>
-                            {mapped ? <span style={{ fontSize:12 }}>✓</span> : icon}
+                        <div className="rd-map-field" key={f} style={{ display:"grid", gridTemplateColumns:"38px 1fr 136px", alignItems:"center", gap:10, padding:"11px", borderRadius:18, background:mapped ? "linear-gradient(145deg,rgba(15,30,52,.78),rgba(5,12,22,.98))" : "linear-gradient(145deg,rgba(15,23,42,.45),rgba(5,12,22,.92))", border:mapped ? "1px solid rgba(96,165,250,.28)" : req ? "1px solid rgba(245,158,11,.22)" : "1px solid rgba(148,163,184,.10)", transition:"all .16s ease" }}>
+                          <div style={{ width:38, height:38, borderRadius:14, display:"grid", placeItems:"center", background:mapped ? "rgba(96,165,250,.10)" : "rgba(148,163,184,.055)", border:mapped ? "1px solid rgba(96,165,250,.22)" : "1px solid rgba(148,163,184,.10)" }}>
+                            {mapped ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={req ? "#fbbf24" : "#64748b"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={path}/>{f==="client" && <circle cx="12" cy="7" r="4"/>}</svg>}
                           </div>
-                          {/* Label + desc */}
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:10.5, fontWeight:700, color: mapped ? color : req ? "#60a5fa" : "#4b5563", fontFamily:"'Syne',sans-serif", letterSpacing:"0.3px", display:"flex", alignItems:"center", gap:4 }}>
-                              {l}{req && <span style={{ fontSize:9,color:"#ef4444" }}>*</span>}
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:mapped ? "#e5eefb" : req ? "#fde68a" : "#94a3b8", fontFamily:"'Syne',sans-serif", fontWeight:950 }}>
+                              {l}{req && <span style={{ fontSize:10, color:"#fbbf24" }}>*</span>}
                             </div>
-                            <div style={{ fontSize:9.5, color:"#2d4a60", marginTop:0.5, fontFamily:"'Inter',sans-serif" }}>{desc}</div>
+                            <div style={{ fontSize:9.5, color:mapped ? "#64748b" : "#475569", marginTop:2 }}>{mapped ? mapping[f] : desc}</div>
                           </div>
-                          {/* Select */}
-                          <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))}
-                            style={{ background:"#060b10", border:`1px solid ${mapped ? color+"35" : "#1a2d40"}`, borderRadius:7, padding:"5px 8px", color: mapped ? "#e2e8f0" : "#4b5563", fontSize:10.5, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", maxWidth:110, flexShrink:0, transition:"border .15s" }}>
-                            <option value="">— —</option>
-                            {headers.map(h => <option key={h} value={h}>{h.length > 14 ? h.slice(0,14)+"…" : h}</option>)}
+                          <select value={mapping[f] || ""} onChange={e => setMapping(m => ({ ...m, [f]: e.target.value || undefined }))} style={{ background:"rgba(2,6,12,.88)", border:mapped ? "1px solid rgba(96,165,250,.28)" : "1px solid rgba(148,163,184,.12)", borderRadius:12, padding:"9px 10px", color:mapped ? "#f8fafc" : "#64748b", fontSize:10.5, fontFamily:"'Inter',sans-serif", outline:"none", cursor:"pointer", width:"100%" }}>
+                            <option value="">— seleccionar —</option>
+                            {headers.map(h => <option key={h} value={h}>{h.length > 18 ? h.slice(0,18)+"…" : h}</option>)}
                           </select>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-
               </div>
-            </div>
+            </aside>
 
-            {/* RIGHT: Preview table — más visual */}
-            <div style={{ flex:1, overflow:"auto", padding:"22px", background:"radial-gradient(circle at 20% 0%,rgba(59,130,246,.08),transparent 28%),#050b14" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-                <div>
-                  <div style={{ fontSize:10,color:"#1e3550",fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:"1.5px" }}>
-                    CONTROL DE DATOS DEL EXCEL
-                  </div>
-                  <div style={{ fontSize:10,color:"#2d4a60",marginTop:2 }}>
-                    {rawRows.length} filas · {headers.length} columnas · mostrando primeras {Math.min(rawRows.length,10)}
-                  </div>
-                </div>
-                <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                  <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:20,padding:"4px 10px" }}>
-                    <div style={{ width:6,height:6,borderRadius:"50%",background:"#10b981" }}/>
-                    <span style={{ fontSize:10,color:"#10b981",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>{Object.values(mapping).filter(Boolean).length} mapeadas</span>
-                  </div>
-                  {!mapping.address && (
-                    <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:20,padding:"4px 10px" }}>
-                      <div style={{ width:6,height:6,borderRadius:"50%",background:"#ef4444" }}/>
-                      <span style={{ fontSize:10,color:"#ef4444",fontFamily:"'Syne',sans-serif",fontWeight:700 }}>Falta dirección *</span>
+            {/* RIGHT: Data studio preview */}
+            <main className="rd-premium-scroll" style={{ minWidth:0, overflow:"auto", padding:24, position:"relative" }}>
+              <div style={{ position:"absolute", inset:0, pointerEvents:"none", backgroundImage:"linear-gradient(rgba(96,165,250,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.035) 1px,transparent 1px)", backgroundSize:"42px 42px", maskImage:"linear-gradient(to bottom,black,transparent 72%)" }}/>
+              <div style={{ position:"relative", zIndex:1 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1.1fr 330px", gap:16, marginBottom:16 }}>
+                  <div className="rd-config-card" style={{ borderRadius:30, padding:22 }}>
+                    <div style={{ position:"relative", zIndex:1, display:"flex", alignItems:"center", justifyContent:"space-between", gap:18 }}>
+                      <div>
+                        <div style={{ fontSize:10, color:"#60a5fa", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.8px", textTransform:"uppercase" }}>Excel Data Studio</div>
+                        <div style={{ fontSize:24, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:1000, letterSpacing:"-.65px", marginTop:4 }}>Vista previa limpia</div>
+                        <div style={{ fontSize:12, color:"#64748b", lineHeight:1.45, marginTop:6 }}>La tabla queda enfocada en lectura: menos colores, más jerarquía, columnas mapeadas resaltadas de forma sutil.</div>
+                      </div>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:9, minWidth:210 }}>
+                        <div style={{ borderRadius:18, padding:"13px 14px", background:"rgba(15,23,42,.56)", border:"1px solid rgba(148,163,184,.11)" }}><div style={{ fontSize:8.5, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.1px" }}>MOSTRANDO</div><div style={{ fontSize:22, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:1000, marginTop:3 }}>{Math.min(rawRows.length,10)}</div></div>
+                        <div style={{ borderRadius:18, padding:"13px 14px", background:mapping.address ? "rgba(34,197,94,.07)" : "rgba(245,158,11,.07)", border:mapping.address ? "1px solid rgba(34,197,94,.17)" : "1px solid rgba(245,158,11,.17)" }}><div style={{ fontSize:8.5, color:mapping.address ? "#86efac" : "#fbbf24", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.1px" }}>ESTADO</div><div style={{ fontSize:15, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:1000, marginTop:7 }}>{mapping.address ? "LISTO" : "REVISAR"}</div></div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
 
-              {/* Tabla con scroll horizontal para ver todas las columnas */}
-              <div className="enterprise-table-shell" style={{ borderRadius:24, border:"1px solid rgba(96,165,250,.16)", overflow:"hidden", boxShadow:"0 28px 80px rgba(0,0,0,.36)" }}>
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
-                    <thead>
-                      <tr style={{ background:"#080e16", borderBottom:"1px solid #131f30" }}>
-                        <th style={{ padding:"9px 12px", textAlign:"center", fontSize:9, color:"#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.8px", borderRight:"1px solid #0d1420", width:36, whiteSpace:"nowrap" }}>#</th>
-                        {headers.map(h => {
-                          const isMapped = Object.values(mapping).includes(h);
-                          const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
-                          const icons = { address:"📍",address2:"🏠",client:"👤",phone:"📞",tracking:"🏷",sector:"🗺",ciudad:"🏙",notes:"📝",provincia:"🌎",cp:"📮" };
-                          const colors = { address:"#3b82f6",client:"#8b5cf6",phone:"#10b981",tracking:"#f59e0b" };
-                          const col = colors[fieldKey] || "#10b981";
-                          return (
-                            <th key={h} style={{ padding:"9px 14px", textAlign:"left", fontSize:9.5, color: isMapped ? col : "#1e3550", fontFamily:"'Syne',sans-serif", fontWeight:700, letterSpacing:"0.6px", whiteSpace:"nowrap", borderRight:"1px solid #0d1420", background: isMapped ? `${col}08` : "transparent" }}>
-                              <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                                {isMapped && <span style={{ fontSize:11 }}>{icons[fieldKey]||"✓"}</span>}
-                                {h}
-                                {isMapped && (
-                                  <span style={{ background:`${col}20`,border:`1px solid ${col}30`,borderRadius:4,padding:"1px 5px",fontSize:8,color:col,fontWeight:800 }}>
-                                    {fieldKey==="address"?"DIRECCIÓN":fieldKey==="client"?"CLIENTE":fieldKey==="phone"?"TEL":fieldKey==="tracking"?"SP":fieldKey?.toUpperCase()||"✓"}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rawRows.slice(0, 10).map((row, i) => (
-                        <tr key={i} style={{ borderBottom:"1px solid #080e16", transition:"background .1s", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                          <td style={{ padding:"9px 12px", textAlign:"center", fontSize:10, color:"#1e3550", fontFamily:"'DM Mono',monospace", borderRight:"1px solid #0a0f18", width:36 }}>{i+1}</td>
+                  <div className="rd-config-card" style={{ borderRadius:30, padding:20 }}>
+                    <div style={{ position:"relative", zIndex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                        <div style={{ fontSize:12, color:"#f8fafc", fontFamily:"'Syne',sans-serif", fontWeight:950 }}>Checklist</div>
+                        <div style={{ width:9, height:9, borderRadius:999, background:mapping.address ? "#22c55e" : "#f59e0b", boxShadow:mapping.address ? "0 0 14px rgba(34,197,94,.7)" : "0 0 14px rgba(245,158,11,.55)" }}/>
+                      </div>
+                      {[
+                        ["Dirección principal", !!mapping.address],
+                        ["Mensajero asignado", !!driverName],
+                        ["Nombre de ruta", !!routeName],
+                        ["Datos importados", rawRows.length > 0],
+                      ].map(([label,ok]) => (
+                        <div key={label} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 0", borderTop:"1px solid rgba(148,163,184,.08)" }}>
+                          <div style={{ width:19, height:19, borderRadius:7, display:"grid", placeItems:"center", background:ok ? "rgba(34,197,94,.10)" : "rgba(100,116,139,.08)", border:ok ? "1px solid rgba(34,197,94,.18)" : "1px solid rgba(148,163,184,.10)" }}>
+                            {ok ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#86efac" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg> : <div style={{ width:5, height:5, borderRadius:999, background:"#64748b" }}/>}                          
+                          </div>
+                          <span style={{ fontSize:11, color:ok ? "#cbd5e1" : "#64748b", fontWeight:800 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rd-config-card" style={{ borderRadius:30, overflow:"hidden" }}>
+                  <div style={{ position:"relative", zIndex:1, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, borderBottom:"1px solid rgba(148,163,184,.10)", background:"linear-gradient(180deg,rgba(7,15,28,.72),rgba(3,8,16,.35))" }}>
+                    <div>
+                      <div style={{ fontSize:10, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1.5px", textTransform:"uppercase" }}>Control de datos del Excel</div>
+                      <div style={{ fontSize:12, color:"#cbd5e1", marginTop:4 }}>{rawRows.length} filas · {headers.length} columnas · primeras {Math.min(rawRows.length,10)} filas</div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ padding:"7px 11px", borderRadius:999, border:"1px solid rgba(148,163,184,.13)", background:"rgba(15,23,42,.45)", color:"#94a3b8", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:900 }}>{Object.values(mapping).filter(Boolean).length} campos mapeados</div>
+                      {!mapping.address && <div style={{ padding:"7px 11px", borderRadius:999, border:"1px solid rgba(245,158,11,.18)", background:"rgba(245,158,11,.07)", color:"#fbbf24", fontSize:10, fontFamily:"'Syne',sans-serif", fontWeight:900 }}>Dirección requerida</div>}
+                    </div>
+                  </div>
+
+                  <div className="rd-premium-scroll" style={{ overflowX:"auto", position:"relative", zIndex:1 }}>
+                    <table className="rd-mapping-table" style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, minWidth:760 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ position:"sticky", left:0, zIndex:6, padding:"13px 14px", textAlign:"center", fontSize:9, color:"#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:"1px", borderRight:"1px solid rgba(148,163,184,.10)", borderBottom:"1px solid rgba(148,163,184,.10)", background:"#07111f", width:44 }}>#</th>
                           {headers.map(h => {
                             const isMapped = Object.values(mapping).includes(h);
                             const fieldKey = Object.keys(mapping).find(k => mapping[k] === h);
-                            const colors = { address:"#e2e8f0",client:"#c4b5fd",phone:"#6ee7b7",tracking:"#fcd34d" };
-                            const col = isMapped ? (colors[fieldKey]||"#e2e8f0") : "#374151";
-                            const val = String(row[h] || "");
+                            const label = fieldKey === "address" ? "DIRECCIÓN" : fieldKey === "client" ? "CLIENTE" : fieldKey === "phone" ? "TEL" : fieldKey === "tracking" ? "SP" : fieldKey?.toUpperCase();
                             return (
-                              <td key={h} style={{ padding:"9px 14px", fontSize:11.5, color: col, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderRight:"1px solid #0a0f18", fontWeight: isMapped ? 500 : 400 }}>
-                                {val || <span style={{ color:"#1e3550",fontStyle:"italic",fontSize:10 }}>vacío</span>}
-                              </td>
+                              <th key={h} style={{ padding:"13px 16px", textAlign:"left", fontSize:9.5, color:isMapped ? "#dbeafe" : "#64748b", fontFamily:"'Syne',sans-serif", fontWeight:950, letterSpacing:".8px", whiteSpace:"nowrap", borderRight:"1px solid rgba(148,163,184,.08)", borderBottom:"1px solid rgba(148,163,184,.10)", background:isMapped ? "rgba(96,165,250,.075)" : "rgba(7,17,31,.96)" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                  <span>{h}</span>
+                                  {isMapped && <span style={{ padding:"2px 7px", borderRadius:999, background:"rgba(96,165,250,.10)", border:"1px solid rgba(96,165,250,.18)", color:"#93c5fd", fontSize:8, fontWeight:1000 }}>{label}</span>}
+                                </div>
+                              </th>
                             );
                           })}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rawRows.slice(0, 10).map((row, i) => (
+                          <tr key={i}>
+                            <td style={{ position:"sticky", left:0, zIndex:3, padding:"12px 14px", textAlign:"center", fontSize:10.5, color:"#475569", fontFamily:"'DM Mono',monospace", borderRight:"1px solid rgba(148,163,184,.08)", borderBottom:"1px solid rgba(148,163,184,.06)", background:i%2===0 ? "#050b14" : "#07111f", width:44 }}>{i+1}</td>
+                            {headers.map(h => {
+                              const isMapped = Object.values(mapping).includes(h);
+                              const val = String(row[h] || "");
+                              return (
+                                <td key={h} style={{ padding:"12px 16px", fontSize:11.5, color:isMapped ? "#e5eefb" : "#64748b", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", borderRight:"1px solid rgba(148,163,184,.055)", borderBottom:"1px solid rgba(148,163,184,.055)", background:isMapped ? "rgba(96,165,250,.035)" : i%2===0 ? "rgba(2,6,12,.54)" : "rgba(15,23,42,.30)", fontWeight:isMapped ? 650 : 450 }}>
+                                  {val || <span style={{ color:"#334155", fontStyle:"italic", fontSize:10 }}>vacío</span>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+
+                {rawRows.length > 10 && (
+                  <div style={{ textAlign:"center", marginTop:12, fontSize:11, color:"#475569", fontFamily:"'Inter',sans-serif" }}>
+                    + {rawRows.length - 10} filas más · {rawRows.length} total
+                  </div>
+                )}
               </div>
-              {rawRows.length > 10 && (
-                <div style={{ textAlign:"center", marginTop:10, fontSize:11, color:"#2d4a60", fontFamily:"'Inter',sans-serif" }}>
-                  + {rawRows.length - 10} filas más · {rawRows.length} total
-                </div>
-              )}
-            </div>
+            </main>
           </div>
         )}
 
