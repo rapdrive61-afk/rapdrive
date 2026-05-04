@@ -3619,45 +3619,65 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         </button>
       </div>
 
-      {/* ══ DRAWER RESTAURADO ══ */}
+      {/* ══ DRAWER PREMIUM REDISEÑADO ══ */}
       {menuOpen && (
         <div style={{ position:"fixed", inset:0, zIndex:9000, pointerEvents:"auto" }}>
-          <div onClick={()=>setMenuOpen(false)} style={{ position:"absolute", inset:0, background:"rgba(2,6,23,.62)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }}/>
-          <aside style={{ position:"absolute", top:0, left:0, bottom:0, width:"min(336px,88vw)", background:"radial-gradient(circle at 20% 0%,rgba(59,130,246,.18),transparent 30%),linear-gradient(180deg,#07111f,#040814)", borderRight:"1px solid rgba(96,165,250,.18)", boxShadow:"28px 0 80px rgba(0,0,0,.62)", padding:"18px 15px", animation:"slideLeft .22s ease", display:"flex", flexDirection:"column", gap:10 }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"4px 2px 10px" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-                <div style={{ width:42, height:42, borderRadius:15, background:"linear-gradient(135deg,#1d4ed8,#38bdf8)", display:"grid", placeItems:"center", color:"white", fontWeight:950, boxShadow:"0 12px 32px rgba(37,99,235,.28)" }}>{(driver.avatar||(driver.name||"RD").slice(0,2)).toUpperCase()}</div>
+          <div onClick={()=>setMenuOpen(false)} style={{ position:"absolute", inset:0, background:"rgba(2,6,23,.70)", backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)" }}/>
+          <aside style={{ position:"absolute", top:0, left:0, bottom:0, width:"min(358px,90vw)", background:"linear-gradient(180deg,#081422 0%,#050b14 52%,#030711 100%)", borderRight:"1px solid rgba(125,171,255,.20)", boxShadow:"34px 0 90px rgba(0,0,0,.70)", padding:16, animation:"slideLeft .22s cubic-bezier(.4,0,.2,1)", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+            <div style={{ position:"absolute", top:-90, left:-70, width:220, height:220, borderRadius:"50%", background:"radial-gradient(circle,rgba(59,130,246,.24),transparent 66%)", pointerEvents:"none" }}/>
+            <div style={{ position:"absolute", bottom:-120, right:-100, width:260, height:260, borderRadius:"50%", background:"radial-gradient(circle,rgba(14,165,233,.12),transparent 68%)", pointerEvents:"none" }}/>
+
+            <div style={{ position:"relative", zIndex:1, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"4px 2px 16px", borderBottom:"1px solid rgba(148,163,184,.10)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}>
+                <div style={{ width:54, height:54, borderRadius:18, overflow:"hidden", background:"linear-gradient(135deg,#1e40af,#38bdf8)", display:"grid", placeItems:"center", color:"white", fontWeight:950, fontSize:15, boxShadow:"0 18px 42px rgba(37,99,235,.34), inset 0 1px 0 rgba(255,255,255,.22)", flexShrink:0 }}>
+                  {profilePhoto ? <img src={profilePhoto} alt="perfil" style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : (driver.avatar||(driver.name||"RD").slice(0,2)).toUpperCase()}
+                </div>
                 <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:14, color:"#f8fafc", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{driver.name||"Mensajero"}</div>
-                  <div style={{ fontSize:10.5, color:"rgba(148,163,184,.62)", marginTop:2 }}>Panel de mensajero</div>
+                  <div style={{ fontSize:16, color:"#f8fafc", fontWeight:950, letterSpacing:"-.25px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{driver.name||"Mensajero"}</div>
+                  <div style={{ marginTop:6, display:"inline-flex", alignItems:"center", gap:7, padding:"5px 9px", borderRadius:999, background:"rgba(15,23,42,.72)", border:"1px solid rgba(96,165,250,.14)", color:locationStatus==="active"?"#86efac":"#94a3b8", fontSize:10, fontWeight:900, letterSpacing:".7px", textTransform:"uppercase" }}>
+                    <span style={{ width:7, height:7, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":locationStatus==="requesting"?"#f59e0b":"#64748b", boxShadow:locationStatus==="active"?"0 0 10px #22c55e":"none" }}/>
+                    {locationStatus==="active"?"GPS activo":"GPS listo"}
+                  </div>
                 </div>
               </div>
-              <button onClick={()=>setMenuOpen(false)} className="rd-btn" style={{ width:34, height:34, borderRadius:12, border:"1px solid rgba(148,163,184,.12)", background:"rgba(255,255,255,.045)", color:"rgba(226,232,240,.72)", cursor:"pointer", display:"grid", placeItems:"center" }}>✕</button>
+              <button onClick={()=>setMenuOpen(false)} className="rd-btn" style={{ width:40, height:40, borderRadius:14, border:"1px solid rgba(148,163,184,.14)", background:"rgba(255,255,255,.055)", color:"#cbd5e1", cursor:"pointer", display:"grid", placeItems:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,.06)", flexShrink:0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
             </div>
 
-            {[
-              ["route","Ruta","M8 6h8M8 12h8M8 18h5"],
-              ["mapa","Mapa","M12 21s7-4.7 7-11a7 7 0 1 0-14 0c0 6.3 7 11 7 11Z"],
-              ["history","Historial","M8 7h8M8 12h8M8 17h5"],
-            ].map(([id,label,path]) => {
-              const active = tab === id;
-              return (
-                <button key={id} onClick={()=>{ setTab(id); setMenuOpen(false); }} className="rd-menu-item" style={{ width:"100%", border:"1px solid rgba(148,163,184,.10)", background:active?"linear-gradient(135deg,rgba(37,99,235,.22),rgba(14,165,233,.10))":"rgba(255,255,255,.035)", color:active?"#dbeafe":"rgba(226,232,240,.72)", borderRadius:16, padding:"13px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:850, fontSize:13 }}>
-                  <span style={{ width:34, height:34, borderRadius:12, display:"grid", placeItems:"center", background:active?"rgba(59,130,246,.18)":"rgba(255,255,255,.045)", color:active?"#93c5fd":"rgba(226,232,240,.48)", flexShrink:0 }}>
-                    {id === "mapa" ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={path}/><circle cx="12" cy="10" r="2.4"/></svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d={path}/></svg>
-                    )}
-                  </span>
-                  <span>{label}</span>
-                </button>
-              );
-            })}
+            <div style={{ position:"relative", zIndex:1, padding:"16px 0 10px", display:"grid", gap:10 }}>
+              {[
+                ["route","Rutas","Ruta activa y paradas","M4 7h16M4 12h16M4 17h10"],
+                ["mapa","Mapa","Navegación en vivo","M12 21s7-4.7 7-11a7 7 0 1 0-14 0c0 6.3 7 11 7 11Z"],
+                ["history","Historial","Rutas completadas","M7 7h10M7 12h10M7 17h6"],
+              ].map(([id,label,sub,path]) => {
+                const active = tab === id;
+                return (
+                  <button key={id} onClick={()=>{ setTab(id); setMenuOpen(false); }} className="rd-menu-item" style={{ width:"100%", minHeight:66, border:`1px solid ${active?"rgba(96,165,250,.34)":"rgba(148,163,184,.105)"}`, background:active?"linear-gradient(135deg,rgba(37,99,235,.24),rgba(14,165,233,.10))":"linear-gradient(135deg,rgba(15,23,42,.76),rgba(8,15,27,.66))", color:active?"#f8fafc":"#cbd5e1", borderRadius:20, padding:"12px 13px", display:"flex", alignItems:"center", gap:13, cursor:"pointer", textAlign:"left", boxShadow:active?"0 18px 42px rgba(37,99,235,.18), inset 0 1px 0 rgba(255,255,255,.08)":"inset 0 1px 0 rgba(255,255,255,.035)" }}>
+                    <span style={{ width:42, height:42, borderRadius:15, display:"grid", placeItems:"center", background:active?"rgba(59,130,246,.20)":"rgba(255,255,255,.045)", color:active?"#93c5fd":"#94a3b8", flexShrink:0 }}>
+                      {id === "mapa" ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={path}/><circle cx="12" cy="10" r="2.4"/></svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d={path}/></svg>
+                      )}
+                    </span>
+                    <span style={{ flex:1, minWidth:0 }}>
+                      <span style={{ display:"block", fontSize:14, fontWeight:950, letterSpacing:"-.15px" }}>{label}</span>
+                      <span style={{ display:"block", marginTop:3, fontSize:11, fontWeight:700, color:active?"rgba(191,219,254,.72)":"rgba(148,163,184,.62)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sub}</span>
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active?"#93c5fd":"rgba(148,163,184,.35)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                );
+              })}
+            </div>
 
-            <div style={{ marginTop:4, paddingTop:10, borderTop:"1px solid rgba(148,163,184,.10)" }}>
-              <button onClick={()=>{ setMenuOpen(false); setLogoutConf(true); }} className="rd-btn" style={{ width:"100%", border:"1px solid rgba(248,113,113,.24)", background:"linear-gradient(135deg,rgba(127,29,29,.34),rgba(15,23,42,.78))", color:"#fecaca", borderRadius:18, padding:"14px 15px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:900, fontSize:13, boxShadow:"0 14px 34px rgba(127,29,29,.18)" }}>
-                <span style={{width:36,height:36,borderRadius:13,display:"grid",placeItems:"center",background:"rgba(248,113,113,.12)",color:"#fca5a5",flexShrink:0}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg></span>
+            <div style={{ position:"relative", zIndex:1, marginTop:"auto", paddingTop:12, borderTop:"1px solid rgba(148,163,184,.10)", display:"grid", gap:10 }}>
+              <button onClick={()=>{ setMenuOpen(false); setPhotoMenuOpen(true); }} className="rd-btn" style={{ width:"100%", border:"1px solid rgba(148,163,184,.12)", background:"rgba(255,255,255,.045)", color:"#cbd5e1", borderRadius:18, padding:"13px 14px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:850, fontSize:13, textAlign:"left" }}>
+                <span style={{width:36,height:36,borderRadius:13,display:"grid",placeItems:"center",background:"rgba(96,165,250,.10)",color:"#93c5fd",flexShrink:0}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+                Editar foto
+              </button>
+              <button onClick={()=>{ setMenuOpen(false); setLogoutConf(true); }} className="rd-btn" style={{ width:"100%", border:"1px solid rgba(248,113,113,.26)", background:"linear-gradient(135deg,rgba(127,29,29,.40),rgba(30,41,59,.70))", color:"#fecaca", borderRadius:20, padding:"14px 15px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", fontWeight:950, fontSize:13, boxShadow:"0 18px 46px rgba(127,29,29,.18)" }}>
+                <span style={{width:40,height:40,borderRadius:15,display:"grid",placeItems:"center",background:"rgba(248,113,113,.14)",color:"#fca5a5",flexShrink:0}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg></span>
                 <span style={{lineHeight:1.1}}>Cerrar sesión</span>
               </button>
             </div>
@@ -3804,24 +3824,6 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
             </div>
           );
         })()}
-
-        {/* No route overlay */}
-        {!myRoute && (
-          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,background:"rgba(6,12,20,0.96)" }}>
-            <div style={{ width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30 }}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(147,197,253,.86)" strokeWidth="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73L13 2.27a2 2 0 0 0-2 0L4 6.27A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg></div>
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.6)",marginBottom:6 }}>Sin ruta asignada</div>
-              <div style={{ display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 16px" }}>
-                <div style={{ width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",animation:"pulse 2s infinite" }}/>
-                <span style={{ fontSize:12,color:"rgba(255,255,255,0.35)" }}>Esperando que el admin envíe una ruta...</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-
-
-
 
         {/* ── Banner: Nueva ruta asignada por el admin ── */}
         {driverNotif && (
