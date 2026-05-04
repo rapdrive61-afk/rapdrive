@@ -3974,20 +3974,47 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
             {/* Empty state - no route */}
             {!hasActiveRoute && (
-              <div style={{ minHeight:"calc(100vh - 168px)", display:"flex", alignItems:"center", justifyContent:"center", padding:"34px 24px 70px", textAlign:"center" }}>
-                <div style={{ maxWidth:310, width:"100%" }}>
-                  <div style={{ width:118, height:118, borderRadius:"50%", margin:"0 auto 22px", display:"grid", placeItems:"center", background:"conic-gradient(from 180deg,#3b82f6 0 72%,rgba(30,41,59,.9) 72% 100%)", boxShadow:"0 24px 70px rgba(37,99,235,.20)", position:"relative" }}>
-                    <div style={{ position:"absolute", inset:12, borderRadius:"50%", background:"#07111f", boxShadow:"inset 0 0 0 1px rgba(255,255,255,.06)" }}/>
-                    <div style={{ position:"relative", zIndex:1, width:62, height:62, borderRadius:"22px", background:"#c7f5b2", display:"grid", placeItems:"center", transform:"rotate(-10deg)", boxShadow:"0 12px 26px rgba(0,0,0,.28)" }}>
-                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{transform:"rotate(10deg)"}}><path d="M20 6L9 17l-5-5"/></svg>
-                    </div>
+              <div style={{ minHeight:"calc(100vh - 168px)", display:"flex", alignItems:"center", justifyContent:"center", padding:"34px 22px 72px", textAlign:"center", position:"relative", overflow:"hidden" }}>
+                <style>{`
+                  @keyframes rdEmptyFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+                  @keyframes rdEmptyOrbit{to{transform:rotate(360deg)}}
+                  @keyframes rdEmptyPulse{0%,100%{transform:scale(.94);opacity:.42}50%{transform:scale(1.08);opacity:.74}}
+                  @keyframes rdEmptyCheck{0%{stroke-dashoffset:34;opacity:.25}45%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
+                  @keyframes rdEmptyRoad{to{stroke-dashoffset:-92}}
+                  @keyframes rdEmptyGlow{0%,100%{opacity:.34;transform:scale(.96)}50%{opacity:.78;transform:scale(1.04)}}
+                  @keyframes rdEmptyDot{0%{transform:translateX(-36px);opacity:0}18%{opacity:1}82%{opacity:1}100%{transform:translateX(36px);opacity:0}}
+                `}</style>
+                <div style={{ position:"absolute", inset:"auto -80px -120px -80px", height:260, background:"radial-gradient(circle at 50% 30%,rgba(37,99,235,.16),transparent 62%)", pointerEvents:"none" }}/>
+                <div style={{ maxWidth:330, width:"100%", position:"relative", zIndex:1 }}>
+                  <div style={{ width:148, height:148, borderRadius:"50%", margin:"0 auto 22px", display:"grid", placeItems:"center", position:"relative", animation:"rdEmptyFloat 4.2s ease-in-out infinite" }}>
+                    <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"conic-gradient(from 210deg,#60a5fa 0 18%,#2563eb 18% 58%,rgba(30,41,59,.92) 58% 100%)", boxShadow:"0 26px 86px rgba(37,99,235,.28)", animation:"rdEmptyOrbit 7.5s linear infinite" }}/>
+                    <div style={{ position:"absolute", inset:13, borderRadius:"50%", background:"linear-gradient(145deg,#07111f,#050b14)", boxShadow:"inset 0 0 0 1px rgba(255,255,255,.08), inset 0 18px 34px rgba(96,165,250,.05)" }}/>
+                    <div style={{ position:"absolute", inset:23, borderRadius:"50%", border:"1px solid rgba(96,165,250,.20)", animation:"rdEmptyPulse 2.4s ease-in-out infinite" }}/>
+                    <svg width="104" height="104" viewBox="0 0 104 104" style={{ position:"relative", zIndex:2, filter:"drop-shadow(0 18px 24px rgba(2,6,23,.42))" }}>
+                      <defs>
+                        <linearGradient id="rdOkBadge" x1="18" y1="14" x2="88" y2="92" gradientUnits="userSpaceOnUse"><stop stopColor="#dcfce7"/><stop offset="1" stopColor="#86efac"/></linearGradient>
+                        <linearGradient id="rdOkRoad" x1="16" y1="88" x2="88" y2="88" gradientUnits="userSpaceOnUse"><stop stopColor="#1d4ed8"/><stop offset="1" stopColor="#60a5fa"/></linearGradient>
+                      </defs>
+                      <path d="M20 83 C36 70 68 70 84 83" fill="none" stroke="url(#rdOkRoad)" strokeWidth="5" strokeLinecap="round" strokeDasharray="9 10" style={{ animation:"rdEmptyRoad 2.2s linear infinite" }}/>
+                      <path d="M52 16 L62 22 L74 22 L80 32 L90 39 L87 52 L90 65 L80 72 L74 84 L62 84 L52 90 L42 84 L30 84 L24 72 L14 65 L17 52 L14 39 L24 32 L30 22 L42 22 Z" fill="url(#rdOkBadge)"/>
+                      <path d="M33 53 L46 66 L73 38" fill="none" stroke="#0f172a" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="34" style={{ animation:"rdEmptyCheck 1.15s ease-out both" }}/>
+                    </svg>
+                    <div style={{ position:"absolute", bottom:20, left:"50%", width:70, height:8, transform:"translateX(-50%)", borderRadius:999, background:"rgba(96,165,250,.18)", filter:"blur(7px)", animation:"rdEmptyGlow 3s ease-in-out infinite" }}/>
                   </div>
-                  <div style={{ fontSize:22, fontWeight:900, color:"#f8fafc", letterSpacing:"-.5px", marginBottom:8 }}>Ya estás al día</div>
-                  <div style={{ fontSize:13.5, color:"rgba(203,213,225,.62)", lineHeight:1.55, fontWeight:600 }}>Aquí aparecerá tu ruta cuando el admin la envíe.</div>
-                  <div style={{ margin:"22px auto 0", display:"inline-flex", alignItems:"center", gap:8, padding:"9px 13px", borderRadius:999, background:"rgba(15,23,42,.72)", border:"1px solid rgba(96,165,250,.13)", color:"#93c5fd", fontSize:11, fontWeight:900, letterSpacing:".8px", textTransform:"uppercase" }}>
-                    <span style={{ width:7, height:7, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 10px #22c55e":"none" }}/>
-                    Esperando ruta
+
+                  <div style={{ fontSize:23, fontWeight:950, color:"#f8fafc", letterSpacing:"-.6px", marginBottom:8 }}>Ya estás al día</div>
+                  <div style={{ fontSize:13.5, color:"rgba(203,213,225,.64)", lineHeight:1.55, fontWeight:650, maxWidth:270, margin:"0 auto" }}>Te avisaremos cuando el admin envíe una nueva ruta.</div>
+
+                  <div style={{ margin:"22px auto 0", width:220, height:40, borderRadius:999, background:"rgba(15,23,42,.72)", border:"1px solid rgba(96,165,250,.15)", display:"flex", alignItems:"center", justifyContent:"center", gap:10, boxShadow:"inset 0 1px 0 rgba(255,255,255,.04)", position:"relative", overflow:"hidden" }}>
+                    <div style={{ position:"absolute", top:0, bottom:0, width:44, background:"linear-gradient(90deg,transparent,rgba(96,165,250,.16),transparent)", animation:"rdEmptyDot 2.8s ease-in-out infinite" }}/>
+                    <span style={{ width:8, height:8, borderRadius:"50%", background:locationStatus==="active"?"#22c55e":"#64748b", boxShadow:locationStatus==="active"?"0 0 12px #22c55e":"none", animation:locationStatus==="active"?"pulse 2s infinite":"none", position:"relative", zIndex:1 }}/>
+                    <span style={{ color:"#93c5fd", fontSize:11, fontWeight:950, letterSpacing:".9px", textTransform:"uppercase", position:"relative", zIndex:1 }}>Esperando ruta</span>
                   </div>
+
+                  <button type="button" onClick={() => { try { window.location.reload(); } catch(e){} }}
+                    style={{ marginTop:14, border:"1px solid rgba(148,163,184,.12)", background:"rgba(255,255,255,.035)", color:"rgba(226,232,240,.72)", borderRadius:999, padding:"9px 14px", fontSize:11, fontWeight:850, letterSpacing:".3px", cursor:"pointer" }}>
+                    Revisar ahora
+                  </button>
                 </div>
               </div>
             )}
