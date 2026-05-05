@@ -2596,6 +2596,10 @@ const DriverPanel = ({ driver, mensajeros, onLogout, globalRoutes, onUpdateRoute
     return fromProps || fromWin || fromLS || null;
   };
   const myRoute = _initRoute();
+  // V54: ruta activa como estado real. Antes dependía de una lectura calculada
+  // desde memoria/globalRoutes y la pantalla vacía podía quedarse montada aunque
+  // Firebase ya hubiera recibido una ruta nueva.
+  const [activeRoute, setActiveRoute] = useState(myRoute);
 
   const [stops, setStops] = useState(() => {
     const r = _initRoute();
@@ -2943,6 +2947,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
 
       lastSentAt.current = null;
       routeFitKeyRef.current = null;
+      setActiveRoute(null);
       setStops([]);
       setSelStop(null);
       setTab("route");
@@ -2963,6 +2968,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         lastSentAt.current = null;
         routeFitKeyRef.current = null;
         routeStopsSigRef.current = "";
+        setActiveRoute(null);
         setStops([]);
         setSelStop(null);
         setSearch("");
@@ -3010,6 +3016,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       const nextSig = route.stops.map(s => `${s.stopNum||""}:${s.lat||""}:${s.lng||""}:${s.navStatus||""}`).join("|");
       const sameStops = routeStopsSigRef.current === nextSig;
 
+      setActiveRoute(route);
       if (!window.__rdRouteStore) window.__rdRouteStore = {};
       window.__rdRouteStore[myKey] = route;
       _memStore.routes[myKey] = route;
@@ -3298,7 +3305,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
   }, [selStop]);
 
   // -- Helpers -------------------------------------------------------------------
-  const hasActiveRoute = !!myRoute && Array.isArray(stops) && stops.length > 0;
+  const hasActiveRoute = !!activeRoute && Array.isArray(stops) && stops.length > 0;
   const routeStops = hasActiveRoute ? stops : [];
   const visited   = routeStops.filter(s=>s.navStatus==="visited");
   const problems    = routeStops.filter(s=>false);
@@ -3324,6 +3331,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
     );
 
     // 1) Actualizar memoria local INMEDIATAMENTE.
+    setActiveRoute(updated);
     if (!window.__rdRouteStore) window.__rdRouteStore = {};
     window.__rdRouteStore[myKey] = updated;
     _memStore.routes[myKey] = updated;
@@ -3356,6 +3364,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       try { localStorage.setItem(`rdSeen_${myKey}`, JSON.stringify([...seenRouteIds.current])); } catch(e) {}
 
       // SIN COLA: al completarse todas las paradas, borrar ruta activa y dejar pantalla esperando nueva ruta.
+      setActiveRoute(null);
       setStops([]);
       setSelStop(null);
       setShowCompletedBanner(true);
@@ -9837,7 +9846,13 @@ const CircuitEngine = () => {
                       if (sendingRoute) return;
                       setSendingRoute(true);
                       try {
-                      const confirmed = stops.filter(s => s.stopNum != null);
+                      const orderedStops = stops.filter(Boolean).map((s, i) => ({ ...s, stopNum: s.stopNum || i + 1, navStatus: s.navStatus || (i === 0 ? "active" : "pending") }));
+                      const confirmed = orderedStops.filter(s => s.stopNum != null);
+                      if (!confirmed.length) {
+                        setRoutesOptStatus("No hay paradas listas para enviar. Importa o agrega paradas primero.");
+                        setTimeout(() => setRoutesOptStatus(""), 3800);
+                        return;
+                      }
                       const allMens = window.__rdMensajeros || DEFAULT_MENSAJEROS;
                       const norm = (s) => (s||"").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
                       const mensajero = allMens.find(m => m.id === driverName)
@@ -10248,8 +10263,17 @@ export default function RapDrive() {
   // globalRoutes se sincroniza dentro del useEffect de notificaciones (un solo FB.listen)
 
   const handleUpdateRoute = (driverId, route) => {
-    setGlobalRoutes(prev => ({ ...prev, [driverId]: route }));
-    if (typeof window !== "undefined") { window.__rdRouteStore = window.__rdRouteStore || {}; window.__rdRouteStore[driverId] = route; LS.setRoute(driverId, route); }
+    setGlobalRoutes(prev => {
+      const next = { ...prev };
+      if (route) next[driverId] = route;
+      else delete next[driverId];
+      return next;
+    });
+    if (typeof window !== "undefined") {
+      window.__rdRouteStore = window.__rdRouteStore || {};
+      if (route) { window.__rdRouteStore[driverId] = route; LS.setRoute(driverId, route); }
+      else { delete window.__rdRouteStore[driverId]; delete _memStore.routes[driverId]; }
+    }
   };
 
   const handleLogin  = async (user) => {
