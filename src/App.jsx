@@ -34,7 +34,7 @@ const ROLE_CONFIG = {
 };
 
 // --- BRANDING: icono de mensajería, sin rayos -------------------------------
-const RD_BRAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="bg" x1="72" y1="40" x2="440" y2="472" gradientUnits="userSpaceOnUse"><stop stop-color="#38bdf8"/><stop offset="0.55" stop-color="#2563eb"/><stop offset="1" stop-color="#1e40af"/></linearGradient><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#020617" flood-opacity="0.35"/></filter></defs><rect x="48" y="48" width="416" height="416" rx="112" fill="url(#bg)"/><g filter="url(#shadow)" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><path d="M132 300h34l28-74h122l38 74h30" stroke-width="24"/><path d="M205 226v-52h80l58 52" stroke-width="22"/><path d="M122 254h48" stroke-width="22" opacity="0.96"/><circle cx="194" cy="328" r="34" fill="#1d4ed8" stroke-width="22"/><circle cx="342" cy="328" r="34" fill="#1d4ed8" stroke-width="22"/><path d="M318 150h64v64h-64z" fill="#fff" stroke-width="14"/><path d="M318 174h64M350 150v64" stroke="#2563eb" stroke-width="10"/></g></svg>`;
+const RD_BRAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="rdBg" x1="66" y1="40" x2="446" y2="472" gradientUnits="userSpaceOnUse"><stop stop-color="#0f172a"/><stop offset="0.45" stop-color="#111827"/><stop offset="1" stop-color="#020617"/></linearGradient><linearGradient id="rdBlue" x1="116" y1="132" x2="390" y2="380" gradientUnits="userSpaceOnUse"><stop stop-color="#67e8f9"/><stop offset="0.45" stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/></linearGradient><linearGradient id="rdGold" x1="296" y1="120" x2="408" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#fef3c7"/><stop offset="1" stop-color="#f59e0b"/></linearGradient><filter id="rdShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000" flood-opacity=".38"/></filter></defs><rect x="42" y="42" width="428" height="428" rx="118" fill="url(#rdBg)"/><rect x="60" y="60" width="392" height="392" rx="98" fill="none" stroke="#1e293b" stroke-width="8" opacity=".9"/><g filter="url(#rdShadow)"><path d="M126 306h42l28-76c8-22 21-33 42-33h74c17 0 31 8 40 22l39 64h34" fill="none" stroke="url(#rdBlue)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/><path d="M215 198v-45h85c15 0 28 6 38 17l44 49" fill="none" stroke="#e0f2fe" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/><path d="M116 252h64M96 292h72" stroke="#38bdf8" stroke-width="20" stroke-linecap="round" opacity=".9"/><circle cx="200" cy="326" r="36" fill="#020617" stroke="#e0f2fe" stroke-width="14"/><circle cx="348" cy="326" r="36" fill="#020617" stroke="#e0f2fe" stroke-width="14"/><circle cx="200" cy="326" r="12" fill="#38bdf8"/><circle cx="348" cy="326" r="12" fill="#38bdf8"/><path d="M340 122c38 0 68 30 68 68 0 48-68 105-68 105s-68-57-68-105c0-38 30-68 68-68Z" fill="url(#rdGold)" stroke="#fff7ed" stroke-width="10"/><circle cx="340" cy="190" r="22" fill="#0f172a"/><path d="M320 386h70" stroke="#38bdf8" stroke-width="18" stroke-linecap="round" opacity=".75"/></g></svg>`
 const RD_BRAND_ICON = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(RD_BRAND_SVG);
 const RD_MANIFEST = { name:"Rap Drive Mensajería", short_name:"Rap Drive", description:"Gestión de rutas, mensajeros y paquetes", start_url:"/", display:"standalone", background_color:"#050a12", theme_color:"#2563eb", icons:[{src:RD_BRAND_ICON,sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"},{src:RD_BRAND_ICON,sizes:"512x512",type:"image/svg+xml",purpose:"any maskable"}] };
 const installRapDriveBranding = () => {
@@ -235,6 +235,20 @@ const PRIORITY = {urgent:{label:"URGENTE",color:"#ef4444"},high:{label:"ALTA",co
 
 const Avatar = ({i,size=30,color="#3b82f6"}) => (
   <div style={{width:size,height:size,borderRadius:"50%",background:`linear-gradient(135deg,${color}28,${color}14)`,border:`1.5px solid ${color}38`,display:"flex",alignItems:"center",justifyContent:"center",color,fontSize:size*0.33,fontWeight:700,fontFamily:"'Syne',sans-serif",flexShrink:0}}>{i}</div>
+);
+
+
+const RDBrandMark = ({ size=52, showText=false, compact=false, label="Rap Drive", sub="Courier Ops" }) => (
+  <div style={{display:"flex",alignItems:"center",gap:compact?9:12,minWidth:0}}>
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      <div style={{position:"absolute",inset:-5,borderRadius:Math.round(size*.34),background:"linear-gradient(135deg,rgba(56,189,248,.26),rgba(245,158,11,.16))",filter:"blur(10px)",opacity:.9}}/>
+      <img src={RD_BRAND_ICON} alt="Rap Drive" style={{position:"relative",width:size,height:size,borderRadius:Math.round(size*.28),display:"block",boxShadow:"0 18px 42px rgba(2,6,23,.42)"}}/>
+    </div>
+    {showText && <div style={{minWidth:0}}>
+      <div style={{fontSize:compact?14:24,fontFamily:"'Syne','DM Sans',sans-serif",fontWeight:950,color:"#f8fafc",letterSpacing:compact?"-.2px":"-.8px",lineHeight:1}}>Rap Drive</div>
+      <div style={{fontSize:compact?8.5:10.5,color:"#7dd3fc",fontFamily:"'Syne','DM Sans',sans-serif",fontWeight:900,letterSpacing:compact?"1.4px":"2.8px",textTransform:"uppercase",marginTop:compact?3:6,whiteSpace:"nowrap"}}>{sub}</div>
+    </div>}
+  </div>
 );
 
 const Badge = ({status}) => {
@@ -2493,7 +2507,7 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif" }}>
+    <div style={{ position:"fixed",inset:0,background:"radial-gradient(circle at 18% 12%,rgba(56,189,248,.18),transparent 34%),linear-gradient(135deg,#020617,#050b14)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
         @keyframes dlFU{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -2538,11 +2552,9 @@ const DriverLoginScreen = ({ mensajeros, onLogin }) => {
       `}</style>
       <div style={{ width:360,animation:"dlFU .5s ease",padding:"0 16px" }}>
         <div style={{ textAlign:"center",marginBottom:32 }}>
-          <div style={{ width:52,height:52,borderRadius:16,background:"white",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="black"/><path d="M2 17l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="black" strokeWidth="2.2" strokeLinecap="round" opacity="0.4"/></svg>
-          </div>
-          <div style={{ fontSize:22,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",letterSpacing:"-0.5px" }}>Rap Drive</div>
-          <div style={{ fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:3,fontWeight:500,fontFamily:"'DM Sans',sans-serif",letterSpacing:"1.5px" }}>PANEL MENSAJERO</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><RDBrandMark size={64}/></div>
+          <div style={{ fontSize:24,fontFamily:"'Syne','DM Sans',sans-serif",fontWeight:900,color:"white",letterSpacing:"-0.7px" }}>Rap Drive</div>
+          <div style={{ fontSize:11,color:"#7dd3fc",marginTop:6,fontWeight:900,fontFamily:"'Syne','DM Sans',sans-serif",letterSpacing:"2px",textTransform:"uppercase" }}>Panel mensajero</div>
         </div>
         <div style={{ background:"#111",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"24px",boxShadow:"0 24px 60px rgba(0,0,0,0.5)" }}>
           <div style={{ fontSize:15,fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"white",marginBottom:16 }}>¿Quién eres?</div>
@@ -4804,7 +4816,7 @@ const PageSuperAdmin = ({ currentUser, onLogout }) => {
         <aside style={{ background:"linear-gradient(180deg,#0b1322,#070d16)", borderRight:`1px solid ${ui.line}`, padding:22, display:"flex", flexDirection:"column", gap:18 }}>
           <div style={{ display:"flex", alignItems:"center", gap:13 }}>
             <div style={{ width:46, height:46, borderRadius:14, display:"grid", placeItems:"center", background:"linear-gradient(135deg,#2563eb,#60a5fa)", boxShadow:"0 14px 34px rgba(37,99,235,.28)", fontWeight:1000 }}>RD</div>
-            <div><div style={{ fontWeight:1000, fontSize:18 }}>Rap Drive</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>Centro de control</div></div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}><img src={RD_BRAND_ICON} alt="Rap Drive" style={{width:42,height:42,borderRadius:14,boxShadow:"0 12px 28px rgba(0,0,0,.28)"}}/><div><div style={{ fontWeight:1000, fontSize:18 }}>Rap Drive</div><div style={{ color:ui.muted, fontSize:12, marginTop:4 }}>Centro de control</div></div></div>
           </div>
           <nav style={{ display:"grid", gap:9, marginTop:8 }}>
             {[
@@ -4906,35 +4918,14 @@ const LoginScreen = ({ onLogin }) => {
   const [focused,  setFocused]  = useState("");
   const [success,  setSuccess]  = useState(false);
 
-  // Carga usuarios de Firebase al montar (para que mensajeros nuevos funcionen)
   useEffect(() => {
     const loadFBUsers = async () => {
       try {
-        const [usersData, mensUsersData, officeData] = await Promise.all([
-          FB.get("users"),
-          FB.get("mens_users"),
-          FB.get("oficinas"),
-        ]);
-        if (usersData && typeof usersData === "object") {
-          Object.values(usersData).forEach(u => {
-            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-          });
-        }
-        if (mensUsersData && typeof mensUsersData === "object") {
-          Object.values(mensUsersData).forEach(u => {
-            if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-          });
-        }
-        if (officeData && typeof officeData === "object") {
-          Object.values(officeData).forEach(of => {
-            if (of?.users && typeof of.users === "object") {
-              Object.values(of.users).forEach(u => {
-                if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u);
-              });
-            }
-          });
-        }
-      } catch(e) { /* Firebase no disponible, usa USERS local */ }
+        const [usersData, mensUsersData, officeData] = await Promise.all([FB.get("users"), FB.get("mens_users"), FB.get("oficinas")]);
+        if (usersData && typeof usersData === "object") Object.values(usersData).forEach(u => { if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u); });
+        if (mensUsersData && typeof mensUsersData === "object") Object.values(mensUsersData).forEach(u => { if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u); });
+        if (officeData && typeof officeData === "object") Object.values(officeData).forEach(of => { if (of?.users && typeof of.users === "object") Object.values(of.users).forEach(u => { if (u && u.id && !USERS.find(x => x.id === u.id)) USERS.push(u); }); });
+      } catch(e) {}
     };
     loadFBUsers();
   }, []);
@@ -4943,31 +4934,15 @@ const LoginScreen = ({ onLogin }) => {
     if (loading) return;
     setError("");
     setLoading(true);
-    // Pequeño delay para que Firebase haya cargado
     setTimeout(async () => {
-      // Buscar primero en USERS (ya incluye los de Firebase tras el useEffect)
       let user = USERS.find(u => u.email === email.trim().toLowerCase() && u.password === password);
-      // Si no encontró, reintentar con Firebase directo (por si el useEffect aún no terminó)
       if (!user) {
         try {
-          const [usersData, mensUsersData, officeData] = await Promise.all([
-            FB.get("users"),
-            FB.get("mens_users"),
-            FB.get("oficinas"),
-          ]);
+          const [usersData, mensUsersData, officeData] = await Promise.all([FB.get("users"), FB.get("mens_users"), FB.get("oficinas")]);
           const officeUsers = [];
-          if (officeData && typeof officeData === "object") {
-            Object.values(officeData).forEach(of => {
-              if (of?.users && typeof of.users === "object") officeUsers.push(...Object.values(of.users));
-            });
-          }
-          const allFB = [
-            ...Object.values(usersData || {}),
-            ...Object.values(mensUsersData || {}),
-            ...officeUsers,
-          ];
+          if (officeData && typeof officeData === "object") Object.values(officeData).forEach(of => { if (of?.users && typeof of.users === "object") officeUsers.push(...Object.values(of.users)); });
+          const allFB = [...Object.values(usersData || {}), ...Object.values(mensUsersData || {}), ...officeUsers];
           user = allFB.find(u => u && u.email === email.trim().toLowerCase() && u.password === password);
-          // Si encontró en Firebase, agrégalo a USERS local para futuras búsquedas
           if (user && !USERS.find(x => x.id === user.id)) USERS.push(user);
         } catch(e) {}
       }
@@ -4975,178 +4950,80 @@ const LoginScreen = ({ onLogin }) => {
         if ((user.role === "admin" || user.role === "driver") && user.officeId) {
           try {
             const office = await FB.get(`oficinas/${user.officeId}`);
-            if (!office || office.activa === false) {
-              setError("Esta oficina está deshabilitada. Contacta al Super Admin.");
-              setLoading(false);
-              return;
-            }
+            if (!office || office.activa === false) { setError("Esta oficina está deshabilitada. Contacta al Super Admin."); setLoading(false); return; }
             user.officeName = office.nombre || user.officeName;
           } catch(e) {}
         }
         setSuccess(true);
         try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
-        setTimeout(() => onLogin(user), 700);
+        setTimeout(() => onLogin(user), 650);
       } else {
         setError("Correo o contraseña incorrectos");
         setLoading(false);
       }
-    }, 900);
+    }, 720);
   };
 
+  const inputBase = (name) => ({
+    width:"100%",height:52,background:focused===name?"rgba(15,23,42,.92)":"rgba(2,6,23,.68)",
+    border:`1px solid ${focused===name?"rgba(56,189,248,.62)":"rgba(148,163,184,.14)"}`,
+    borderRadius:16,padding:name==="pass"?"0 48px 0 16px":"0 16px",color:"#f8fafc",fontSize:14,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"all .18s ease",boxShadow:focused===name?"0 0 0 4px rgba(56,189,248,.10), inset 0 1px 0 rgba(255,255,255,.05)":"inset 0 1px 0 rgba(255,255,255,.035)",
+  });
+
   return (
-    <div style={{ position:"fixed",inset:0,background:"#080a0f",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",overflow:"hidden" }}>
+    <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",overflow:"hidden",background:"#020617",padding:22}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@500&display=swap');
-        @keyframes lCard{from{opacity:0;transform:translateY(32px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes lLogo{from{opacity:0;transform:translateY(-16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes lSuccess{0%{transform:scale(1)}30%{transform:scale(1.03)}70%{transform:scale(0.99)}100%{transform:scale(1)}}
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Syne:wght@700;800;900&family=DM+Mono:wght@500&display=swap');
+        @keyframes loginIn{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes floatSeal{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+        @keyframes truckLine{0%{transform:translateX(-35%);opacity:0}18%{opacity:.55}80%{opacity:.55}100%{transform:translateX(105%);opacity:0}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes lOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.06) translateY(-8px)}}
-        @keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.1)}66%{transform:translate(-20px,20px) scale(0.95)}}
-        @keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,25px) scale(1.05)}66%{transform:translate(30px,-35px) scale(1.08)}}
-        @keyframes orb3{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,40px)}}
-        @keyframes shimmer{0%{opacity:0.03}50%{opacity:0.07}100%{opacity:0.03}}
-        @keyframes inputGlow{from{box-shadow:0 0 0 0 rgba(59,130,246,0)}to{box-shadow:0 0 0 3px rgba(59,130,246,0.15)}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
-      {/* Animated background orbs */}
-      <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:"10%",left:"20%",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.08) 0%,transparent 70%)",animation:"orb1 12s ease-in-out infinite"}}/>
-        <div style={{position:"absolute",bottom:"15%",right:"15%",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,0.06) 0%,transparent 70%)",animation:"orb2 15s ease-in-out infinite"}}/>
-        <div style={{position:"absolute",top:"50%",left:"50%",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(16,185,129,0.04) 0%,transparent 70%)",transform:"translate(-50%,-50%)",animation:"orb3 18s ease-in-out infinite"}}/>
-        {/* Grid pattern */}
-        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)",backgroundSize:"60px 60px",animation:"shimmer 4s ease-in-out infinite"}}/>
-      </div>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"radial-gradient(circle at 18% 18%,rgba(56,189,248,.18),transparent 34%),radial-gradient(circle at 82% 82%,rgba(245,158,11,.12),transparent 32%),linear-gradient(135deg,#020617,#040b16 48%,#020617)"}}/>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",backgroundImage:"linear-gradient(rgba(148,163,184,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.035) 1px,transparent 1px)",backgroundSize:"58px 58px",maskImage:"radial-gradient(circle at center,black,transparent 72%)"}}/>
 
-      <div style={{
-        width:380, position:"relative", zIndex:1,
-        animation: success ? "lOut .5s ease forwards" : "lCard .6s cubic-bezier(.16,1,.3,1) both",
-      }}>
-        {/* Logo */}
-        <div style={{ textAlign:"center", marginBottom:28, animation:"lLogo .6s .08s cubic-bezier(.16,1,.3,1) both", opacity:0 }}>
-          <div style={{ position:"relative",width:60,height:60,margin:"0 auto 14px" }}>
-            <div style={{ position:"absolute",inset:-4,borderRadius:20,background:"linear-gradient(135deg,rgba(59,130,246,0.3),rgba(99,102,241,0.2))",filter:"blur(8px)" }}/>
-            <div style={{ position:"relative",width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 32px rgba(59,130,246,0.4)" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/>
-                <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.45"/>
-              </svg>
+      <div style={{position:"relative",zIndex:1,width:"min(1060px,100%)",display:"grid",gridTemplateColumns:"1.05fr 430px",gap:24,alignItems:"stretch",animation:"loginIn .55s cubic-bezier(.16,1,.3,1) both"}}>
+        <section style={{border:"1px solid rgba(148,163,184,.12)",borderRadius:32,background:"linear-gradient(145deg,rgba(15,23,42,.72),rgba(2,6,23,.76))",boxShadow:"0 32px 100px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.05)",overflow:"hidden",position:"relative",minHeight:560,padding:34,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+          <div style={{position:"absolute",left:0,right:0,top:132,height:2,overflow:"hidden",opacity:.7}}><div style={{height:2,width:"45%",background:"linear-gradient(90deg,transparent,#38bdf8,#f59e0b,transparent)",animation:"truckLine 4.8s linear infinite"}}/></div>
+          <div>
+            <RDBrandMark size={68} showText sub="Courier Operations" />
+            <div style={{marginTop:44,maxWidth:560}}>
+              <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:999,border:"1px solid rgba(56,189,248,.20)",background:"rgba(56,189,248,.07)",color:"#7dd3fc",fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.7px",textTransform:"uppercase"}}>Panel operativo</div>
+              <h1 style={{fontSize:54,lineHeight:.96,letterSpacing:"-2.4px",color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:900,margin:"20px 0 14px"}}>Entrega, rutas y control en una sola cabina.</h1>
+              <p style={{fontSize:15,lineHeight:1.7,color:"#8ea3bd",maxWidth:500,margin:0}}>Acceso seguro para administrar oficinas, rutas, mensajeros y seguimiento GPS con una experiencia más seria y de nivel logístico.</p>
             </div>
           </div>
-          <div style={{ fontSize:26,fontWeight:800,color:"white",letterSpacing:"-0.8px",lineHeight:1 }}>Rap Drive</div>
-          <div style={{ fontSize:10,color:"rgba(255,255,255,0.22)",marginTop:5,letterSpacing:"3px",fontWeight:600,textTransform:"uppercase" }}>Gestión de Rutas</div>
-        </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,maxWidth:620}}>
+            {[ ["GPS","En vivo"], ["Rutas","Operativas"], ["Oficinas","Aisladas"] ].map(([a,b])=><div key={a} style={{padding:16,borderRadius:20,border:"1px solid rgba(148,163,184,.12)",background:"rgba(2,6,23,.45)"}}><div style={{fontSize:21,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:900}}>{a}</div><div style={{fontSize:11,color:"#64748b",fontWeight:800,letterSpacing:"1.2px",textTransform:"uppercase",marginTop:4}}>{b}</div></div>)}
+          </div>
+        </section>
 
-        {/* Card */}
-        <div style={{
-          background:"rgba(255,255,255,0.04)",
-          border:"1px solid rgba(255,255,255,0.08)",
-          borderRadius:22,
-          padding:"28px 26px 24px",
-          boxShadow:"0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
-          backdropFilter:"blur(20px)",
-          animation: success ? "lSuccess .5s ease" : "none",
-        }}>
-          {/* Header */}
-          <div style={{textAlign:"center", marginBottom:26}}>
-            <div style={{fontSize:17,fontWeight:700,color:"rgba(255,255,255,0.92)",letterSpacing:"-0.3px"}}>Bienvenido de vuelta</div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,0.25)",marginTop:4}}>Inicia sesión para continuar</div>
+        <section style={{border:"1px solid rgba(148,163,184,.14)",borderRadius:32,background:"linear-gradient(180deg,rgba(15,23,42,.92),rgba(3,7,14,.96))",boxShadow:"0 34px 100px rgba(0,0,0,.54), inset 0 1px 0 rgba(255,255,255,.06)",padding:28,position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",right:-70,top:-70,width:180,height:180,borderRadius:"50%",background:"radial-gradient(circle,rgba(56,189,248,.14),transparent 68%)"}}/>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:20,animation:"floatSeal 4s ease-in-out infinite"}}><RDBrandMark size={76}/></div>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:24,color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-.7px"}}>Iniciar sesión</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:6}}>Entra al centro operativo Rap Drive</div>
           </div>
 
-          {/* Email */}
-          <div style={{marginBottom:14}}>
-            <label style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CORREO</label>
-            <input
-              value={email}
-              onChange={e=>{setEmail(e.target.value);setError("");}}
-              onFocus={()=>setFocused("email")} onBlur={()=>setFocused("")}
-              onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
-              placeholder="tu@rapdrive.do"
-              type="email"
-              style={{
-                width:"100%", background:focused==="email"?"rgba(255,255,255,0.07)":"rgba(255,255,255,0.04)",
-                border:`1.5px solid ${focused==="email"?"rgba(59,130,246,0.6)":"rgba(255,255,255,0.08)"}`,
-                borderRadius:13, padding:"13px 14px", color:"white",
-                fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none",
-                caretColor:"#3b82f6", transition:"all .2s", boxSizing:"border-box",
-                boxShadow: focused==="email"?"0 0 0 3px rgba(59,130,246,0.12)":"none",
-              }}
-            />
+          <div style={{display:"grid",gap:14}}>
+            <div><label style={{display:"block",fontSize:10,color:"#7dd3fc",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.6px",textTransform:"uppercase",marginBottom:7}}>Correo</label><input value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onFocus={()=>setFocused("email")} onBlur={()=>setFocused("")} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder="admin@rapdrive.do" type="email" style={inputBase("email")}/></div>
+            <div><label style={{display:"block",fontSize:10,color:"#7dd3fc",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.6px",textTransform:"uppercase",marginBottom:7}}>Contraseña</label><div style={{position:"relative"}}><input value={password} onChange={e=>{setPassword(e.target.value);setError("");}} onFocus={()=>setFocused("pass")} onBlur={()=>setFocused("")} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder="••••••••" type={showPass?"text":"password"} style={inputBase("pass")}/><button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:32,height:32,borderRadius:11,border:"1px solid rgba(148,163,184,.12)",background:"rgba(255,255,255,.035)",color:"#94a3b8",cursor:"pointer",display:"grid",placeItems:"center"}}>{showPass ? "Ocultar".slice(0,1) : "Ver".slice(0,1)}</button></div></div>
           </div>
 
-          {/* Password */}
-          <div style={{marginBottom:22}}>
-            <label style={{fontSize:10,color:"rgba(255,255,255,0.3)",letterSpacing:"1.5px",fontWeight:600,display:"block",marginBottom:7}}>CONTRASEÑA</label>
-            <div style={{position:"relative"}}>
-              <input
-                value={password}
-                onChange={e=>{setPassword(e.target.value);setError("");}}
-                onFocus={()=>setFocused("pass")} onBlur={()=>setFocused("")}
-                onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
-                placeholder="••••••••"
-                type={showPass?"text":"password"}
-                style={{
-                  width:"100%", background:focused==="pass"?"rgba(255,255,255,0.07)":"rgba(255,255,255,0.04)",
-                  border:`1.5px solid ${focused==="pass"?"rgba(59,130,246,0.6)":"rgba(255,255,255,0.08)"}`,
-                  borderRadius:13, padding:"13px 44px 13px 14px", color:"white",
-                  fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none",
-                  caretColor:"#3b82f6", transition:"all .2s", boxSizing:"border-box",
-                  boxShadow: focused==="pass"?"0 0 0 3px rgba(59,130,246,0.12)":"none",
-                }}
-              />
-              <button onClick={()=>setShowPass(s=>!s)}
-                style={{position:"absolute",right:13,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"rgba(255,255,255,0.25)",cursor:"pointer",padding:4,display:"flex",alignItems:"center",justifyContent:"center",transition:"color .15s"}}>
-                {showPass
-                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                }
-              </button>
-            </div>
-          </div>
+          {error && <div style={{marginTop:15,background:"rgba(239,68,68,.10)",border:"1px solid rgba(239,68,68,.22)",borderRadius:16,padding:"12px 14px",fontSize:12,color:"#fca5a5",animation:"fadeUp .18s ease"}}>{error}</div>}
 
-          {/* Error */}
-          {error && (
-            <div style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:12,padding:"11px 14px",marginBottom:16,fontSize:12,color:"#f87171",display:"flex",alignItems:"center",gap:8,animation:"fadeUp .2s ease"}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              {error}
-            </div>
-          )}
-
-          {/* Submit */}
-          <button
-            onClick={handleSubmit}
-            disabled={loading||!email||!password}
-            style={{
-              width:"100%", padding:"14px", borderRadius:13, border:"none",
-              background: success
-                ? "linear-gradient(135deg,#059669,#10b981)"
-                : !loading&&email&&password
-                  ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-                  : "rgba(255,255,255,0.05)",
-              color: !loading&&email&&password ? "white" : "rgba(255,255,255,0.15)",
-              fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
-              cursor:!loading&&email&&password?"pointer":"not-allowed",
-              transition:"all .3s cubic-bezier(.4,0,.2,1)",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-              boxSizing:"border-box", letterSpacing:"-0.2px",
-              boxShadow: !loading&&email&&password&&!success ? "0 8px 24px rgba(37,99,235,0.4)" : "none",
-            }}>
-            {success
-              ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>¡Entrando!</>
-              : loading
-                ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,0.2)",borderTopColor:"white",animation:"spin .7s linear infinite"}}/>Verificando...</>
-                : <>Ingresar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></>
-            }
+          <button onClick={handleSubmit} disabled={loading||!email||!password} style={{width:"100%",height:54,marginTop:20,borderRadius:17,border:"1px solid rgba(255,255,255,.08)",background:success?"linear-gradient(135deg,#16a34a,#22c55e)":(!loading&&email&&password?"linear-gradient(135deg,#0ea5e9,#2563eb)":"rgba(148,163,184,.08)"),color:(!loading&&email&&password)||success?"#fff":"#475569",fontSize:14,fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:".2px",cursor:(!loading&&email&&password)?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:(!loading&&email&&password&&!success)?"0 18px 38px rgba(37,99,235,.32)":"none",transition:"all .18s ease"}}>
+            {success ? "Acceso aprobado" : loading ? <><span style={{width:16,height:16,borderRadius:"50%",border:"2px solid rgba(255,255,255,.25)",borderTopColor:"#fff",animation:"spin .7s linear infinite"}}/>Verificando</> : "Entrar al panel"}
           </button>
 
-          {/* Footer */}
-          <div style={{textAlign:"center",marginTop:20,paddingTop:16,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
-              Developer: <span style={{color:"rgba(255,255,255,0.45)",fontWeight:600}}>Adonis Castillo</span>
-            </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:20,paddingTop:18,borderTop:"1px solid rgba(148,163,184,.10)"}}>
+            <div style={{fontSize:11,color:"#475569"}}>Sistema privado</div>
+            <div style={{fontSize:11,color:"#64748b",fontWeight:800}}>Rap Drive ©</div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
@@ -9288,7 +9165,7 @@ const CircuitEngine = () => {
           <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2.2" strokeLinecap="round" opacity="0.5"/></svg>
           </div>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 14 }}>Rap Drive</span>
+          <span style={{ display:"inline-flex",alignItems:"center",gap:8,fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 14 }}><img src={RD_BRAND_ICON} alt="" style={{width:24,height:24,borderRadius:8}}/>Rap Drive</span>
           <span style={{ color: "#131f30" }}>·</span>
           <span className="rd-chip-pro">Circuit Mode Enterprise</span>
           {!mapsReady && <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 6, padding: "2px 8px" }}>Cargando Maps...</span>}
@@ -10568,10 +10445,8 @@ export default function RapDrive() {
       <aside className="rd-admin-sidebar-v48" style={{width:adminNavCollapsed?92:232,background:"#060b10",borderRight:"1px solid #0d1420",display:"flex",flexDirection:"column",alignItems:"stretch",padding:"16px 12px 14px",flexShrink:0}}>
         {/* Logo */}
         <div className="rd-admin-logo-v48" style={{marginBottom:10,display:"flex",alignItems:"center",gap:11,minHeight:58}}>
-          <div style={{width:46,height:46,borderRadius:17,background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 14px 34px rgba(37,99,235,.28)",flexShrink:0}}>
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="white"/><path d="M2 17l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round"/><path d="M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.5"/></svg>
-          </div>
-          {!adminNavCollapsed && <div style={{minWidth:0,flex:1}}><div style={{fontSize:14,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"-.2px",lineHeight:1}}>Rap Drive</div><div style={{fontSize:9,color:"#60a5fa",fontFamily:"'Syne',sans-serif",fontWeight:800,letterSpacing:"1.8px",marginTop:4}}>ADMIN</div></div>}
+          <img src={RD_BRAND_ICON} alt="Rap Drive" style={{width:46,height:46,borderRadius:17,boxShadow:"0 14px 34px rgba(2,6,23,.34)",flexShrink:0}}/>
+          {!adminNavCollapsed && <div style={{minWidth:0,flex:1}}><div style={{fontSize:15,color:"#f8fafc",fontFamily:"'Syne',sans-serif",fontWeight:950,letterSpacing:"-.3px",lineHeight:1}}>Rap Drive</div><div style={{fontSize:9,color:"#7dd3fc",fontFamily:"'Syne',sans-serif",fontWeight:900,letterSpacing:"1.9px",marginTop:4}}>ADMIN OPS</div></div>}
           <button onClick={()=>setAdminNavCollapsed(v=>!v)} title={adminNavCollapsed?"Expandir menú":"Contraer menú"} style={{width:32,height:32,borderRadius:12,border:"1px solid rgba(96,165,250,.15)",background:"rgba(255,255,255,.035)",color:"#93c5fd",display:"grid",placeItems:"center",cursor:"pointer",flexShrink:0,marginLeft:adminNavCollapsed?0:"auto"}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{transform:adminNavCollapsed?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M15 18l-6-6 6-6"/></svg>
           </button>
