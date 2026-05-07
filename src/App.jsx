@@ -44,7 +44,10 @@ const installRapDriveBranding = () => {
   upsert('link[rel="shortcut icon"]','link',{rel:'shortcut icon',type:'image/png',href:RD_BRAND_ICON});
   upsert('link[rel="apple-touch-icon"]','link',{rel:'apple-touch-icon',href:RD_BRAND_ICON});
   upsert('meta[name="theme-color"]','meta',{name:'theme-color',content:'#2563eb'});
-  upsert('link[rel="manifest"]','link',{rel:'manifest',href:'data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(RD_MANIFEST))});
+  // PWA SAFE: no inyectar manifest gigante en data-uri. En modo instalado algunos navegadores
+  // pueden abrir pantalla blanca al restaurar la app. Dejamos iconos PNG y tema activos.
+  const oldManifest = document.querySelector('link[rel="manifest"]');
+  if (oldManifest && String(oldManifest.getAttribute('href') || '').startsWith('data:')) oldManifest.remove();
 };
 
 // --- PERSISTENT STORE (in-memory - compatible con entorno de artefacto) -------
@@ -10088,11 +10091,16 @@ const RoleBadge = ({ role }) => {
 export default function RapDrive() {
   useEffect(() => {
     try { installRapDriveBranding(); } catch(e) {}
+    const onErr = (e) => { try { console.error('RapDrive runtime error:', e?.error || e?.message || e); } catch(_) {} };
+    const onRej = (e) => { try { console.error('RapDrive promise error:', e?.reason || e); } catch(_) {} };
+    window.addEventListener('error', onErr);
+    window.addEventListener('unhandledrejection', onRej);
+    return () => { window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej); };
   }, []);
   // -- Phase 6: Auth --
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const saved = sessionStorage.getItem("rdSession");
+      const saved = sessionStorage.getItem("rdSession") || localStorage.getItem("rdSession");
       if (saved) {
         const parsed = JSON.parse(saved);
         // Aceptar la sesión si está en USERS local, o si tiene id y email válidos
@@ -10167,9 +10175,10 @@ export default function RapDrive() {
     }
     if (typeof window !== "undefined") window.__rdOfficeId = user?.officeId || null;
     try { sessionStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
+    try { localStorage.setItem("rdSession", JSON.stringify(user)); } catch(e) {}
     setCurrentUser(user);
   };
-  const handleLogout = () => { setLogoutConfirm(false); try { sessionStorage.removeItem("rdSession"); } catch(e) {} setCurrentUser(null); };
+  const handleLogout = () => { setLogoutConfirm(false); try { sessionStorage.removeItem("rdSession"); } catch(e) {} try { localStorage.removeItem("rdSession"); } catch(e) {} setCurrentUser(null); };
 
   const [nav,setNav]=useState("dashboard");
   const [time,setTime]=useState(new Date());
