@@ -3248,7 +3248,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="48" viewBox="0 0 42 48">
         <defs><filter id="sh" x="-30%" y="-20%" width="160%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="${color}" flood-opacity=".34"/></filter></defs>
         <g filter="url(#sh)">
-          <path d="M21 46s15-13.2 15-25A15 15 0 0 0 6 21c0 11.8 15 25 15 25z" fill="${color}" stroke="rgba(255,255,255,.96)" stroke-width="1.5"/>
+          <path d="M21 46s15-13.2 15-25A15 15 0 0 0 6 21c0 11.8 15 25 15 25z" fill="${color}" stroke="#ffffff" stroke-width="2"/>
           <circle cx="21" cy="21" r="10.8" fill="${dark}" opacity=".95"/>
           <text x="21" y="25" text-anchor="middle" font-size="${fs}" font-weight="900" fill="white" font-family="Arial, sans-serif">${label}</text>
         </g>
@@ -3277,8 +3277,8 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           map: gMapRef.current,
           position: pos,
           title: `#${stop.stopNum} ${stop.client || ""}`,
-          zIndex: stop.navStatus === "visited" ? 5 : 20,
-          optimized: true,
+          zIndex: stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000,
+          optimized: false,
           clickable: true,
           icon: makeFixedPinIcon(stop),
         });
@@ -3294,7 +3294,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
           marker.setPosition(pos);
         }
         marker.setTitle(`#${stop.stopNum} ${stop.client || ""}`);
-        marker.setZIndex(stop.navStatus === "visited" ? 5 : 20);
+        marker.setZIndex(stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000);
         if (marker.__rdStatusKey !== statusKey) {
           marker.setIcon(makeFixedPinIcon(stop));
           marker.__rdStatusKey = statusKey;
@@ -3316,6 +3316,18 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       routeLinesRef.current.glow,
       routeLinesRef.current.core,
     ].filter(Boolean);
+
+    // FIX V62: asegurar que los pines queden visibles encima de la línea de ruta en PWA/navegador.
+    Object.values(stopMarkersRef.current || {}).forEach((m) => {
+      try {
+        const st = m.__rdStatusKey || "";
+        m.setMap(gMapRef.current);
+        if (st.startsWith("active")) m.setZIndex(10000);
+        else if (st.startsWith("not_delivered")) m.setZIndex(9500);
+        else if (st.startsWith("visited")) m.setZIndex(9000);
+        else m.setZIndex(8000);
+      } catch(e) {}
+    });
 
     const fitKey = `${lastSentAt.current || ""}|${validStops.length}|${validStops.map(s => `${s.lat},${s.lng}`).join("|")}`;
     if (routeFitKeyRef.current !== fitKey && !mapUserInteractingRef.current) {
@@ -9189,8 +9201,10 @@ const CircuitEngine = () => {
       {/* -- TOPBAR -- */}
       <div style={{ height: 50, borderBottom: "1px solid #0d1420", display: "flex", alignItems: "center", padding: "0 20px", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src={RD_BRAND_ICON} alt="Rap Drive" style={{ width:30, height:30, borderRadius:10, objectFit:"cover", boxShadow:"0 10px 24px rgba(0,0,0,.28)" }}/>
-          <span style={{ display:"inline-flex",alignItems:"center",gap:8,fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 14 }}><img src={RD_BRAND_ICON} alt="" style={{width:24,height:24,borderRadius:8}}/>Rap Drive</span>
+          <span style={{ display:"inline-flex",alignItems:"center",gap:8,fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 14 }}>
+            <img src={RD_BRAND_ICON} alt="Rap Drive" style={{width:30,height:30,borderRadius:10,objectFit:"cover",boxShadow:"0 10px 24px rgba(0,0,0,.28)"}}/>
+            Rap Drive
+          </span>
           <span style={{ color: "#131f30" }}>·</span>
           <span className="rd-chip-pro">Circuit Mode Enterprise</span>
           {!mapsReady && <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 6, padding: "2px 8px" }}>Cargando Maps...</span>}
