@@ -3967,7 +3967,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                     </button>
                     <button onClick={(e)=>{ e.stopPropagation(); markStopNotDelivered(currentStop); }}
                       style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"9px 6px", borderRadius:11, background:"linear-gradient(135deg,#991b1b,#ef4444)", border:"1px solid rgba(239,68,68,0.35)", color:"#fff", fontSize:10.8, lineHeight:1.05, fontWeight:950, cursor:"pointer", boxShadow:"0 3px 12px rgba(239,68,68,0.22)", fontFamily:"'DM Sans',sans-serif" }}>
-                      NO ENT.
+                      FALLIDO
                     </button>
                     {/* Waze */}
                     <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
