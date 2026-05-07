@@ -3028,7 +3028,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         routeStopsSigRef.current = nextSig;
         setStops(route.stops);
       }
-      if (isNewRoute) setTab("route");
+      if (isNewRoute) setTab(prev => (prev === "mapa" || prev === "history" ? prev : "route"));
       try { localStorage.setItem(LS_KEY, JSON.stringify(route)); } catch(e) {}
     };
 
@@ -3677,6 +3677,22 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
               </button>
             </div>
 
+            <div style={{ position:"relative", zIndex:1, display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:8, padding:"13px 0 2px" }}>
+              {[
+                { label:"ASIGNADOS", value:routeStops.length, color:"#60a5fa", bg:"rgba(59,130,246,.12)", path:"M4 7h16M4 12h16M4 17h10" },
+                { label:"ENTREGADOS", value:visited.length, color:"#22c55e", bg:"rgba(34,197,94,.12)", path:"M20 6 9 17l-5-5" },
+                { label:"FALLIDOS", value:problems.length, color:"#ef4444", bg:"rgba(239,68,68,.12)", path:"M18 6 6 18M6 6l12 12" },
+              ].map((k)=>(
+                <div key={k.label} style={{ minWidth:0, border:"1px solid rgba(148,163,184,.105)", background:"linear-gradient(135deg,rgba(15,23,42,.74),rgba(8,15,27,.58))", borderRadius:16, padding:"10px 7px", textAlign:"center", boxShadow:"inset 0 1px 0 rgba(255,255,255,.035)" }}>
+                  <div style={{ width:30, height:30, margin:"0 auto 7px", borderRadius:12, display:"grid", placeItems:"center", background:k.bg, color:k.color }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round"><path d={k.path}/></svg>
+                  </div>
+                  <div style={{ fontSize:20, color:"#f8fafc", fontWeight:1000, lineHeight:1, fontFamily:"'Syne',sans-serif" }}>{k.value}</div>
+                  <div style={{ marginTop:4, fontSize:8.2, color:k.color, fontWeight:950, letterSpacing:".35px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+
             <div style={{ position:"relative", zIndex:1, padding:"16px 0 10px", display:"grid", gap:10 }}>
               {[
                 ["route","Rutas","Ruta activa y paradas","M4 7h16M4 12h16M4 17h10"],
@@ -3758,7 +3774,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
         {mapPinPopup && (() => {
           const s = mapPinPopup;
           const isDone = s.navStatus === "visited";
-          const isProb = stop.navStatus==="not_delivered";
+          const isProb = s.navStatus==="not_delivered";
           const ac = isDone ? "#10b981" : isProb ? "#ef4444" : "#3b82f6";
           return (
             /* ── Info card: top-left, no obstruction, read-only ── */
@@ -3943,29 +3959,27 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                     {currentStop.notes ? <span style={{ color:"rgba(255,255,255,0.25)" }}> · {currentStop.notes}</span> : null}
                   </div>
 
-                  {/* ── Action buttons ── */}
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:7 }}>
+                  {/* ── Action buttons compactos: ENTREGADO / FALLIDO / WAZE / WHATSAPP ── */}
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:5, width:"100%" }}>
                     <button onClick={(e)=>{ e.stopPropagation(); markStopVisited(currentStop); }}
-                      style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:11, background:"linear-gradient(135deg,#059669,#10b981)", border:"1px solid rgba(16,185,129,0.35)", color:"white", fontSize:12.5, fontWeight:900, cursor:"pointer", boxShadow:"0 3px 12px rgba(16,185,129,0.25)", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
+                      style={{ minWidth:0, height:36, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, background:"linear-gradient(135deg,#059669,#10b981)", border:"1px solid rgba(16,185,129,0.35)", color:"white", fontSize:9.8, fontWeight:950, cursor:"pointer", boxShadow:"0 3px 10px rgba(16,185,129,0.22)", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", letterSpacing:"-.25px", lineHeight:1 }}>
                       ✓ ENTREGADO
                     </button>
                     <button onClick={(e)=>{ e.stopPropagation(); markStopFailed(currentStop); }}
-                      style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:11, background:"linear-gradient(135deg,#b91c1c,#ef4444)", border:"1px solid rgba(239,68,68,0.38)", color:"white", fontSize:12.5, fontWeight:900, cursor:"pointer", boxShadow:"0 3px 12px rgba(239,68,68,0.22)", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
+                      style={{ minWidth:0, height:36, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, background:"linear-gradient(135deg,#b91c1c,#ef4444)", border:"1px solid rgba(239,68,68,0.38)", color:"white", fontSize:9.8, fontWeight:950, cursor:"pointer", boxShadow:"0 3px 10px rgba(239,68,68,0.20)", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", letterSpacing:"-.25px", lineHeight:1 }}>
                       ✕ FALLIDO
                     </button>
-                    {/* Waze */}
                     <a href={`https://waze.com/ul?ll=${currentStop.lat},${currentStop.lng}&navigate=yes`}
                       target="_blank" rel="noreferrer"
-                      style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:11, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 3px 12px rgba(59,130,246,0.3)", transition:"all .12s", whiteSpace:"nowrap" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      <span style={{ fontSize:12.5, fontWeight:800, color:"white" }}>Waze</span>
+                      style={{ minWidth:0, height:36, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", textDecoration:"none", boxShadow:"0 3px 10px rgba(59,130,246,0.24)", transition:"all .12s", whiteSpace:"nowrap" }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.7"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      <span style={{ fontSize:10.2, fontWeight:900, color:"white", letterSpacing:"-.15px" }}>WAZE</span>
                     </a>
-                    {/* WhatsApp */}
                     <a href={`https://wa.me/1${String(currentStop.phone||'').replace(/\D/g,'')}`}
                       target="_blank" rel="noreferrer"
-                      style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:11, background:"linear-gradient(135deg,#047857,#22c55e)", textDecoration:"none", boxShadow:"0 3px 12px rgba(34,197,94,0.25)", transition:"all .12s", whiteSpace:"nowrap" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.2A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 8.8c.3 2.8 2.1 4.9 5 6 .6.2 1.3-.3 1.6-.9l.3-.7"/></svg>
-                      <span style={{ fontSize:12.5, fontWeight:800, color:"white" }}>WhatsApp</span>
+                      style={{ minWidth:0, height:36, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, background:"linear-gradient(135deg,#047857,#22c55e)", textDecoration:"none", boxShadow:"0 3px 10px rgba(34,197,94,0.20)", transition:"all .12s", whiteSpace:"nowrap" }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.2A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 8.8c.3 2.8 2.1 4.9 5 6 .6.2 1.3-.3 1.6-.9l.3-.7"/></svg>
+                      <span style={{ fontSize:9.6, fontWeight:900, color:"white", letterSpacing:"-.45px" }}>WHATS</span>
                     </a>
                   </div>
                 </div>
@@ -4067,7 +4081,7 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
             {/* ── Stop list — premium redesign ── */}
             {filteredStops.map((stop,i) => {
               const isDone = stop.navStatus==="visited";
-              const isProb = stop.navStatus==="not_delivered";
+              const isProb = s.navStatus==="not_delivered";
               const isEnR  = stop.navStatus==="active";
               const isCur  = stop===currentStop;
               const isExp  = selStop?.id===stop.id;
@@ -4089,15 +4103,15 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                     : isCur
                     ? "rgba(255,255,255,0.04)"
                     : isDone
-                    ? "rgba(10,20,14,0.5)"
+                    ? "linear-gradient(135deg,rgba(16,185,129,.16),rgba(6,78,59,.10))"
                     : isProb
-                    ? "rgba(30,10,10,0.5)"
+                    ? "linear-gradient(135deg,rgba(239,68,68,.17),rgba(127,29,29,.10))"
                     : "rgba(255,255,255,0.03)",
                   border: `1px solid ${
                     isExp ? "rgba(255,255,255,0.10)"
                     : isCur ? "rgba(255,255,255,0.08)"
-                    : isDone ? "rgba(16,185,129,0.15)"
-                    : isProb ? "rgba(239,68,68,0.18)"
+                    : isDone ? "rgba(16,185,129,0.30)"
+                    : isProb ? "rgba(239,68,68,0.32)"
                     : "rgba(255,255,255,0.06)"}`,
                   boxShadow: "none",
                   transition:"all .18s cubic-bezier(.4,0,.2,1)",
@@ -4223,46 +4237,33 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
                           <span style={{ fontSize:12, color:"rgba(255,255,255,0.45)", lineHeight:1.5, paddingTop:4 }}>{stop.displayAddr||stop.rawAddr||"Sin dirección"}</span>
                         </div>
 
-                        {/* Action buttons */}
-                        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8 }}>
-                          {!isDone && !isProb && (
-                            <button onClick={e=>{ e.stopPropagation(); markStopVisited(stop); }}
-                              style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:12, border:"1px solid rgba(16,185,129,0.28)", background:"rgba(16,185,129,0.13)", color:"#22c55e", fontSize:11.5, fontWeight:900, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
-                              ✓ ENTREGADO
-                            </button>
-                          )}
-                          {!isProb && !isDone && (
-                            <button onClick={e=>{ e.stopPropagation(); markStopFailed(stop); }}
-                              style={{ minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 8px", borderRadius:12, border:"1px solid rgba(239,68,68,0.28)", background:"rgba(239,68,68,0.13)", color:"#f87171", fontSize:11.5, fontWeight:900, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
-                              ✕ FALLIDO
-                            </button>
-                          )}
-                          {/* WhatsApp */}
-                          {stop.phone && (
-                            <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${stop.phone.replace(/\D/g,"")}`,"_blank");}}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(37,211,102,0.25)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .12s" }}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.558 4.122 1.528 5.853L0 24l6.293-1.507A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.848 0-3.587-.504-5.083-1.382l-.363-.218-3.737.895.945-3.629-.237-.375A9.965 9.965 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-                              WhatsApp
-                            </button>
-                          )}
-                          {/* Llamar */}
-                          {stop.phone && (
-                            <a href={`tel:${stop.phone.replace(/\D/g,"")}`} onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.65)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.91 10.5a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.9 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                              Llamar
-                            </a>
-                          )}
-                          {/* Waze */}
-                          {stop.lat && stop.lng && (
+                        {/* Action buttons compactos */}
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:5, width:"100%" }}>
+                          <button onClick={e=>{ e.stopPropagation(); markStopVisited(stop); }}
+                            disabled={isDone || isProb}
+                            style={{ minWidth:0, height:34, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, border:"1px solid rgba(16,185,129,0.28)", background:isDone||isProb?"rgba(16,185,129,0.05)":"rgba(16,185,129,0.13)", color:isDone||isProb?"rgba(34,197,94,.35)":"#22c55e", fontSize:9.2, fontWeight:950, cursor:isDone||isProb?"default":"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", letterSpacing:"-.3px", opacity:(isDone||isProb)?0.75:1 }}>
+                            ✓ ENTREGADO
+                          </button>
+                          <button onClick={e=>{ e.stopPropagation(); markStopFailed(stop); }}
+                            disabled={isDone || isProb}
+                            style={{ minWidth:0, height:34, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, border:"1px solid rgba(239,68,68,0.28)", background:isDone||isProb?"rgba(239,68,68,0.05)":"rgba(239,68,68,0.13)", color:isDone||isProb?"rgba(248,113,113,.35)":"#f87171", fontSize:9.2, fontWeight:950, cursor:isDone||isProb?"default":"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", letterSpacing:"-.3px", opacity:(isDone||isProb)?0.75:1 }}>
+                            ✕ FALLIDO
+                          </button>
+                          {stop.lat && stop.lng ? (
                             <a href={`https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
-                              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:12, border:"1px solid rgba(59,130,246,0.2)", background:"rgba(59,130,246,0.07)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", transition:"all .12s" }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                              Waze
+                              style={{ minWidth:0, height:34, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, border:"1px solid rgba(59,130,246,0.20)", background:"rgba(59,130,246,0.08)", color:"#60a5fa", fontSize:9.8, fontWeight:950, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textDecoration:"none", whiteSpace:"nowrap" }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                              WAZE
                             </a>
-                          )}
-                        </div>
-                      </div>
+                          ) : <span/>}
+                          {stop.phone ? (
+                            <button onClick={e=>{e.stopPropagation();window.open(`https://wa.me/1${String(stop.phone||"").replace(/\D/g,"")}`,"_blank");}}
+                              style={{ minWidth:0, height:34, display:"flex", alignItems:"center", justifyContent:"center", gap:3, padding:"0 4px", borderRadius:10, border:"1px solid rgba(37,211,102,0.25)", background:"rgba(37,211,102,0.08)", color:"#22c55e", fontSize:9.2, fontWeight:950, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", letterSpacing:"-.45px" }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
+                              WHATS
+                            </button>
+                          ) : <span/>}
+                        </div>                      </div>
                     </div>
                   )}
                 </div>
