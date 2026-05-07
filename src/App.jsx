@@ -3262,6 +3262,92 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       return icon;
     };
 
+    const makeHtmlPinOverlay = (stop, key, pos, statusKey) => {
+      const Overlay = window.google.maps.OverlayView;
+      const z = stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000;
+      const isDone = stop.navStatus === "visited";
+      const isFail = stop.navStatus === "not_delivered";
+      const isActive = stop.navStatus === "active";
+      const color = isDone ? "#10b981" : isFail ? "#ef4444" : isActive ? "#2563eb" : "#1f2937";
+      const border = isDone ? "#34d399" : isFail ? "#f87171" : isActive ? "#60a5fa" : "#64748b";
+      const label = String(stop.stopNum || "?");
+
+      class RdStopOverlay extends Overlay {
+        constructor(){
+          super();
+          this.position = new window.google.maps.LatLng(pos.lat, pos.lng);
+          this.div = null;
+          this.__rdStatusKey = statusKey;
+          this.__rdKey = key;
+          this.__rdStop = stop;
+        }
+        onAdd(){
+          this.div = document.createElement("button");
+          this.div.type = "button";
+          this.div.setAttribute("aria-label", `Parada ${label}`);
+          this.div.style.cssText = `
+            position:absolute;width:42px;height:48px;border:0;background:transparent;padding:0;margin:0;
+            transform:translate(-21px,-46px);cursor:pointer;z-index:${z};pointer-events:auto;
+            filter:drop-shadow(0 10px 12px rgba(0,0,0,.38));
+          `;
+          this.div.innerHTML = `
+            <div style="position:relative;width:42px;height:48px;">
+              <div style="position:absolute;left:6px;top:2px;width:30px;height:30px;border-radius:999px;background:${color};border:2px solid ${border};box-shadow:0 0 0 4px rgba(255,255,255,.22),0 0 20px ${color}66;display:flex;align-items:center;justify-content:center;color:white;font:900 12px Arial,sans-serif;line-height:1;">${label}</div>
+              <div style="position:absolute;left:16px;top:28px;width:10px;height:10px;background:${color};transform:rotate(45deg);border-right:2px solid ${border};border-bottom:2px solid ${border};"></div>
+            </div>`;
+          this.div.addEventListener("click", (e) => {
+            e.preventDefault(); e.stopPropagation();
+            setSelStop(this.__rdStop);
+            setMapPinPopup(this.__rdStop);
+          });
+          const panes = this.getPanes();
+          (panes.overlayMouseTarget || panes.overlayLayer).appendChild(this.div);
+        }
+        draw(){
+          if(!this.div) return;
+          const projection = this.getProjection();
+          if(!projection) return;
+          const point = projection.fromLatLngToDivPixel(this.position);
+          if(!point) return;
+          this.div.style.left = `${point.x}px`;
+          this.div.style.top = `${point.y}px`;
+          this.div.style.zIndex = String(this.__rdZ || z);
+        }
+        onRemove(){
+          if(this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
+          this.div = null;
+        }
+        setPosition(nextPos){ this.position = new window.google.maps.LatLng(nextPos.lat, nextPos.lng); this.draw(); }
+        getPosition(){ return this.position; }
+        setTitle(t){ this.title = t; if(this.div) this.div.title = t; }
+        setZIndex(nextZ){ this.__rdZ = nextZ; if(this.div) this.div.style.zIndex = String(nextZ); }
+        setIcon(){ /* no-op: overlay HTML pin, not SVG marker */ }
+        updateStop(nextStop, nextStatusKey){
+          this.__rdStop = nextStop;
+          this.__rdStatusKey = nextStatusKey;
+          const nextIsDone = nextStop.navStatus === "visited";
+          const nextIsFail = nextStop.navStatus === "not_delivered";
+          const nextIsActive = nextStop.navStatus === "active";
+          const nextColor = nextIsDone ? "#10b981" : nextIsFail ? "#ef4444" : nextIsActive ? "#2563eb" : "#1f2937";
+          const nextBorder = nextIsDone ? "#34d399" : nextIsFail ? "#f87171" : nextIsActive ? "#60a5fa" : "#64748b";
+          const nextLabel = String(nextStop.stopNum || "?");
+          if(this.div){
+            this.div.setAttribute("aria-label", `Parada ${nextLabel}`);
+            this.div.innerHTML = `
+              <div style="position:relative;width:42px;height:48px;">
+                <div style="position:absolute;left:6px;top:2px;width:30px;height:30px;border-radius:999px;background:${nextColor};border:2px solid ${nextBorder};box-shadow:0 0 0 4px rgba(255,255,255,.22),0 0 20px ${nextColor}66;display:flex;align-items:center;justify-content:center;color:white;font:900 12px Arial,sans-serif;line-height:1;">${nextLabel}</div>
+                <div style="position:absolute;left:16px;top:28px;width:10px;height:10px;background:${nextColor};transform:rotate(45deg);border-right:2px solid ${nextBorder};border-bottom:2px solid ${nextBorder};"></div>
+              </div>`;
+          }
+        }
+      }
+      const overlay = new RdStopOverlay();
+      overlay.setMap(gMapRef.current);
+      overlay.setZIndex(z);
+      overlay.setTitle(`#${stop.stopNum} ${stop.client || ""}`);
+      return overlay;
+    };
+
     const bounds = new window.google.maps.LatLngBounds();
     const seen = new Set();
 
@@ -3270,35 +3356,23 @@ const motorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34"
       seen.add(key);
       const pos = { lat: stop.lat, lng: stop.lng };
       const statusKey = `${stop.navStatus || "pending"}:${stop.stopNum || idx}`;
+      const z = stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000;
       let marker = stopMarkersRef.current[key];
 
       if (!marker) {
-        marker = new window.google.maps.Marker({
-          map: gMapRef.current,
-          position: pos,
-          title: `#${stop.stopNum} ${stop.client || ""}`,
-          zIndex: stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000,
-          optimized: false,
-          clickable: true,
-          icon: makeFixedPinIcon(stop),
-        });
-        marker.__rdStatusKey = statusKey;
-        marker.addListener("click", () => {
-          setSelStop(stop);
-          setMapPinPopup(stop);
-        });
+        marker = makeHtmlPinOverlay(stop, key, pos, statusKey);
         stopMarkersRef.current[key] = marker;
       } else {
         const current = marker.getPosition?.();
         if (!current || Math.abs(current.lat() - stop.lat) > 0.000001 || Math.abs(current.lng() - stop.lng) > 0.000001) {
           marker.setPosition(pos);
         }
-        marker.setTitle(`#${stop.stopNum} ${stop.client || ""}`);
-        marker.setZIndex(stop.navStatus === "active" ? 10000 : stop.navStatus === "visited" ? 9000 : stop.navStatus === "not_delivered" ? 9500 : 8000);
-        if (marker.__rdStatusKey !== statusKey) {
-          marker.setIcon(makeFixedPinIcon(stop));
-          marker.__rdStatusKey = statusKey;
+        marker.setTitle?.(`#${stop.stopNum} ${stop.client || ""}`);
+        marker.setZIndex?.(z);
+        if (marker.__rdStatusKey !== statusKey || marker.__rdStop !== stop) {
+          marker.updateStop?.(stop, statusKey);
         }
+        if (marker.getMap && !marker.getMap()) marker.setMap(gMapRef.current);
       }
       bounds.extend(pos);
     });
